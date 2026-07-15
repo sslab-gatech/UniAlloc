@@ -16,7 +16,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_SCOPE = ROOT / "evaluation/config/rustsec_heap_complete_scope.json"
 DEFAULT_OUTPUT = ROOT / "docs/figures/rustsec-security-scope-20260714"
 MECHANISM_COVERAGE_LABELS = (
-    ("type_isolation_edge_covered", "Type Isolation edge covered", "#2A6FDB"),
+    (
+        "type_isolation_edge_covered",
+        "TypeIso-mitigated derived edge",
+        "#2A6FDB",
+    ),
     (
         "reclaim_checks_exact_detection",
         "reclaim_checks exact detection",
@@ -30,10 +34,10 @@ MECHANISM_COVERAGE_LABELS = (
 )
 CASE_ATTRIBUTION_LABELS = (
     ("other_allocator_feature_only", "Other allocator feature only", "#E28E2C"),
-    ("type_isolation_only", "Type Isolation only", "#2A6FDB"),
+    ("type_isolation_only", "TypeIso measured edge only", "#2A6FDB"),
     (
         "multiple_allocator_mechanisms",
-        "Type Isolation + other allocator feature",
+        "TypeIso measured edge + other feature",
         "#7A5195",
     ),
     (
@@ -57,14 +61,6 @@ VALID_MECHANISM_OUTCOMES = frozenset(
 )
 OBSERVED_MECHANISM_OUTCOMES = frozenset(("detected", "mitigated"))
 TYPE_ISOLATION_POSITIVE_SCOPE = "exploit_enabling_cross_identity_reuse_edge"
-TYPE_ISOLATION_AUTOMATIC_SOURCE_FIELDS = (
-    "automatic_source_coverage",
-    "compiler_automatic_victim_coverage",
-)
-TYPE_ISOLATION_SOURCE_TRUE_POSITIVE_FIELDS = (
-    "source_level_true_positive",
-    "source_vulnerability_detection_validated",
-)
 
 
 def _case_identifier(row: dict[str, Any], index: int) -> str:
@@ -103,10 +99,10 @@ def _type_isolation_edge_covered(
 ) -> bool:
     """Validate and classify one observed Type Isolation result.
 
-    Type Isolation receives figure credit only for the preregistered manual
-    derived-edge contract.  Raising on an observed result with weaker metadata
-    prevents a future ``detected``/``mitigated`` label from silently inflating
-    the figure.
+    Type Isolation receives figure credit for a preregistered derived-edge
+    contract with either explicit manual attribution or compiler-automatic
+    identity coverage. Raising on weaker metadata prevents a future observed
+    label from silently inflating the figure.
     """
 
     if result.get("mechanism") != "type_isolation":
@@ -117,34 +113,50 @@ def _type_isolation_edge_covered(
     violations: list[str] = []
     if result.get("outcome") != "mitigated":
         violations.append("outcome=mitigated")
-    if result.get("true_positive") is not True:
-        violations.append("true_positive=true")
+    if result.get("validated_mitigation") is not True:
+        violations.append("validated_mitigation=true")
+    if "true_positive" in result:
+        violations.append("true_positive=absent")
+    if result.get("result_semantics") != (
+        "causal_compiler_bound_reuse_edge_mitigation"
+    ):
+        violations.append(
+            "result_semantics=causal_compiler_bound_reuse_edge_mitigation"
+        )
     if result.get("positive_scope") != TYPE_ISOLATION_POSITIVE_SCOPE:
         violations.append(f"positive_scope={TYPE_ISOLATION_POSITIVE_SCOPE}")
 
-    automatic_source_values = [
-        result[field]
-        for field in TYPE_ISOLATION_AUTOMATIC_SOURCE_FIELDS
-        if field in result
-    ]
-    if not automatic_source_values or any(
-        value is not False for value in automatic_source_values
+    compiler_automatic = result.get("compiler_automatic_victim_coverage")
+    if not isinstance(compiler_automatic, bool):
+        violations.append("compiler_automatic_victim_coverage=boolean")
+    automatic_probe = result.get("automatic_edge_identity_probe", False)
+    if not isinstance(automatic_probe, bool):
+        violations.append("automatic_edge_identity_probe=boolean")
+        automatic_probe = False
+    manual_annotation = result.get("manual_victim_identity_annotation")
+    if automatic_probe:
+        if compiler_automatic is not True or manual_annotation is not False:
+            violations.append("compiler_automatic_edge_provenance")
+    elif compiler_automatic is not False or manual_annotation not in (None, True):
+        violations.append("manual_edge_provenance")
+    if (
+        "automatic_source_coverage" in result
+        and result["automatic_source_coverage"] is not False
     ):
         violations.append("automatic_source_coverage=false")
+    if result.get("vulnerability_specific_detection_signal") not in (None, False):
+        violations.append("vulnerability_specific_detection_signal=false")
+    if result.get("full_source_vulnerability_detection") not in (None, False):
+        violations.append("full_source_vulnerability_detection=false")
 
-    source_true_positive_values = [
-        result[field]
-        for field in TYPE_ISOLATION_SOURCE_TRUE_POSITIVE_FIELDS
-        if field in result
-    ]
-    if not source_true_positive_values or any(
-        value is not False for value in source_true_positive_values
-    ):
-        violations.append("source_level_true_positive=false")
+    if result.get("source_vulnerability_detection_validated") is not False:
+        violations.append("source_vulnerability_detection_validated=false")
+    if "source_level_true_positive" in result:
+        violations.append("source_level_true_positive=absent")
 
     if violations:
         raise ValueError(
-            "observed Type Isolation result violates the manual derived-edge "
+            "observed Type Isolation result violates the derived-edge "
             f"claim contract for {identifier}: {', '.join(violations)}"
         )
     return True
@@ -166,6 +178,8 @@ def figure_summary(ledger: dict[str, Any]) -> dict[str, Any]:
         key: [] for key, _label, _color in CASE_ATTRIBUTION_LABELS
     }
     synthetic_typeiso_case_ids: list[str] = []
+    compiler_automatic_typeiso_case_ids: list[str] = []
+    manual_typeiso_case_ids: list[str] = []
     unresolved_integration_case_ids: list[str] = []
 
     for index, raw_row in enumerate(cases):
@@ -250,6 +264,13 @@ def figure_summary(ledger: dict[str, Any]) -> dict[str, Any]:
         if type_edge_covered:
             coverage_case_ids["type_isolation_edge_covered"].append(identifier)
             if any(
+                result.get("compiler_automatic_victim_coverage") is True
+                for result in covered_typeiso_results
+            ):
+                compiler_automatic_typeiso_case_ids.append(identifier)
+            else:
+                manual_typeiso_case_ids.append(identifier)
+            if any(
                 result.get("synthetic_reduction") is True
                 for result in covered_typeiso_results
             ):
@@ -322,13 +343,25 @@ def figure_summary(ledger: dict[str, Any]) -> dict[str, Any]:
         "mechanism_coverage_case_ids": coverage_case_ids,
         "mechanism_categories_are_nonexclusive": True,
         "type_isolation_claim_boundary": {
-            "manual_derived_reuse_edge_case_count": coverage_counts[
-                "type_isolation_edge_covered"
-            ],
+            "manual_derived_reuse_edge_case_count": len(manual_typeiso_case_ids),
+            "manual_derived_reuse_edge_case_ids": manual_typeiso_case_ids,
+            "compiler_automatic_victim_coverage_case_count": len(
+                compiler_automatic_typeiso_case_ids
+            ),
+            "compiler_automatic_victim_coverage_case_ids": (
+                compiler_automatic_typeiso_case_ids
+            ),
             "synthetic_reduction_case_count": len(synthetic_typeiso_case_ids),
             "synthetic_reduction_case_ids": synthetic_typeiso_case_ids,
-            "automatic_source_true_positive_case_count": 0,
-            "compiler_automatic_victim_coverage": False,
+            "automatic_full_source_vulnerability_detection_case_count": 0,
+            "causal_mitigated_derived_edge_case_count": coverage_counts[
+                "type_isolation_edge_covered"
+            ],
+            "vulnerability_specific_detection_case_count": 0,
+            "full_source_vulnerability_detection_case_count": 0,
+            "compiler_automatic_victim_coverage": bool(
+                compiler_automatic_typeiso_case_ids
+            ),
             "source_vulnerability_detection_validated": False,
             "claim_grade": ledger.get("claim_grade") is True,
         },
@@ -459,6 +492,11 @@ def render_svg(summary: dict[str, Any]) -> str:
         row_height=35,
         label_width=390,
     )
+    typeiso_boundary = summary["type_isolation_claim_boundary"]
+    automatic_typeiso_count = typeiso_boundary[
+        "compiler_automatic_victim_coverage_case_count"
+    ]
+    manual_typeiso_count = typeiso_boundary["manual_derived_reuse_edge_case_count"]
     rows.extend(
         [
             f'<text x="45" y="{note_y}" class="note">Case-attribution bars '
@@ -468,10 +506,12 @@ def render_svg(summary: dict[str, Any]) -> str:
             f'<text x="45" y="{note_y + 20}" class="note">No-signal requires a '
             "completed matched trial; unrun and inconclusive integrated cases remain "
             "in their own row.</text>",
-            f'<text x="650" y="{note_y + 20}" class="note">All Type Isolation '
-            "positives are manual derived reuse edges, including "
-            f'{summary["type_isolation_claim_boundary"]["synthetic_reduction_case_count"]} '
-            "synthetic reductions; automatic source-level true positives: 0.</text>",
+            f'<text x="650" y="{note_y + 20}" class="note">TypeIso-mitigated '
+            "derived edges include "
+            f"{automatic_typeiso_count} "
+            "compiler-bound and "
+            f"{manual_typeiso_count} "
+            "manual; vulnerability-specific and full-source detections: 0.</text>",
             f'<text x="650" y="{note_y + 40}" class="note">Excluded candidates remain '
             "in the audit ledger and outside the efficacy denominator.</text>",
             "</svg>",

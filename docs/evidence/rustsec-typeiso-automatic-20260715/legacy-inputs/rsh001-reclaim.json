@@ -1,0 +1,148 @@
+{
+  "boundary": "Detected true positives reproduce an exact allocator diagnostic in every vulnerable repetition with matched baseline and patched controls. Mitigated true positives causally block and report one matched exploit-enabling cross-identity reuse edge. No-signal rows are feature-matched negatives for the integrated witness only.",
+  "claim_grade": false,
+  "counts": {
+    "detected": 1
+  },
+  "derived_reuse_input": null,
+  "minimum_repetitions": 3,
+  "results": [
+    {
+      "advisory_id": "RUSTSEC-2019-0016",
+      "allocator_signal_signatures": {
+        "unialloc_pointer_already_released_check": 3
+      },
+      "baseline_finding_signatures": {
+        "asan_double_free": 3
+      },
+      "case_id": "RSH-001",
+      "checks": {
+        "baseline_reproduced_in_all_repetitions": true,
+        "exact_allocator_signal_in_all_repetitions": true,
+        "feature_matched_reclaim_ablation_valid": true,
+        "patched_reclaim_plain_control_valid": true,
+        "patched_system_control_valid": true,
+        "patched_treatment_signal_free": true,
+        "vulnerable_reclaim_plain_completed_in_all_repetitions": true,
+        "vulnerable_reclaim_plain_exact_signal_absent": true,
+        "vulnerable_treatment_completed_in_all_repetitions": true,
+        "vulnerable_treatment_status_valid": true
+      },
+      "claim_scope": "exact duplicate-reclaim detection in the integrated witness",
+      "evidence": {
+        "bytes": 41090,
+        "path": "docs/evidence/rustsec-rsh001-reclaim-20260714/summary.json",
+        "sha256": "49beee8c28b227310e7cff3ee839c642d0fe0c52367677cd56b55640a70e3aaa"
+      },
+      "feature_provenance": {
+        "patched_reclaim_checks": {
+          "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+          "manifest_path": "unialloc/Cargo.toml",
+          "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+          "resolved_features": [
+            "reclaim_checks",
+            "stats"
+          ],
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "chttp",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "unialloc_implementation_sha256": "cb9af601f387dec43a0676f873a6b92566490facb87549111ef2b5524b7e23ff"
+        },
+        "patched_reclaim_plain": {
+          "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+          "manifest_path": "unialloc/Cargo.toml",
+          "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+          "resolved_features": [
+            "stats"
+          ],
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "chttp",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "unialloc_implementation_sha256": "cb9af601f387dec43a0676f873a6b92566490facb87549111ef2b5524b7e23ff"
+        },
+        "vulnerable_reclaim_checks": {
+          "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+          "manifest_path": "unialloc/Cargo.toml",
+          "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+          "resolved_features": [
+            "reclaim_checks",
+            "stats"
+          ],
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "chttp",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "unialloc_implementation_sha256": "cb9af601f387dec43a0676f873a6b92566490facb87549111ef2b5524b7e23ff"
+        },
+        "vulnerable_reclaim_plain": {
+          "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+          "manifest_path": "unialloc/Cargo.toml",
+          "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+          "resolved_features": [
+            "stats"
+          ],
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "chttp",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "unialloc_implementation_sha256": "cb9af601f387dec43a0676f873a6b92566490facb87549111ef2b5524b7e23ff"
+        }
+      },
+      "feature_provenance_failures": [],
+      "mechanism": "reclaim_checks",
+      "negative_boundary": null,
+      "outcome": "detected",
+      "patched_control_mode": "matched_clean_exit",
+      "patched_reclaim_plain_control_mode": "matched_clean_exit",
+      "positive_scope": "duplicate_reclaim_event_in_integrated_witness",
+      "reason": "feature_matched_exact_allocator_diagnostic",
+      "repetitions": 3,
+      "result_semantics": "exact_diagnostic_true_positive",
+      "scenario_id": "RSH-001-upstream",
+      "true_positive": true,
+      "vulnerable_reclaim_plain_allocator_signal_signatures": {},
+      "vulnerable_reclaim_plain_mode": "stable_clean_exit",
+      "vulnerable_reclaim_plain_native_abnormal_signal_signatures": {},
+      "vulnerable_treatment_clean_exit_count": 0,
+      "vulnerable_treatment_incomplete_oracle_statuses": [],
+      "vulnerable_treatment_mode": "exact_allocator_signal",
+      "vulnerable_treatment_native_abnormal_signal_signatures": {},
+      "vulnerable_treatment_native_outcome_fingerprints": {
+        "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": 3
+      }
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-mechanism-results",
+  "summary_input": {
+    "bytes": 41090,
+    "path": "docs/evidence/rustsec-rsh001-reclaim-20260714/summary.json",
+    "sha256": "49beee8c28b227310e7cff3ee839c642d0fe0c52367677cd56b55640a70e3aaa"
+  }
+}

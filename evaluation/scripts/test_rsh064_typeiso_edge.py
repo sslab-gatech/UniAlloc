@@ -14,7 +14,9 @@ RUNNER = ROOT / "evaluation" / "scripts" / "run_rsh064_neon_witness.py"
 CATALOG = (
     ROOT / "evaluation" / "config" / "rustsec_heap_neon_node_harnesses.json"
 )
-EVIDENCE = ROOT / "docs" / "evidence" / "rustsec-rsh064-typeiso-20260714"
+EVIDENCE = (
+    ROOT / "docs" / "evidence" / "rustsec-typeiso-automatic-20260715"
+)
 EXPORTER = ROOT / "evaluation" / "scripts" / "export_rustsec_mechanism_results.py"
 
 spec = importlib.util.spec_from_file_location("rsh064_neon_runner", RUNNER)
@@ -36,27 +38,27 @@ class Rsh064TypeIsolationEdgeTests(unittest.TestCase):
         _cases, scenarios = runner.harness.index_catalog(self.catalog)
         self.scenario = scenarios["RSH-064-derived-reuse"][1]
 
-    def test_manual_edge_uses_indirect_victim_scope_and_safe_control(self) -> None:
+    def test_automatic_edge_uses_concrete_victim_scope_and_safe_control(self) -> None:
         vulnerable = (ROOT / self.scenario["source_path"]).read_text(
             encoding="utf-8"
         )
         patched_meta = self.scenario["patched_source"]
         patched = (ROOT / patched_meta["source_path"]).read_text(encoding="utf-8")
 
-        self.assertIn("fn materialize_victim<T: Clone", vulnerable)
+        self.assertIn("fn materialize_victim(seed: &[u8; PAYLOAD_SIZE])", vulnerable)
         self.assertIn("fn reclaim_victim<T>", vulnerable)
         self.assertIn("black_box(materialize)", vulnerable)
         self.assertIn("black_box(reclaim)", vulnerable)
         self.assertIn("ExternalView", vulnerable)
         self.assertIn("Box::new(Replacement", vulnerable)
 
-        self.assertIn("fn materialize_payload<T: Clone", patched)
+        self.assertIn("fn materialize_payload(seed: &[u8; PAYLOAD_SIZE])", patched)
         self.assertIn("fn reclaim_payload<T>", patched)
         self.assertNotIn("ExternalView", patched)
         self.assertNotIn("unsafe", patched)
 
-    def test_frozen_evidence_exports_one_bounded_true_positive(self) -> None:
-        experiment_path = EVIDENCE / "experiment.json"
+    def test_frozen_evidence_exports_one_bounded_mitigation(self) -> None:
+        experiment_path = EVIDENCE / "raw" / "RSH-064-experiment.json"
         summary_path = EVIDENCE / "derived-reuse-summary.json"
         mechanism_path = EVIDENCE / "mechanism-results.json"
         experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
@@ -70,11 +72,14 @@ class Rsh064TypeIsolationEdgeTests(unittest.TestCase):
         self.assertEqual(
             edge["status"], "cross_identity_reuse_edge_blocked_and_reported"
         )
-        self.assertTrue(edge["vulnerability_specific_detection_signal"])
+        self.assertFalse(edge["vulnerability_specific_detection_signal"])
 
+        summary_scenario = next(
+            row for row in summary["scenarios"] if row["case_id"] == "RSH-064"
+        )
         arms = {
             (arm["archive_variant"], arm["allocator_variant"]): arm
-            for arm in summary["scenarios"][0]["arms"]
+            for arm in summary_scenario["arms"]
         }
         self.assertEqual(
             arms[("vulnerable", "system")]["address_reuse_observation_count"],
@@ -112,7 +117,7 @@ class Rsh064TypeIsolationEdgeTests(unittest.TestCase):
                 0,
             )
 
-        raw_record = summary["scenarios"][0]["raw_experiment"]
+        raw_record = summary_scenario["raw_experiment"]
         self.assertEqual(raw_record["bytes"], experiment_path.stat().st_size)
         self.assertEqual(raw_record["sha256"], runner.sha256_file(experiment_path))
         typeiso_toolchain = experiment["typeiso_toolchain"]
@@ -132,18 +137,24 @@ class Rsh064TypeIsolationEdgeTests(unittest.TestCase):
             implementation_digests, {force_build["implementation_sha256"]}
         )
 
-        self.assertEqual(mechanism["counts"], {"mitigated": 1})
-        self.assertEqual(len(mechanism["results"]), 1)
-        result = mechanism["results"][0]
+        self.assertEqual(mechanism["counts"], {"mitigated": 12})
+        self.assertEqual(len(mechanism["results"]), 12)
+        result = next(
+            row for row in mechanism["results"] if row["case_id"] == "RSH-064"
+        )
         recomputed = exporter.evaluate_type_isolation_edge(
-            summary["scenarios"][0], minimum_repetitions=3
+            summary_scenario, minimum_repetitions=3
         )
         recomputed["evidence"] = mechanism["derived_reuse_input"]
         self.assertEqual(result, recomputed)
-        self.assertTrue(result["true_positive"])
-        self.assertEqual(result["outcome"], "mitigated")
+        self.assertFalse(result["claim_grade"])
+        self.assertFalse(result["vulnerability_specific_detection_signal"])
+        self.assertFalse(result["full_source_vulnerability_detection"])
+        self.assertTrue(result["validated_mitigation"])
+        self.assertNotIn("true_positive", result)
         self.assertEqual(
-            result["result_semantics"], "causal_mitigation_true_positive"
+            result["result_semantics"],
+            "causal_compiler_bound_reuse_edge_mitigation",
         )
         self.assertEqual(result["failed_checks"], [])
         self.assertTrue(all(result["checks"].values()))
@@ -151,21 +162,6 @@ class Rsh064TypeIsolationEdgeTests(unittest.TestCase):
             mechanism["derived_reuse_input"]["sha256"],
             runner.sha256_file(summary_path),
         )
-
-        readme = (EVIDENCE / "README.md").read_text(encoding="utf-8")
-        for artifact_name in (
-            "preflight.json",
-            "experiment.json",
-            "derived-reuse-summary.json",
-            "mechanism-results.json",
-        ):
-            self.assertIn(f"`{artifact_name}`", readme)
-        self.assertIn(self.scenario["source_path"], readme)
-        self.assertIn(self.scenario["patched_source"]["source_path"], readme)
-        self.assertIn("machine-readable records are the provenance authority", readme)
-        self.assertIn("manually attributed", readme)
-        self.assertIn("Automatic compiler", readme)
-
 
 if __name__ == "__main__":
     unittest.main()

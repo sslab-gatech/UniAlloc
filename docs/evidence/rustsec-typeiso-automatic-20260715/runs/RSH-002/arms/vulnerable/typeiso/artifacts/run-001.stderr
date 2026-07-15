@@ -1,0 +1,101 @@
+UNIALLOC_SECURITY_REUSE_DENIAL={"allocator":"typeiso","typed_cache_wrong_identity_denials":1,"last_wrong_identity_requested_type_id":15570848550896987138,"last_wrong_identity_retained_type_id":14044063237687571302,"last_wrong_identity_requested_module_id":15769001225827985372,"last_wrong_identity_retained_module_id":303084169615458712,"last_wrong_identity_requested_callsite":4199877169023819186,"last_wrong_identity_size":1016,"last_wrong_identity_align":8,"last_wrong_identity_retained_ptr":140447097257984}
+original=0x7fbc63578000 replacement=0x7fbc63578400
+
+thread 'main' (165742) panicked at unialloc/src/alloc_api/type_isolation.rs:13241:13:
+type-cache pointer already retained
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'main' (165742) panicked at unialloc/src/alloc_api/type_isolation.rs:13241:13:
+type-cache pointer already retained
+stack backtrace:
+   0:     0x555e261dc0e8 - std[3e0755d7ee10f1c0]::backtrace_rs::backtrace::libunwind::trace
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+   1:     0x555e261dc0e8 - std[3e0755d7ee10f1c0]::backtrace_rs::backtrace::trace_unsynchronized::<std[3e0755d7ee10f1c0]::sys::backtrace::_print_fmt::{closure#1}>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+   2:     0x555e261dc0e8 - std[3e0755d7ee10f1c0]::sys::backtrace::_print_fmt
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/sys/backtrace.rs:74:9
+   3:     0x555e261dc0e8 - <<std[3e0755d7ee10f1c0]::sys::backtrace::BacktraceLock>::print::DisplayBacktrace as core[53a3f952d0a3e8e5]::fmt::Display>::fmt
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/sys/backtrace.rs:44:26
+   4:     0x555e261ec3aa - <core[53a3f952d0a3e8e5]::fmt::rt::Argument>::fmt
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/fmt/rt.rs:152:76
+   5:     0x555e261ec3aa - core[53a3f952d0a3e8e5]::fmt::write
+   6:     0x555e261df852 - std[3e0755d7ee10f1c0]::io::default_write_fmt::<std[3e0755d7ee10f1c0]::sys::stdio::unix::Stderr>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/io/mod.rs:623:11
+   7:     0x555e261df852 - <std[3e0755d7ee10f1c0]::sys::stdio::unix::Stderr as std[3e0755d7ee10f1c0]::io::Write>::write_fmt
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/io/mod.rs:1661:13
+   8:     0x555e261c7e16 - <std[3e0755d7ee10f1c0]::sys::backtrace::BacktraceLock>::print
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/sys/backtrace.rs:47:9
+   9:     0x555e261c7e16 - std[3e0755d7ee10f1c0]::panicking::default_hook::{closure#0}
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:292:27
+  10:     0x555e261d8481 - std[3e0755d7ee10f1c0]::panicking::default_hook
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:319:9
+  11:     0x555e261d863b - std[3e0755d7ee10f1c0]::panicking::panic_with_hook
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:814:13
+  12:     0x555e261c7f04 - std[3e0755d7ee10f1c0]::panicking::panic_handler::{closure#0}
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:680:13
+  13:     0x555e261bfc49 - std[3e0755d7ee10f1c0]::sys::backtrace::__rust_end_short_backtrace::<std[3e0755d7ee10f1c0]::panicking::panic_handler::{closure#0}, !>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/sys/backtrace.rs:182:18
+  14:     0x555e261c859d - __rustc[d07b71777c76ca6]::rust_begin_unwind
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:678:5
+  15:     0x555e261ecb3c - core[53a3f952d0a3e8e5]::panicking::panic_fmt
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/panicking.rs:80:14
+  16:     0x555e261ecb02 - core[53a3f952d0a3e8e5]::panicking::panic
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/panicking.rs:150:5
+  17:     0x555e261f1d57 - <unialloc[8660954de8e39517]::cache::RustAllocator>::dealloc_semantic_slow
+  18:     0x555e261adc6b - __rustc[d07b71777c76ca6]::__rust_dealloc
+                               at /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/work/project/src/main.rs:8:19
+  19:     0x555e261b2253 - <alloc[a394d862aa68610c]::raw_vec::RawVec<usize> as core[53a3f952d0a3e8e5]::ops::drop::Drop>::drop
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:424:29
+  20:     0x555e261ac7fa - core[53a3f952d0a3e8e5]::ptr::drop_glue::<alloc[a394d862aa68610c]::raw_vec::RawVec<usize>>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1
+  21:     0x555e261ac79b - core[53a3f952d0a3e8e5]::ptr::drop_glue::<alloc[a394d862aa68610c]::vec::Vec<usize>>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1
+  22:     0x555e261b0cc5 - <alloc[a394d862aa68610c]::vec::Vec<usize>>::into_boxed_slice
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:1741:5
+  23:     0x555e261b2616 - <bitvec[cc93e76584517b87]::boxed::BitBox as core[53a3f952d0a3e8e5]::ops::drop::Drop>::drop
+                               at /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/work/subject/bitvec-0.17.3/src/boxed/ops.rs:129:52
+  24:     0x555e261ac81a - core[53a3f952d0a3e8e5]::ptr::drop_glue::<bitvec[cc93e76584517b87]::boxed::BitBox>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1
+  25:     0x555e261ac6f8 - core[53a3f952d0a3e8e5]::mem::drop::<bitvec[cc93e76584517b87]::boxed::BitBox>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1
+  26:     0x555e261b1340 - rsh_002_harness[fd557f229fb0f0d1]::witness::run
+                               at /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/work/project/src/witness.rs:56:5
+  27:     0x555e261ae051 - rsh_002_harness[fd557f229fb0f0d1]::main
+                               at /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/work/project/src/main.rs:41:5
+  28:     0x555e261b28eb - <fn() as core[53a3f952d0a3e8e5]::ops::function::FnOnce<()>>::call_once
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+  29:     0x555e261ac84e - std[3e0755d7ee10f1c0]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
+  30:     0x555e261adb01 - std[3e0755d7ee10f1c0]::rt::lang_start::<()>::{closure#0}
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
+  31:     0x555e261d7c27 - <&dyn core[53a3f952d0a3e8e5]::ops::function::Fn<(), Output = i32> + core[53a3f952d0a3e8e5]::marker::Sync + core[53a3f952d0a3e8e5]::panic::unwind_safe::RefUnwindSafe as core[53a3f952d0a3e8e5]::ops::function::FnOnce<()>>::call_once
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21
+  32:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panicking::catch_unwind::do_call::<&dyn core[53a3f952d0a3e8e5]::ops::function::Fn<(), Output = i32> + core[53a3f952d0a3e8e5]::marker::Sync + core[53a3f952d0a3e8e5]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43
+  33:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panicking::catch_unwind::<i32, &dyn core[53a3f952d0a3e8e5]::ops::function::Fn<(), Output = i32> + core[53a3f952d0a3e8e5]::marker::Sync + core[53a3f952d0a3e8e5]::panic::unwind_safe::RefUnwindSafe>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19
+  34:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panic::catch_unwind::<&dyn core[53a3f952d0a3e8e5]::ops::function::Fn<(), Output = i32> + core[53a3f952d0a3e8e5]::marker::Sync + core[53a3f952d0a3e8e5]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14
+  35:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::rt::lang_start_internal::{closure#0}
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24
+  36:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panicking::catch_unwind::do_call::<std[3e0755d7ee10f1c0]::rt::lang_start_internal::{closure#0}, isize>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43
+  37:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panicking::catch_unwind::<isize, std[3e0755d7ee10f1c0]::rt::lang_start_internal::{closure#0}>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19
+  38:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::panic::catch_unwind::<std[3e0755d7ee10f1c0]::rt::lang_start_internal::{closure#0}, isize>
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14
+  39:     0x555e261d7c27 - std[3e0755d7ee10f1c0]::rt::lang_start_internal
+                               at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5
+  40:     0x555e261ac697 - std[3e0755d7ee10f1c0]::rt::lang_start::<()>
+                               at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
+  41:     0x555e261b298e - main
+  42:     0x7fbc6322a1ca - __libc_start_call_main
+                               at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  43:     0x7fbc6322a28b - __libc_start_main_impl
+                               at ./csu/../csu/libc-start.c:360:3
+  44:     0x555e261abc25 - _start
+  45:                0x0 - <unknown>
+
+thread 'main' (165742) panicked at /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/panicking.rs:233:5:
+panic in a destructor during cleanup
+thread caused non-unwinding panic. aborting.

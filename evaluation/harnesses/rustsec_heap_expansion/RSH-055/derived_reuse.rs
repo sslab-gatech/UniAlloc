@@ -46,10 +46,10 @@ impl Clone for DropDetector {
     }
 }
 
-// This audited generic slice-to-Vec path matches the RSH-064 manual-identity
-// pattern and avoids a compiler-emitted exact Box identity at the victim site.
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_payload<T: Clone, const N: usize>(seed: &[T; N]) -> std::vec::Vec<T> {
+fn materialize_payload(seed: &[u64; 1]) -> std::vec::Vec<u64> {
     seed.to_vec()
 }
 

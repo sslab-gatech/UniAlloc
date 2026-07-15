@@ -1,0 +1,61 @@
+label: unialloc-rustc-driver-mir-rewrite-dry-run
+query_overridden: optimized_mir
+body_clone_returned_to_rustc: true
+actual_allocator_call_replacement_requested: true
+actual_allocator_call_replacement: false
+rewrite_applied_count: 0
+direct_layout_allocator_rewrite_applied_count: 0
+direct_size_align_allocator_call_site_count: 0
+direct_size_align_recovery_backed_unpaired_dealloc_count: 0
+direct_local_size_align_semantic_drop_scope_count: 0
+direct_local_size_align_metadata_contract_violation_count: 0
+direct_local_size_align_pairing_gap_count: 0
+actual_semantic_scope_rewrite_requested: true
+actual_semantic_ownership_transfer_rewrite_requested: true
+policy_flags: 0
+lifetime_hint: 0
+lifetime_profile_confidence_threshold: 0
+lifetime_profile_enabled: false
+lifetime_profile_format: unialloc-lifetime-profile-v1
+lifetime_profile_binding: exact(callsite,type_id,module_id)
+lifetime_profile_digest_algorithm: fnv1a64-raw-bytes
+lifetime_profile_match_count: 0
+lifetime_profile_abstention_count: 0
+lifetime_profile_miss_count: 0
+automatic_lifetime_classifier_enabled: false
+automatic_lifetime_classifier_precedence: exact_profile>manual_global>automatic>Unknown
+automatic_lifetime_candidate_allocation_site_count: 3
+automatic_lifetime_eligible_allocation_site_count: 0
+automatic_lifetime_ephemeral_allocation_site_count: 0
+automatic_lifetime_long_lived_allocation_site_count: 0
+automatic_lifetime_unsupported_allocation_site_count: 0
+automatic_lifetime_unknown_allocation_site_count: 0
+placement_hint: 0
+module_id: 17321350450253438126
+module_id_algorithm: unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))
+auto_cross_thread_recovery_hint: false
+continue_compilation: true
+default_policy_flags: 1
+actual_semantic_scope_rewrite: true
+actual_semantic_ownership_transfer_rewrite: true
+semantic_scope_candidate_count: 3
+semantic_ownership_transfer_candidate_count: 1
+semantic_scope_deallocation_like_candidate_count: 0
+semantic_scope_unsolved_candidate_count: 683
+semantic_scope_callback_capable_skipped_count: 64
+semantic_scope_drop_candidate_count: 0
+semantic_scope_drop_unsolved_candidate_count: 2
+semantic_scope_drop_non_heap_skipped_count: 27
+semantic_scope_drop_generic_type_parameter_skipped_count: 87
+semantic_scope_rewrite_applied_count: 3
+semantic_ownership_transfer_rewrite_applied_count: 1
+semantic_scope_deallocation_like_rewrite_applied_count: 0
+semantic_scope_drop_rewrite_applied_count: 0
+semantic_scope_unwind_pop_inserted_count: 3
+cross_thread_recovery_hint_count: 3
+rewrite_candidate_count: 871
+target_allocator_abi: __unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator
+semantic_scope_abi: __unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed
+semantic_ownership_transfer_abi: exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, CString -> Vec<u8, Global> to __unialloc_semantic_cstring_into_bytes_with_nul, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; proof or symbol-resolution failure retains the ambiguous fail-closed path
+semantic_heap_object_solver: rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only
+note: real rustc query override; dry-run by default, optional actual modes rewrite supported direct allocator calls or insert semantic-scope enter/exit calls

@@ -1,0 +1,654 @@
+{
+  "allocator_provenance": {
+    "cargo_metadata_attestation": null,
+    "compiler_wrapper_sha256": null,
+    "direct_cargo_configuration": null,
+    "direct_cargo_unialloc": false,
+    "force_loaded_unialloc": false,
+    "force_rlib_sha256": null,
+    "force_wrapper_sha256": null,
+    "single_unialloc_identity_enforced": true,
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "bitvec",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "unialloc_implementation_sha256": "7aab5d36646605915b9f6b29dc0b1d8c5611d835d6c9856a526d8a04bf4490e2"
+  },
+  "allocator_topology": {
+    "allocator_variant": "system",
+    "allocator_wrapper_policy": "explicit_experiment_wrapper",
+    "claim_grade": false,
+    "default_system_allocator_preserved": false,
+    "detection": "absent",
+    "direct_global_allocator_attribute_count": 0,
+    "effective_allocator_owner": "experiment_wrapper",
+    "fail_closed": false,
+    "global_allocator_token_count": 0,
+    "subject_allocator_preserved": false,
+    "subject_global_allocator_detected": false,
+    "substitution_supported": true,
+    "unsupported_reason": null,
+    "wrapper_defines_global_allocator": true
+  },
+  "allocator_variant": "system",
+  "archive_variant": "vulnerable",
+  "binary_artifact": {
+    "bytes": 7238504,
+    "path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness",
+    "sha256": "a8d4949bec8a2ff5264def3ce2cbf2ea8b064b6a710c295f0a21c96634b9763b"
+  },
+  "build": {
+    "command": [
+      "cargo",
+      "+nightly-2026-06-11",
+      "build",
+      "--offline",
+      "--locked",
+      "--manifest-path",
+      "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/Cargo.toml",
+      "--jobs",
+      "4",
+      "--target",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project",
+    "environment": {
+      "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target",
+      "HOME": "/home/hanqing",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LOGNAME": "hanqing",
+      "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+      "SHELL": "/usr/bin/zsh",
+      "TERM": "dumb",
+      "USER": "hanqing"
+    },
+    "environment_allowlist": [
+      "ASAN_OPTIONS",
+      "CARGO_INCREMENTAL",
+      "CARGO_TARGET_DIR",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LOGNAME",
+      "PATH",
+      "RUSTFLAGS",
+      "SHELL",
+      "TERM",
+      "USER"
+    ],
+    "exit_code": 0,
+    "stderr": "   Compiling either v1.16.0\n   Compiling radium v0.3.0\n   Compiling bitvec v0.17.3 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3)\nwarning: unused import: `api::*`\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/boxed.rs:382:9\n    |\n382 | pub use api::*;\n    |         ^^^^^^\n    |\n    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused import: `api::*`\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/vec.rs:837:9\n    |\n837 | pub use api::*;\n    |         ^^^^^^\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:335:19\n    |\n335 |     pub fn first_mut(&mut self) -> Option<BitMut<O, T>> {\n    |                      ^^^^^^^^^            ^^^^^^^^^^^^ the same lifetime is hidden here\n    |                      |\n    |                      the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\n    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default\nhelp: use `'_` for type paths\n    |\n335 |     pub fn first_mut(&mut self) -> Option<BitMut<'_, O, T>> {\n    |                                                  +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:380:25\n    |\n380 |     pub fn split_first_mut(&mut self) -> Option<(BitMut<O, T>, &mut Self)> {\n    |                            ^^^^^^^^^             ^^^^^^^^^^^^  ^^^^^^^^^ the same lifetime is elided here\n    |                            |                     |\n    |                            |                     the same lifetime is hidden here\n    |                            the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n380 |     pub fn split_first_mut(&mut self) -> Option<(BitMut<'_, O, T>, &mut Self)> {\n    |                                                         +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:431:24\n    |\n431 |     pub fn split_last_mut(&mut self) -> Option<(BitMut<O, T>, &mut Self)> {\n    |                           ^^^^^^^^^             ^^^^^^^^^^^^  ^^^^^^^^^ the same lifetime is elided here\n    |                           |                     |\n    |                           |                     the same lifetime is hidden here\n    |                           the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n431 |     pub fn split_last_mut(&mut self) -> Option<(BitMut<'_, O, T>, &mut Self)> {\n    |                                                        +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:472:18\n    |\n472 |     pub fn last_mut(&mut self) -> Option<BitMut<O, T>> {\n    |                     ^^^^^^^^^            ^^^^^^^^^^^^ the same lifetime is hidden here\n    |                     |\n    |                     the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n472 |     pub fn last_mut(&mut self) -> Option<BitMut<'_, O, T>> {\n    |                                                 +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:738:14\n    |\n738 |     pub fn iter(&self) -> Iter<O, T> {\n    |                 ^^^^^     ^^^^^^^^^^ the same lifetime is hidden here\n    |                 |\n    |                 the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n738 |     pub fn iter(&self) -> Iter<'_, O, T> {\n    |                                +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:756:18\n    |\n756 |     pub fn iter_mut(&mut self) -> IterMut<O, T> {\n    |                     ^^^^^^^^^     ^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                     |\n    |                     the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n756 |     pub fn iter_mut(&mut self) -> IterMut<'_, O, T> {\n    |                                           +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:790:17\n    |\n790 |     pub fn windows(&self, width: usize) -> Windows<O, T> {\n    |                    ^^^^^                   ^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                    |\n    |                    the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n790 |     pub fn windows(&self, width: usize) -> Windows<'_, O, T> {\n    |                                                    +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:828:16\n    |\n828 |     pub fn chunks(&self, chunk_size: usize) -> Chunks<O, T> {\n    |                   ^^^^^                        ^^^^^^^^^^^^ the same lifetime is hidden here\n    |                   |\n    |                   the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n828 |     pub fn chunks(&self, chunk_size: usize) -> Chunks<'_, O, T> {\n    |                                                       +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:869:20\n    |\n869 |     pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<O, T> {\n    |                       ^^^^^^^^^                        ^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                       |\n    |                       the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n869 |     pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<'_, O, T> {\n    |                                                                  +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:911:22\n    |\n911 |     pub fn chunks_exact(&self, chunk_size: usize) -> ChunksExact<O, T> {\n    |                         ^^^^^                        ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                         |\n    |                         the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n911 |     pub fn chunks_exact(&self, chunk_size: usize) -> ChunksExact<'_, O, T> {\n    |                                                                  +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:964:26\n    |\n964 |     pub fn chunks_exact_mut(&mut self, chunk_size: usize) -> ChunksExactMut<O, T> {\n    |                             ^^^^^^^^^                        ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                             |\n    |                             the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n964 |     pub fn chunks_exact_mut(&mut self, chunk_size: usize) -> ChunksExactMut<'_, O, T> {\n    |                                                                             +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n    --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:1007:17\n     |\n1007 |     pub fn rchunks(&self, chunk_size: usize) -> RChunks<O, T> {\n     |                    ^^^^^                        ^^^^^^^^^^^^^ the same lifetime is hidden here\n     |                    |\n     |                    the lifetime is elided here\n     |\n     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n     |\n1007 |     pub fn rchunks(&self, chunk_size: usize) -> RChunks<'_, O, T> {\n     |                                                         +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n    --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:1049:21\n     |\n1049 |     pub fn rchunks_mut(&mut self, chunk_size: usize) -> RChunksMut<O, T> {\n     |                        ^^^^^^^^^                        ^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n     |                        |\n     |                        the lifetime is elided here\n     |\n     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n     |\n1049 |     pub fn rchunks_mut(&mut self, chunk_size: usize) -> RChunksMut<'_, O, T> {\n     |                                                                    +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n    --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:1092:23\n     |\n1092 |     pub fn rchunks_exact(&self, chunk_size: usize) -> RChunksExact<O, T> {\n     |                          ^^^^^                        ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n     |                          |\n     |                          the lifetime is elided here\n     |\n     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n     |\n1092 |     pub fn rchunks_exact(&self, chunk_size: usize) -> RChunksExact<'_, O, T> {\n     |                                                                    +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n    --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/slice/api.rs:1143:27\n     |\n1143 |     pub fn rchunks_exact_mut(&mut self, chunk_size: usize) -> RChunksExactMut<O, T> {\n     |                              ^^^^^^^^^                        ^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n     |                              |\n     |                              the lifetime is elided here\n     |\n     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n     |\n1143 |     pub fn rchunks_exact_mut(&mut self, chunk_size: usize) -> RChunksExactMut<'_, O, T> {\n     |                                                                               +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/vec/api.rs:570:18\n    |\n570 |     pub fn drain<R>(&mut self, range: R) -> Drain<O, T>\n    |                     ^^^^^^^^^               ^^^^^^^^^^^ the same lifetime is hidden here\n    |                     |\n    |                     the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n570 |     pub fn drain<R>(&mut self, range: R) -> Drain<'_, O, T>\n    |                                                   +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3/src/vec/api.rs:809:3\n    |\n809 |         &mut self,\n    |         ^^^^^^^^^ the lifetime is elided here\n...\n812 |     ) -> Splice<O, T, <I as IntoIterator>::IntoIter>\n    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n812 |     ) -> Splice<'_, O, T, <I as IntoIterator>::IntoIter>\n    |                 +++\n\nwarning: `bitvec` (lib) generated 19 warnings (run `cargo fix --lib -p bitvec` to apply 19 suggestions)\n   Compiling rsh-002-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project)\nwarning: function `with_vulnerability_edge_identity` is never used\n  --> src/witness.rs:20:15\n   |\n20 | pub(crate) fn with_vulnerability_edge_identity<R>(\n   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `report_vulnerability_edge_reuse_denial` is never used\n  --> src/witness.rs:29:15\n   |\n29 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}\n   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: `rsh-002-harness` (bin \"rsh-002-harness\") generated 2 warnings\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.74s\n",
+    "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/build.stderr",
+    "stderr_sha256": "1a14ef79fd61aff612d44dbb9e0e88031824d7ba6f8a7339eb5e91e3de3fa6bf",
+    "stdout": "",
+    "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/build.stdout",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "wall_seconds": 0.761786605
+  },
+  "case_id": "RSH-002",
+  "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+  "claim_grade": false,
+  "crate": "bitvec",
+  "edge_identity_mode": "compiler_automatic_probe",
+  "effective_oracle_toolchain": "nightly-2026-06-11",
+  "effective_required_environment": {
+    "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0"
+  },
+  "efficacy_blockers": [
+    "critical_site_coverage_not_validated",
+    "no_compiler_rewrite_observed"
+  ],
+  "efficacy_eligible": false,
+  "execution_mode": "asan",
+  "execution_status": "completed",
+  "fingerprint": "a8c26beca8d8e79b7def61c5346067a346a6c9ecc5f45982ea7ad35f5a5b447a",
+  "fingerprint_payload": {
+    "allocator_variant": "system",
+    "archive_sha256": "fea3f6954750547b48aa42185a8fd6ef09e3ecaff57901e386d5f0df79b3b99d",
+    "archive_variant": "vulnerable",
+    "automatic_edge_identity_probe": true,
+    "base_lock_sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8",
+    "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+    "catalog_sha256": "db019cfa387e2b068be114f21ee89201f68551998265d0b7a4ff75a74ffe3386",
+    "effective_lock_sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8",
+    "effective_manifest_sha256": "3f72a3b52cf71cc04e5e1aedb704387d0bdafb9a740c08395ecf104004385dad",
+    "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+    "orchestrator_sha256": "e380805e432e834aff9ebeb6c0bc2212ed663bd1efb08be337a40d1cc2cdcd57",
+    "realworld_driver_sha256": "b2063258fb5e30194a4241f1b7fee05c149b0d21d40db82ab85fc781322c7476",
+    "rustflags": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs",
+      "-Zsanitizer=address",
+      "-Cforce-frame-pointers=yes"
+    ],
+    "scenario_id": "RSH-002-derived-reuse",
+    "schema_version": 1,
+    "source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "bitvec",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "target_crates": [
+      "bitvec",
+      "rsh_002_harness"
+    ],
+    "toolchain": {
+      "cargo": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "-V"
+        ],
+        "exit_code": 0,
+        "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+        "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+      },
+      "name": "nightly-2026-06-11",
+      "rustc": {
+        "command": [
+          "rustc",
+          "+nightly-2026-06-11",
+          "-vV"
+        ],
+        "exit_code": 0,
+        "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+        "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+      },
+      "target": "x86_64-unknown-linux-gnu"
+    },
+    "transformed_sources": {
+      "original_source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+      "witness_module_sha256": "f817fbc6aa8cf52cb90be50faff183337c4a1cb0d97b7e30f7f4463b157d8bca",
+      "wrapper_source_sha256": "f5c619a5fffc9c2ab79fbe161178dcc6430e88cfd247c74a3c7dbd3650fd26f5"
+    },
+    "unialloc_implementation_sha256": "7aab5d36646605915b9f6b29dc0b1d8c5611d835d6c9856a526d8a04bf4490e2"
+  },
+  "full_rebuild_required": true,
+  "ground_truth_arm": true,
+  "legacy_allocator_abi_bridge": false,
+  "lock_resolution": null,
+  "materialization": {
+    "archive_bytes": 105418,
+    "archive_path": "/tmp/unialloc-rustsec-cache/archives/bitvec-0.17.3.crate",
+    "archive_sha256": "fea3f6954750547b48aa42185a8fd6ef09e3ecaff57901e386d5f0df79b3b99d",
+    "cargo_lock_path": "evaluation/harnesses/rustsec_heap/RSH-002/Cargo.lock.vulnerable",
+    "cargo_lock_sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8",
+    "case_id": "RSH-002",
+    "claim_grade": false,
+    "dependency_package": "bitvec",
+    "dependency_version": "0.17.3",
+    "oracle": {
+      "patched_control": "same address grooming exits 0",
+      "tool": "asan",
+      "vulnerable": "old address equals Replacement address and stale invalid free is reported"
+    },
+    "required_environment": {
+      "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0"
+    },
+    "rustflags": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs"
+    ],
+    "scenario_id": "RSH-002-derived-reuse",
+    "schema_version": 1,
+    "source": "unialloc-rustsec-heap-materialization",
+    "source_path": "evaluation/harnesses/rustsec_heap/RSH-002/derived_reuse.rs",
+    "source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "bitvec",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "subject_directory": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/subject/bitvec-0.17.3",
+    "variant": "vulnerable",
+    "work_directory": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work"
+  },
+  "oracle_validation": {
+    "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+    "claim_grade": false,
+    "diagnostic_only": false,
+    "expected_contract": {
+      "compile_error_codes": [],
+      "expected_finding_signature": "asan_bad_free",
+      "kind": "asan_finding",
+      "parse_status": "parsed",
+      "required_evidence": [
+        "asan_bad_free",
+        "run_nonzero",
+        "address_reuse_same_run"
+      ]
+    },
+    "expected_description": "old address equals Replacement address and stale invalid free is reported",
+    "expected_oracle_observed": true,
+    "matched_compile_error_codes": [],
+    "mitigation_inferred": false,
+    "native_diagnostic_signatures": [],
+    "oracle_role": "catalog_oracle",
+    "repetition_observations": [
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": false,
+        "exit_code": 1,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 1,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": true,
+        "timed_out": false,
+        "tool_finding_signature": "asan_bad_free"
+      },
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": false,
+        "exit_code": 1,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 2,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": true,
+        "timed_out": false,
+        "tool_finding_signature": "asan_bad_free"
+      },
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": false,
+        "exit_code": 1,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 3,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": true,
+        "timed_out": false,
+        "tool_finding_signature": "asan_bad_free"
+      }
+    ],
+    "status": "tool_finding_observed",
+    "tool_finding_signatures": [
+      "asan_bad_free",
+      "asan_bad_free",
+      "asan_bad_free"
+    ]
+  },
+  "pass_audit_summary": {
+    "audit_file_count": 0,
+    "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "claim_grade_file_count": 0,
+    "crate_names": [],
+    "direct_allocator_rewrites_applied": 0,
+    "direct_layout_allocator_rewrites_applied": 0,
+    "semantic_deallocation_like_rewrites_applied": 0,
+    "semantic_drop_rewrites_applied": 0,
+    "semantic_ownership_transfer_rewrites_applied": 0,
+    "semantic_rewrites_applied": 0,
+    "semantic_scope_rewrites_applied": 0,
+    "total_compiler_rewrites_applied": 0,
+    "unresolved_file_count": 0
+  },
+  "pass_audit_validation": {
+    "claim_grade": false,
+    "compiler_rewrite_counts": {
+      "direct_allocator_rewrites_applied": 0,
+      "direct_layout_allocator_rewrites_applied": 0,
+      "semantic_ownership_transfer_rewrites_applied": 0,
+      "semantic_rewrites_applied": 0,
+      "total_compiler_rewrites_applied": 0
+    },
+    "critical_site_coverage_validated": false,
+    "efficacy_blockers": [
+      "critical_site_coverage_not_validated",
+      "no_compiler_rewrite_observed"
+    ],
+    "efficacy_eligible": false,
+    "rewrite_route": "none",
+    "status": "not_applicable",
+    "valid": null,
+    "validation_scope": "target_crate_presence_and_force_load_topology_only"
+  },
+  "pass_audits": [],
+  "pass_logs": [],
+  "platform_constraints": {},
+  "repetition_summary": {
+    "address_reuse_observation_count": 3,
+    "claim_grade": false,
+    "clean_exit_count": 0,
+    "executed": 3,
+    "exit_codes": [
+      1,
+      1,
+      1
+    ],
+    "mitigation_inferred": false,
+    "native_diagnostic_signal_count": 0,
+    "requested": 3,
+    "timed_out_count": 0,
+    "tool_finding_count": 3
+  },
+  "repetitions_requested": 3,
+  "required_environment": {
+    "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0"
+  },
+  "reuse_denial_evidence": {
+    "annotation": {
+      "annotation_scope": [
+        "bitvec::BitVec::with_capacity generic Vec<T> backing allocation",
+        "BitVec-to-BitBox conversion reclaims the original backing while the stale BitBox retains it"
+      ],
+      "automatic_compiler_coverage_contract": {
+        "coverage_scope": "source_shaped_derived",
+        "replacement": {
+          "rewrite_statuses": [
+            "actual_semantic_scope_generic_type_rewrite_applied"
+          ],
+          "semantic_type_fragment": "Box<witness::Replacement",
+          "source_file_fragment": "src/witness.rs:50:23:"
+        },
+        "schema_version": 1,
+        "victim": {
+          "rewrite_statuses": [
+            "actual_semantic_scope_generic_type_rewrite_applied"
+          ],
+          "semantic_type_fragment": "std::vec::Vec<T/#1",
+          "source_file_fragment": "/src/vec/api.rs:54:11:"
+        }
+      },
+      "claim_scope": "derived RSH-002 cross-identity A-to-B reuse edge only",
+      "expected_layout": {
+        "align": 8,
+        "size": 1016
+      },
+      "kind": "manual_exact_vulnerability_edge_identity",
+      "replacement_semantic_type_fragment": "Box<witness::Replacement",
+      "replacement_source_file_fragment": "src/witness.rs:",
+      "schema_version": 1,
+      "victim_module_id": 5932164307604209666,
+      "victim_type_id": 5932164307604209665
+    },
+    "claim_grade": false,
+    "repetitions": [],
+    "status": "system_baseline_uses_address_and_sanitizer_oracles",
+    "valid": null
+  },
+  "run": {
+    "command": [
+      "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness"
+    ],
+    "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+    "environment": {
+      "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target",
+      "HOME": "/home/hanqing",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LOGNAME": "hanqing",
+      "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+      "SHELL": "/usr/bin/zsh",
+      "TERM": "dumb",
+      "USER": "hanqing"
+    },
+    "environment_allowlist": [
+      "ASAN_OPTIONS",
+      "CARGO_INCREMENTAL",
+      "CARGO_TARGET_DIR",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LOGNAME",
+      "PATH",
+      "RUSTFLAGS",
+      "SHELL",
+      "TERM",
+      "USER"
+    ],
+    "exit_code": 1,
+    "stderr": "original=0x7d5d2e3e0080 replacement=0x7d5d2e3e0080\n=================================================================\n==164675==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x7d5d2e3e0080 in thread T0\n    #0 0x55b48aa858a6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x55b48aabca58 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x55b48aab6bd4 in __rustc::__rust_dealloc /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x55b48aabd300 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x55b48aabd300 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x55b48aabd300 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x55b48aabd300 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x55b48aabcd98 in <alloc::boxed::Box<rsh_002_harness::witness::Replacement> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x55b48aab55b0 in core::ptr::drop_glue::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x55b48aab51ca in core::mem::drop::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1\n    #10 0x55b48aabbd81 in rsh_002_harness::witness::run /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/witness.rs:57:5\n    #11 0x55b48aab6ca8 in rsh_002_harness::main /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:20:5\n    #12 0x55b48aabd70d in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #13 0x55b48aab5710 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #14 0x55b48aab6a03 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #15 0x55b48aae2e66 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #16 0x55b48aae2e66 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #17 0x55b48aae2e66 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #18 0x55b48aae2e66 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #19 0x55b48aae2e66 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #20 0x55b48aae2e66 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #21 0x55b48aae2e66 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #22 0x55b48aae2e66 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #23 0x55b48aae2e66 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #24 0x55b48aab509f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #25 0x55b48aabda70 in main (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x10fa70) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n    #26 0x7fcd2f02a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #27 0x7fcd2f02a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #28 0x55b48a9f95e4 in _start (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x4b5e4) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n\nAddress 0x7d5d2e3e0080 is a wild pointer inside of access range of size 0x000000000001.\nSUMMARY: AddressSanitizer: bad-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==164675==ABORTING\n",
+    "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-001.stderr",
+    "stderr_sha256": "e47ed00cafa07147566357b9d4f31a7f37d65031bf895b392b0619cb9f618b18",
+    "stdout": "",
+    "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-001.stdout",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "wall_seconds": 0.331870492
+  },
+  "runs": [
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+      "environment": {
+        "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0",
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "ASAN_OPTIONS",
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 1,
+      "stderr": "original=0x7d5d2e3e0080 replacement=0x7d5d2e3e0080\n=================================================================\n==164675==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x7d5d2e3e0080 in thread T0\n    #0 0x55b48aa858a6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x55b48aabca58 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x55b48aab6bd4 in __rustc::__rust_dealloc /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x55b48aabd300 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x55b48aabd300 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x55b48aabd300 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x55b48aabd300 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x55b48aabcd98 in <alloc::boxed::Box<rsh_002_harness::witness::Replacement> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x55b48aab55b0 in core::ptr::drop_glue::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x55b48aab51ca in core::mem::drop::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1\n    #10 0x55b48aabbd81 in rsh_002_harness::witness::run /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/witness.rs:57:5\n    #11 0x55b48aab6ca8 in rsh_002_harness::main /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:20:5\n    #12 0x55b48aabd70d in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #13 0x55b48aab5710 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #14 0x55b48aab6a03 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #15 0x55b48aae2e66 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #16 0x55b48aae2e66 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #17 0x55b48aae2e66 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #18 0x55b48aae2e66 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #19 0x55b48aae2e66 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #20 0x55b48aae2e66 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #21 0x55b48aae2e66 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #22 0x55b48aae2e66 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #23 0x55b48aae2e66 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #24 0x55b48aab509f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #25 0x55b48aabda70 in main (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x10fa70) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n    #26 0x7fcd2f02a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #27 0x7fcd2f02a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #28 0x55b48a9f95e4 in _start (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x4b5e4) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n\nAddress 0x7d5d2e3e0080 is a wild pointer inside of access range of size 0x000000000001.\nSUMMARY: AddressSanitizer: bad-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==164675==ABORTING\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-001.stderr",
+      "stderr_sha256": "e47ed00cafa07147566357b9d4f31a7f37d65031bf895b392b0619cb9f618b18",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-001.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.331870492
+    },
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+      "environment": {
+        "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0",
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "ASAN_OPTIONS",
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 1,
+      "stderr": "original=0x7d2cda3e0080 replacement=0x7d2cda3e0080\n=================================================================\n==164709==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x7d2cda3e0080 in thread T0\n    #0 0x56221ba868a6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x56221babda58 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x56221bab7bd4 in __rustc::__rust_dealloc /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x56221babe300 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x56221babe300 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x56221babe300 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x56221babe300 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x56221babdd98 in <alloc::boxed::Box<rsh_002_harness::witness::Replacement> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x56221bab65b0 in core::ptr::drop_glue::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x56221bab61ca in core::mem::drop::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1\n    #10 0x56221babcd81 in rsh_002_harness::witness::run /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/witness.rs:57:5\n    #11 0x56221bab7ca8 in rsh_002_harness::main /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:20:5\n    #12 0x56221babe70d in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #13 0x56221bab6710 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #14 0x56221bab7a03 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #15 0x56221bae3e66 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #16 0x56221bae3e66 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #17 0x56221bae3e66 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #18 0x56221bae3e66 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #19 0x56221bae3e66 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #20 0x56221bae3e66 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #21 0x56221bae3e66 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #22 0x56221bae3e66 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #23 0x56221bae3e66 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #24 0x56221bab609f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #25 0x56221babea70 in main (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x10fa70) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n    #26 0x7f9cdb02a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #27 0x7f9cdb02a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #28 0x56221b9fa5e4 in _start (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x4b5e4) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n\nAddress 0x7d2cda3e0080 is a wild pointer inside of access range of size 0x000000000001.\nSUMMARY: AddressSanitizer: bad-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==164709==ABORTING\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-002.stderr",
+      "stderr_sha256": "93fd0386a6beeaf98206364bab195061e4f461bc779ffff47582d787c7b5c04a",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-002.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.331097852
+    },
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+      "environment": {
+        "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0",
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "ASAN_OPTIONS",
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 1,
+      "stderr": "original=0x7d8bebfe0080 replacement=0x7d8bebfe0080\n=================================================================\n==164713==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x7d8bebfe0080 in thread T0\n    #0 0x5622cbc668a6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x5622cbc9da58 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x5622cbc97bd4 in __rustc::__rust_dealloc /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5622cbc9e300 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x5622cbc9e300 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x5622cbc9e300 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x5622cbc9e300 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x5622cbc9dd98 in <alloc::boxed::Box<rsh_002_harness::witness::Replacement> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x5622cbc965b0 in core::ptr::drop_glue::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x5622cbc961ca in core::mem::drop::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1\n    #10 0x5622cbc9cd81 in rsh_002_harness::witness::run /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/witness.rs:57:5\n    #11 0x5622cbc97ca8 in rsh_002_harness::main /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:20:5\n    #12 0x5622cbc9e70d in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #13 0x5622cbc96710 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #14 0x5622cbc97a03 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #15 0x5622cbcc3e66 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #16 0x5622cbcc3e66 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #17 0x5622cbcc3e66 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #18 0x5622cbcc3e66 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #19 0x5622cbcc3e66 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #20 0x5622cbcc3e66 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #21 0x5622cbcc3e66 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #22 0x5622cbcc3e66 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #23 0x5622cbcc3e66 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #24 0x5622cbc9609f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #25 0x5622cbc9ea70 in main (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x10fa70) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n    #26 0x7ffbecc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #27 0x7ffbecc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #28 0x5622cbbda5e4 in _start (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x4b5e4) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)\n\nAddress 0x7d8bebfe0080 is a wild pointer inside of access range of size 0x000000000001.\nSUMMARY: AddressSanitizer: bad-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==164713==ABORTING\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-003.stderr",
+      "stderr_sha256": "b45fc6defd9fcf0a6ee88ca06c4be0240426a6de5fc7217c9d8d468d2a04a1b8",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/artifacts/run-003.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.332374295
+    }
+  ],
+  "runtime_stats": null,
+  "runtime_stats_by_repetition": [],
+  "runtime_stats_validation": {
+    "claim_grade": false,
+    "efficacy_blockers": [
+      "critical_site_coverage_not_validated"
+    ],
+    "efficacy_eligible": false,
+    "repetitions": [],
+    "status": "not_applicable",
+    "valid": null
+  },
+  "rustflag_policy": {
+    "effective": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs",
+      "-Zsanitizer=address",
+      "-Cforce-frame-pointers=yes"
+    ],
+    "effective_oracle_toolchain": "nightly-2026-06-11",
+    "reason": null,
+    "removed": [],
+    "requested": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs",
+      "-Zsanitizer=address",
+      "-Cforce-frame-pointers=yes"
+    ]
+  },
+  "scenario_id": "RSH-002-derived-reuse",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment",
+  "source_provenance": {
+    "archive_sha256": "fea3f6954750547b48aa42185a8fd6ef09e3ecaff57901e386d5f0df79b3b99d",
+    "base_lock_sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8",
+    "effective_lock_sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8",
+    "original_source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+    "source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "bitvec",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "witness_module_sha256": "f817fbc6aa8cf52cb90be50faff183337c4a1cb0d97b7e30f7f4463b157d8bca",
+    "wrapper_source_sha256": "f5c619a5fffc9c2ab79fbe161178dcc6430e88cfd247c74a3c7dbd3650fd26f5"
+  },
+  "target_crates": [
+    "bitvec",
+    "rsh_002_harness"
+  ],
+  "target_reset": false,
+  "target_reset_reasons": [
+    "fingerprint_changed"
+  ],
+  "tool": "asan",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  }
+}

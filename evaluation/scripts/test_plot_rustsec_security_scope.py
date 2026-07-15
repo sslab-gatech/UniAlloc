@@ -19,14 +19,17 @@ plot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(plot)
 
 
-def typeiso_edge_positive(**updates: object) -> dict[str, object]:
+def typeiso_edge_mitigation(**updates: object) -> dict[str, object]:
     result: dict[str, object] = {
         "mechanism": "type_isolation",
         "outcome": "mitigated",
-        "true_positive": True,
+        "validated_mitigation": True,
+        "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
         "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
         "compiler_automatic_victim_coverage": False,
         "source_vulnerability_detection_validated": False,
+        "vulnerability_specific_detection_signal": False,
+        "full_source_vulnerability_detection": False,
     }
     result.update(updates)
     return result
@@ -42,7 +45,7 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
                     "primary_primitive": "use_after_free",
                     "integration": {"status": "executable"},
                     "mechanism_results": [
-                        typeiso_edge_positive(synthetic_reduction=True)
+                        typeiso_edge_mitigation(synthetic_reduction=True)
                     ],
                 },
                 {
@@ -58,7 +61,7 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
                     "primary_primitive": "double_free",
                     "integration": {"status": "executable"},
                     "mechanism_results": [
-                        typeiso_edge_positive(),
+                        typeiso_edge_mitigation(),
                         {"mechanism": "reclaim_checks", "outcome": "detected"},
                     ],
                 },
@@ -144,9 +147,15 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
             summary["type_isolation_claim_boundary"],
             {
                 "manual_derived_reuse_edge_case_count": 2,
+                "manual_derived_reuse_edge_case_ids": ["A", "C"],
+                "compiler_automatic_victim_coverage_case_count": 0,
+                "compiler_automatic_victim_coverage_case_ids": [],
                 "synthetic_reduction_case_count": 1,
                 "synthetic_reduction_case_ids": ["A"],
-                "automatic_source_true_positive_case_count": 0,
+                "automatic_full_source_vulnerability_detection_case_count": 0,
+                "causal_mitigated_derived_edge_case_count": 2,
+                "vulnerability_specific_detection_case_count": 0,
+                "full_source_vulnerability_detection_case_count": 0,
                 "compiler_automatic_victim_coverage": False,
                 "source_vulnerability_detection_validated": False,
                 "claim_grade": False,
@@ -247,17 +256,23 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "separate plot categories"):
             plot.figure_summary(ledger)
 
-    def test_observed_typeiso_requires_the_manual_derived_edge_contract(self) -> None:
-        missing_automatic_boundary = typeiso_edge_positive()
+    def test_observed_typeiso_requires_a_derived_edge_identity_contract(self) -> None:
+        missing_automatic_boundary = typeiso_edge_mitigation()
         del missing_automatic_boundary["compiler_automatic_victim_coverage"]
-        missing_source_boundary = typeiso_edge_positive()
+        missing_source_boundary = typeiso_edge_mitigation()
         del missing_source_boundary["source_vulnerability_detection_validated"]
         invalid_results = (
-            typeiso_edge_positive(outcome="detected"),
-            typeiso_edge_positive(true_positive=False),
-            typeiso_edge_positive(positive_scope="source_vulnerability"),
-            typeiso_edge_positive(compiler_automatic_victim_coverage=True),
-            typeiso_edge_positive(source_vulnerability_detection_validated=True),
+            typeiso_edge_mitigation(outcome="detected"),
+            typeiso_edge_mitigation(validated_mitigation=False),
+            typeiso_edge_mitigation(true_positive=True),
+            typeiso_edge_mitigation(positive_scope="source_vulnerability"),
+            typeiso_edge_mitigation(
+                compiler_automatic_victim_coverage=True,
+                automatic_edge_identity_probe=False,
+            ),
+            typeiso_edge_mitigation(source_vulnerability_detection_validated=True),
+            typeiso_edge_mitigation(vulnerability_specific_detection_signal=True),
+            typeiso_edge_mitigation(full_source_vulnerability_detection=True),
             missing_automatic_boundary,
             missing_source_boundary,
         )
@@ -275,7 +290,7 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
                     ]
                 }
                 with self.assertRaisesRegex(
-                    ValueError, "violates the manual derived-edge claim contract"
+                    ValueError, "violates the derived-edge claim contract"
                 ):
                     plot.figure_summary(ledger)
 
@@ -287,19 +302,19 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
                     "primary_primitive": "use_after_free",
                     "integration": {"status": "source_evidence_only"},
                     "mechanism_results": [
-                        typeiso_edge_positive(),
-                        typeiso_edge_positive(true_positive=False),
+                        typeiso_edge_mitigation(),
+                        typeiso_edge_mitigation(validated_mitigation=False),
                     ],
                 }
             ]
         }
 
         with self.assertRaisesRegex(
-            ValueError, "violates the manual derived-edge claim contract"
+            ValueError, "violates the derived-edge claim contract"
         ):
             plot.figure_summary(ledger)
 
-    def test_typeiso_contract_accepts_explicit_source_boundary_field_names(self) -> None:
+    def test_typeiso_contract_accepts_explicit_source_boundary_fields(self) -> None:
         ledger = {
             "cases": [
                 {
@@ -308,11 +323,10 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
                     "primary_primitive": "use_after_free",
                     "integration": {"status": "executable"},
                     "mechanism_results": [
-                        typeiso_edge_positive(
+                        typeiso_edge_mitigation(
                             compiler_automatic_victim_coverage=False,
                             source_vulnerability_detection_validated=False,
                             automatic_source_coverage=False,
-                            source_level_true_positive=False,
                         )
                     ],
                 }
@@ -328,6 +342,41 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
         self.assertEqual(
             summary["case_attribution_case_ids"]["type_isolation_only"],
             ["RSH-EDGE"],
+        )
+
+    def test_typeiso_contract_accepts_compiler_automatic_derived_coverage(self) -> None:
+        ledger = {
+            "cases": [
+                {
+                    "case_id": "RSH-AUTO",
+                    "primary_primitive": "use_after_free",
+                    "integration": {"status": "executable"},
+                    "mechanism_results": [
+                        typeiso_edge_mitigation(
+                            automatic_edge_identity_probe=True,
+                            manual_victim_identity_annotation=False,
+                            compiler_automatic_victim_coverage=True,
+                            automatic_source_coverage=False,
+                        )
+                    ],
+                }
+            ]
+        }
+
+        summary = plot.figure_summary(ledger)
+
+        boundary = summary["type_isolation_claim_boundary"]
+        self.assertEqual(
+            boundary["compiler_automatic_victim_coverage_case_ids"],
+            ["RSH-AUTO"],
+        )
+        self.assertEqual(boundary["manual_derived_reuse_edge_case_count"], 0)
+        self.assertTrue(boundary["compiler_automatic_victim_coverage"])
+        self.assertFalse(boundary["source_vulnerability_detection_validated"])
+        self.assertEqual(boundary["causal_mitigated_derived_edge_case_count"], 1)
+        self.assertEqual(boundary["vulnerability_specific_detection_case_count"], 0)
+        self.assertEqual(
+            boundary["full_source_vulnerability_detection_case_count"], 0
         )
 
     def test_svg_and_csv_are_written_without_external_plot_dependencies(self) -> None:
@@ -352,10 +401,12 @@ class RustSecSecurityScopePlotTests(unittest.TestCase):
 
         self.assertIn("<svg", svg)
         self.assertIn("Exclusive case attribution", svg)
-        self.assertIn("Type Isolation edge covered", svg)
+        self.assertIn("TypeIso-mitigated derived edge", svg)
         self.assertIn("reclaim_checks exact detection", svg)
         self.assertIn("Recovery-layout validation", svg)
-        self.assertIn("automatic source-level true positives: 0", svg)
+        self.assertIn(
+            "vulnerability-specific and full-source detections: 0", svg
+        )
         self.assertIn("No exact allocator signal observed", svg)
         self.assertIn("Excluded before evaluation", svg)
         self.assertIn("Unresolved mechanism attribution", svg)

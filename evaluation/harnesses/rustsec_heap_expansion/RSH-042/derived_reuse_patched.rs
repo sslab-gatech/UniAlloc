@@ -31,8 +31,10 @@ pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 #[derive(Clone)]
 struct Victim<T>(Vec<T>);
 
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_victim<T: Clone, const N: usize>(seed: &[T; N]) -> Victim<T> {
+fn materialize_victim(seed: &[u8; PAYLOAD_SIZE]) -> Victim<u8> {
     Victim(seed.to_vec())
 }
 

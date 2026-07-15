@@ -25,21 +25,30 @@ class Rsh002TypeIsolationEdgeTests(unittest.TestCase):
         self.case = cases["RSH-002"]
         self.scenario = scenarios["RSH-002-derived-reuse"][1]
 
-    def test_manual_victim_identity_has_a_structured_compiler_exclusion(self) -> None:
+    def test_default_manual_mode_has_a_structured_automatic_probe_boundary(self) -> None:
         self.assertEqual(
             self.scenario["compiler_target_crates"], ["rsh-002-harness"]
         )
         exclusion = self.scenario["compiler_target_exclusion"]
         self.assertEqual(exclusion["subject_crate"], "bitvec")
         self.assertFalse(exclusion["compiler_automatic_victim_coverage"])
-        self.assertIn("manual", exclusion["reason"])
-        self.assertIn("allocator policy", exclusion["claim_boundary"])
+        self.assertIn("Manual-mode provenance", exclusion["reason"])
+        self.assertIn("automatic mode disables the manual scope", exclusion["reason"])
+        self.assertIn("default manual experiment", exclusion["claim_boundary"])
+        self.assertIn("automatic-edge-identity probe", exclusion["claim_boundary"])
 
         annotation = self.scenario["type_isolation_edge_annotation"]
         self.assertEqual(
             annotation["kind"], "manual_exact_vulnerability_edge_identity"
         )
         self.assertEqual(annotation["expected_layout"], {"size": 1016, "align": 8})
+        contract = annotation["automatic_compiler_coverage_contract"]
+        self.assertEqual(contract["schema_version"], 1)
+        self.assertEqual(contract["coverage_scope"], "source_shaped_derived")
+        self.assertEqual(
+            set(contract) - {"schema_version", "coverage_scope"},
+            {"victim", "replacement"},
+        )
 
     def test_patched_control_is_safe_same_identity_bitvec_reuse(self) -> None:
         runner.validate_repo_file(

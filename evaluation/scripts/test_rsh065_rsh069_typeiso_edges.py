@@ -27,23 +27,23 @@ class MediumDerivedTypeIsolationEdgeTests(unittest.TestCase):
         _, scenarios = runner.index_catalog(catalog)
         return scenarios[f"{case_id}-derived-reuse"][1]
 
-    def test_manual_edges_have_structured_compiler_exclusions(self) -> None:
+    def test_edges_have_structured_manual_and_automatic_probe_boundaries(self) -> None:
         expected = {
             "RSH-065": (
                 "mail-internals",
                 {"size": 4, "align": 1},
                 0x5253_4865_0000_0001,
                 0x5253_4865_0000_0002,
-                "8123e1c70af07184d3896e1220b1de242319f98845a13a2f0c27098a4dcb1a53",
-                "2cbc7f945b9961f6d022897ac54191aacfc239c3dea77969f252ba326270070f",
+                "351369c0a1afe14a880277eddd2d76594d2cb2a17259a887bc5eb4b1204a4679",
+                "f401f45f6de2e8ca80670ec5e02dd20b2c4ef976900ce1356d2aa09ae44e2fb3",
             ),
             "RSH-069": (
                 "openssl",
                 {"size": 4096, "align": 1},
                 0x5253_4869_0000_0001,
                 0x5253_4869_0000_0002,
-                "59156d8f175c07124388b9dbf4befd91e6a66af79ccd5318137fdef92a7129a5",
-                "447cf102407be6753715fa2f7cabce26b82dc8631d099072709e0d44f17c1f01",
+                "ce73ccd1d641403e1d98674a4803da843d0fdb268d6f310387e6ee0d3953b92c",
+                "6e2e768fa04d1b2c1a96088dfc079a639124c7388c85d4202860fe7233c7da73",
             ),
         }
         for case_id, (
@@ -63,11 +63,10 @@ class MediumDerivedTypeIsolationEdgeTests(unittest.TestCase):
                 exclusion = scenario["compiler_target_exclusion"]
                 self.assertEqual(exclusion["subject_crate"], subject)
                 self.assertFalse(exclusion["compiler_automatic_victim_coverage"])
-                self.assertIn("manual", exclusion["reason"])
-                self.assertIn("Indirect generic", exclusion["reason"])
-                self.assertIn(
-                    "automatic compiler victim coverage", exclusion["claim_boundary"]
-                )
+                self.assertIn("Manual-mode provenance", exclusion["reason"])
+                self.assertIn("automatic mode disables the manual scope", exclusion["reason"])
+                self.assertIn("default manual experiment", exclusion["claim_boundary"])
+                self.assertIn("automatic-edge-identity probe", exclusion["claim_boundary"])
                 annotation = scenario["type_isolation_edge_annotation"]
                 self.assertEqual(annotation["expected_layout"], layout)
                 self.assertEqual(
@@ -76,6 +75,11 @@ class MediumDerivedTypeIsolationEdgeTests(unittest.TestCase):
                 )
                 self.assertEqual(annotation["victim_type_id"], type_id)
                 self.assertEqual(annotation["victim_module_id"], module_id)
+                contract = annotation["automatic_compiler_coverage_contract"]
+                self.assertEqual(contract["schema_version"], 1)
+                self.assertEqual(contract["coverage_scope"], "source_shaped_derived")
+                self.assertIn("Vec<u8", contract["victim"]["semantic_type_fragment"])
+                self.assertIn("Replacement", contract["replacement"]["semantic_type_fragment"])
                 self.assertEqual(scenario["source_sha256"], vulnerable_hash)
                 self.assertEqual(
                     scenario["patched_source"]["source_sha256"], patched_hash

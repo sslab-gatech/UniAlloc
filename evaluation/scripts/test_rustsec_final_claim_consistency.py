@@ -7,7 +7,7 @@ import collections
 import hashlib
 import json
 import pathlib
-import tarfile
+import statistics
 import unittest
 
 
@@ -29,32 +29,32 @@ TERMINAL_HASH_MANIFEST = (
     ROOT
     / "docs/evidence/rustsec-security-complete-20260714/terminal-artifact-hashes.json"
 )
-TYPEISO_SNAPSHOT_SUMMARY = (
-    ROOT
-    / "docs/evidence/rustsec-security-complete-20260714/typeiso-frozen-snapshot-summary.json"
+TYPEISO_AUTOMATIC_ROOT = (
+    ROOT / "docs/evidence/rustsec-typeiso-automatic-20260715"
 )
-TYPEISO_IMPLEMENTATION_MANIFEST = (
-    ROOT
-    / "docs/evidence/rustsec-security-complete-20260714/"
-    "typeiso-frozen-implementation-ce653fd5-manifest.json"
-)
+TYPEISO_AUTOMATIC_SUMMARY = TYPEISO_AUTOMATIC_ROOT / "derived-reuse-summary.json"
+TYPEISO_AUTOMATIC_RESULTS = TYPEISO_AUTOMATIC_ROOT / "mechanism-results.json"
+TYPEISO_PERFORMANCE_SCREEN = TYPEISO_AUTOMATIC_ROOT / "performance-screen/summary.json"
 TYPEISO_EXPERIMENTS = {
-    "RSH-002": ROOT / "docs/evidence/rustsec-rsh002-typeiso-20260714/experiment.json",
-    "RSH-008": ROOT / "docs/evidence/rustsec-rsh008-typeiso-20260714/experiment.json",
-    "RSH-041": ROOT
-    / "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-041-derived-reuse-experiment.json",
-    "RSH-042": ROOT
-    / "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-042-derived-reuse-experiment.json",
-    "RSH-052": ROOT / "docs/evidence/rustsec-rsh052-typeiso-20260714/experiment.json",
-    "RSH-055": ROOT / "docs/evidence/rustsec-rsh055-typeiso-20260715/experiment.json",
-    "RSH-064": ROOT / "docs/evidence/rustsec-rsh064-typeiso-20260714/experiment.json",
-    "RSH-065": ROOT / "docs/evidence/rustsec-rsh065-typeiso-20260715/experiment.json",
-    "RSH-066": ROOT / "docs/evidence/rustsec-rsh066-typeiso-20260715/experiment.json",
-    "RSH-067": ROOT / "docs/evidence/rustsec-rsh067-typeiso-20260715/experiment.json",
-    "RSH-068": ROOT / "docs/evidence/rustsec-rsh068-typeiso-20260715/experiment.json",
-    "RSH-069": ROOT / "docs/evidence/rustsec-rsh069-typeiso-20260715/experiment.json",
+    case_id: ROOT
+    / "docs/evidence/rustsec-typeiso-automatic-20260715/raw"
+    / f"{case_id}-experiment.json"
+    for case_id in (
+        "RSH-002",
+        "RSH-008",
+        "RSH-041",
+        "RSH-042",
+        "RSH-052",
+        "RSH-055",
+        "RSH-064",
+        "RSH-065",
+        "RSH-066",
+        "RSH-067",
+        "RSH-068",
+        "RSH-069",
+    )
 }
-TYPEISO_POSITIVE_CASES = set(TYPEISO_EXPERIMENTS)
+TYPEISO_MITIGATED_CASES = set(TYPEISO_EXPERIMENTS)
 EXPECTED_ATTRIBUTION_CASES = {
     "other_allocator_feature_only": {
         "RSH-001",
@@ -89,7 +89,7 @@ EXPECTED_ATTRIBUTION_CASES = {
         "RSH-074",
         "RSH-076",
     },
-    "type_isolation_only": TYPEISO_POSITIVE_CASES - {"RSH-002"},
+    "type_isolation_only": TYPEISO_MITIGATED_CASES - {"RSH-002"},
     "multiple_allocator_mechanisms": {"RSH-002"},
     "no_allocator_signal_observed": {"RSH-049", "RSH-050", "RSH-075"},
     "not_yet_attributed": {"RSH-003", "RSH-006", "RSH-019"},
@@ -128,10 +128,10 @@ EXPECTED_TERMINAL_MANIFEST_COUNTS = {
     "reclaim_checks_detected": 31,
     "recovery_layout_validation_detected": 1,
     "case_reclaim_checks_positive": 31,
-    "case_type_isolation_positive": 12,
+    "case_type_isolation_mitigated": 12,
     "type_isolation_edge_covered": 12,
     "mechanism_overlap_observed_count": 1,
-    "automatic_source_type_isolation_true_positive_cases": 0,
+    "automatic_full_source_vulnerability_detection_cases": 0,
     "case_detected": 32,
     "case_mitigated": 11,
     "case_matched_no_signal": 3,
@@ -197,7 +197,20 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             {"detected": 32, "mitigated": 12, "no_signal": 12, "inconclusive": 6},
         )
 
-        positives = [row for row in rows if row.get("true_positive") is True]
+        positives = [
+            row
+            for row in rows
+            if (
+                row.get("mechanism") == "type_isolation"
+                and row.get("validated_mitigation") is True
+                and "true_positive" not in row
+            )
+            or (
+                row.get("mechanism") != "type_isolation"
+                and row.get("true_positive") is True
+                and "validated_mitigation" not in row
+            )
+        ]
         self.assertEqual(len(positives), 44)
         self.assertEqual(len({row["case_id"] for row in positives}), 43)
         self.assertEqual(
@@ -225,13 +238,36 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             for row in positives
             if row["mechanism"] == "type_isolation"
         ]
-        self.assertEqual({row["case_id"] for row in typeiso_rows}, TYPEISO_POSITIVE_CASES)
+        self.assertEqual({row["case_id"] for row in typeiso_rows}, TYPEISO_MITIGATED_CASES)
         for row in typeiso_rows:
             self.assertEqual(row["outcome"], "mitigated")
-            self.assertIs(row["compiler_automatic_victim_coverage"], False)
+            self.assertIs(row["validated_mitigation"], True)
+            self.assertNotIn("true_positive", row)
+            self.assertEqual(
+                row["result_semantics"],
+                "causal_compiler_bound_reuse_edge_mitigation",
+            )
+            compiler_automatic = row["compiler_automatic_victim_coverage"]
+            self.assertIsInstance(compiler_automatic, bool)
+            automatic_probe = row.get("automatic_edge_identity_probe", False)
+            self.assertIsInstance(automatic_probe, bool)
+            self.assertIs(compiler_automatic, automatic_probe)
+            manual_annotation = row.get("manual_victim_identity_annotation")
+            if automatic_probe:
+                self.assertIs(manual_annotation, False)
+            else:
+                self.assertIn(manual_annotation, (None, True))
             self.assertIs(row["source_vulnerability_detection_validated"], False)
+            self.assertIn(
+                row.get("vulnerability_specific_detection_signal"),
+                (None, False),
+            )
+            self.assertIn(
+                row.get("full_source_vulnerability_detection"),
+                (None, False),
+            )
             self.assertIs(row["automatic_source_coverage"], False)
-            self.assertIs(row["source_level_true_positive"], False)
+            self.assertNotIn("source_level_true_positive", row)
             self.assertIs(row["claim_grade"], False)
             self.assertEqual(
                 row["positive_scope"], "exploit_enabling_cross_identity_reuse_edge"
@@ -241,7 +277,11 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             self.assertEqual(
                 row["reduction_fidelity"],
                 (
-                    "synthetic_manual_reduction"
+                    "compiler_automatic_synthetic_reduction"
+                    if automatic_probe and synthetic
+                    else "compiler_automatic_derived_reduction"
+                    if automatic_probe
+                    else "synthetic_manual_reduction"
                     if synthetic
                     else "manual_derived_reduction"
                 ),
@@ -336,14 +376,24 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             for result in row.get("strict_positive_mechanism_results", [])
             if result["mechanism"] == "type_isolation"
         }
-        self.assertEqual(set(bound_typeiso_results), TYPEISO_POSITIVE_CASES)
+        self.assertEqual(set(bound_typeiso_results), TYPEISO_MITIGATED_CASES)
         for case_id, result in bound_typeiso_results.items():
             self.assertEqual(
                 result["implementation_sha256"], next(iter(evidence_digests))
             )
             self.assertIs(result["automatic_source_coverage"], False)
-            self.assertIs(result["source_level_true_positive"], False)
+            self.assertIs(result["validated_mitigation"], True)
+            self.assertNotIn("true_positive", result)
+            self.assertNotIn("source_level_true_positive", result)
             self.assertIs(result["claim_grade"], False)
+            self.assertIn(
+                result.get("vulnerability_specific_detection_signal"),
+                (None, False),
+            )
+            self.assertIn(
+                result.get("full_source_vulnerability_detection"),
+                (None, False),
+            )
             self.assertIs(
                 result["synthetic_reduction"],
                 case_id in {"RSH-065", "RSH-069"},
@@ -362,10 +412,13 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             if any(
                 result["mechanism"] == "type_isolation"
                 and result["outcome"] == "mitigated"
-                and result.get("true_positive") is True
+                and result.get("validated_mitigation") is True
+                and "true_positive" not in result
                 and result.get("positive_scope")
                 == "exploit_enabling_cross_identity_reuse_edge"
-                and result.get("compiler_automatic_victim_coverage") is False
+                and isinstance(
+                    result.get("compiler_automatic_victim_coverage"), bool
+                )
                 and result.get("source_vulnerability_detection_validated") is False
                 for result in results
             ):
@@ -423,9 +476,61 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
         terminal = load(TERMINAL_HASH_MANIFEST)
         for key, value in EXPECTED_TERMINAL_MANIFEST_COUNTS.items():
             self.assertEqual(terminal["counts"].get(key), value, key)
+        self.assertEqual(
+            terminal["strict_typeiso_evidence_implementation_digest_counts"],
+            load(REPORT)["counts"][
+                "strict_typeiso_evidence_implementation_digest_counts"
+            ],
+        )
         self.assertIn(
             "docs/evidence/rustsec-all-53-live-20260714/rsh064/mechanism-result.json",
             terminal_paths,
+        )
+        performance_screen_root = TYPEISO_PERFORMANCE_SCREEN.parent
+        performance_screen_paths = {
+            path.relative_to(ROOT).as_posix()
+            for path in performance_screen_root.rglob("*")
+            if path.is_file()
+        }
+        screen = load(TYPEISO_PERFORMANCE_SCREEN)
+        expected_performance_screen_paths = {
+            TYPEISO_PERFORMANCE_SCREEN.relative_to(ROOT).as_posix(),
+            (performance_screen_root / "README.md").relative_to(ROOT).as_posix(),
+            *(artifact["path"] for artifact in screen["raw_artifacts"]),
+        }
+        self.assertEqual(
+            performance_screen_paths,
+            expected_performance_screen_paths,
+            "performance-screen directory contains an unpinned or missing file",
+        )
+        self.assertTrue(
+            performance_screen_paths <= terminal_paths,
+            sorted(performance_screen_paths - terminal_paths),
+        )
+        self.assertEqual(
+            terminal["counts"]["performance_screen_artifacts"],
+            len(performance_screen_paths),
+        )
+        automatic_bundle_paths = {
+            path.relative_to(ROOT).as_posix()
+            for path in TYPEISO_AUTOMATIC_ROOT.rglob("*")
+            if path.is_file()
+        }
+        terminal_automatic_paths = {
+            path
+            for path in terminal_paths
+            if path.startswith(
+                TYPEISO_AUTOMATIC_ROOT.relative_to(ROOT).as_posix() + "/"
+            )
+        }
+        self.assertEqual(
+            terminal_automatic_paths,
+            automatic_bundle_paths,
+            "automatic Type Isolation bundle contains an unpinned or missing file",
+        )
+        self.assertEqual(
+            terminal["counts"]["automatic_typeiso_bundle_artifacts"],
+            len(automatic_bundle_paths),
         )
 
     def test_all_typeiso_edge_matrices_share_one_implementation_snapshot(self) -> None:
@@ -448,71 +553,185 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
             experiment_hashes[case_id] = sha256_file(path)
         self.assertEqual(len(implementation_digests), 1)
 
-        snapshot = load(TYPEISO_SNAPSHOT_SUMMARY)
-        self.assertFalse(snapshot["claim_grade"])
+        summary = load(TYPEISO_AUTOMATIC_SUMMARY)
+        self.assertFalse(summary["claim_grade"])
         self.assertEqual(
-            snapshot["snapshot_status"], "frozen_isolated_wip_evidence_snapshot"
-        )
-        self.assertEqual(snapshot["case_count"], 12)
-        self.assertEqual(set(snapshot["case_ids"]), TYPEISO_POSITIVE_CASES)
-        self.assertEqual(snapshot["manual_derived_edge_case_count"], 12)
-        self.assertEqual(snapshot["automatic_source_true_positive_case_count"], 0)
-        self.assertEqual(
-            set(snapshot["synthetic_reduction_case_ids"]),
-            {"RSH-065", "RSH-069"},
+            summary["counts"]["validated_cross_identity_reuse_edge_count"], 12
         )
         self.assertEqual(
-            snapshot["implementation_sha256"], next(iter(implementation_digests))
+            summary["counts"]["compiler_automatic_victim_coverage_count"], 12
         )
         self.assertEqual(
-            {row["case"]: row["experiment_sha256"] for row in snapshot["results"]},
+            summary["counts"]["vulnerability_specific_detection_signal_count"], 0
+        )
+        self.assertEqual(
+            summary["counts"]["full_source_vulnerability_detection_count"], 0
+        )
+        self.assertIn(
+            "causal mitigation of compiler-bound measured cross-identity reuse edges",
+            summary["boundary"],
+        )
+        self.assertEqual(
+            {
+                row["case_id"]: row["sha256"]
+                for row in summary["raw_experiment_inputs"]
+            },
             experiment_hashes,
         )
-        self.assertIn("does not assert equality", snapshot["claim_boundary"])
-
-        implementation_manifest = load(TYPEISO_IMPLEMENTATION_MANIFEST)
-        self.assertFalse(implementation_manifest["claim_grade"])
         self.assertEqual(
-            implementation_manifest["implementation_sha256"],
-            snapshot["implementation_sha256"],
+            {row["case_id"] for row in summary["scenarios"]},
+            TYPEISO_MITIGATED_CASES,
         )
-        implementation_files = implementation_manifest["files"]
-        implementation_paths = [row["path"] for row in implementation_files]
-        self.assertEqual(implementation_paths, sorted(implementation_paths))
-        self.assertEqual(len(implementation_paths), len(set(implementation_paths)))
-        self.assertEqual(
-            implementation_manifest["file_count"], len(implementation_paths)
-        )
-        pass_record = next(
-            row
-            for row in implementation_files
-            if row["path"]
-            == "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
-        )
-        self.assertEqual(pass_record["sha256"], snapshot["pass_sha256"])
-        archive_record = implementation_manifest["archive"]
-        archive_path = ROOT / archive_record["path"]
-        self.assertEqual(archive_path.stat().st_size, archive_record["bytes"])
-        self.assertEqual(sha256_file(archive_path), archive_record["sha256"])
+        for scenario in summary["scenarios"]:
+            self.assertIs(scenario["automatic_edge_identity_probe"], True)
+            edge = scenario["edge_evaluation"]
+            self.assertIs(edge["compiler_automatic_victim_coverage"], True)
+            self.assertIs(
+                edge["causal_compiler_bound_reuse_edge_mitigation"], True
+            )
+            self.assertIs(edge["vulnerability_specific_detection_signal"], False)
+            self.assertIs(edge["source_vulnerability_detection_validated"], False)
 
-        combined = hashlib.sha256()
-        with tarfile.open(archive_path, "r:gz") as archive:
-            members = [member for member in archive.getmembers() if member.isfile()]
-            self.assertEqual([member.name for member in members], implementation_paths)
-            for member, record in zip(members, implementation_files, strict=True):
-                self.assertNotIn("..", pathlib.PurePosixPath(member.name).parts)
-                handle = archive.extractfile(member)
-                self.assertIsNotNone(handle)
-                data = handle.read()
-                self.assertEqual(len(data), record["bytes"], member.name)
-                self.assertEqual(
-                    hashlib.sha256(data).hexdigest(), record["sha256"], member.name
+        mechanism_results = load(TYPEISO_AUTOMATIC_RESULTS)["results"]
+        self.assertEqual(len(mechanism_results), 12)
+        self.assertEqual(
+            {row["case_id"] for row in mechanism_results},
+            TYPEISO_MITIGATED_CASES,
+        )
+        for row in mechanism_results:
+            self.assertEqual(row["mechanism"], "type_isolation")
+            self.assertEqual(row["outcome"], "mitigated")
+            self.assertIs(row["validated_mitigation"], True)
+            self.assertNotIn("true_positive", row)
+            self.assertEqual(
+                row["result_semantics"],
+                "causal_compiler_bound_reuse_edge_mitigation",
+            )
+            self.assertIs(row["vulnerability_specific_detection_signal"], False)
+            self.assertIs(row["full_source_vulnerability_detection"], False)
+
+    def test_compiler_pass_performance_screen_is_recomputable(self) -> None:
+        screen = load(TYPEISO_PERFORMANCE_SCREEN)
+        self.assertIs(screen["passed"], True)
+        self.assertIs(screen["claim_grade"], False)
+        self.assertEqual(screen["protocol"]["warmups_per_run"], 3)
+        self.assertEqual(screen["protocol"]["measured_repetitions_per_run"], 15)
+        self.assertEqual(screen["protocol"]["cpu_list"], "20")
+        self.assertEqual(screen["protocol"]["numa_node"], 0)
+        self.assertEqual(
+            screen["identity_gates"]["google_tcmalloc_revision"],
+            "12f255231938d30493186b0a037feedd70f5a1c1",
+        )
+        self.assertEqual(screen["identity_gates"]["hpaa_active"], 1)
+        self.assertEqual(screen["identity_gates"]["malloc_provider_is_self"], 1)
+        self.assertIs(
+            screen["identity_gates"]["per_target_tcmalloc_marker_gate"], True
+        )
+        self.assertIs(screen["identity_gates"]["performance_stats_disabled"], True)
+
+        raw: dict[str, dict[str, object]] = {}
+        for artifact in screen["raw_artifacts"]:
+            path = ROOT / artifact["path"]
+            self.assertEqual(path.stat().st_size, artifact["bytes"])
+            self.assertEqual(sha256_file(path), artifact["sha256"])
+            raw[artifact["id"]] = load(path)
+        self.assertEqual(len(raw), 10)
+
+        candidate_digests = {
+            raw[name]["implementation_sha256"]
+            for name in raw
+            if name.startswith("candidate_")
+        }
+        self.assertEqual(len(candidate_digests), 1)
+        candidate_pass_hashes = {
+            raw[name]["pass_source_sha256"]
+            for name in raw
+            if name.startswith("candidate_")
+        }
+        self.assertEqual(
+            candidate_pass_hashes,
+            {
+                sha256_file(
+                    ROOT
+                    / "tools/unialloc-rustc-pass/"
+                    "unialloc-rustc-mir-rewrite-dry-run.rs"
                 )
-                combined.update(member.name.encode())
-                combined.update(b"\0")
-                combined.update(data)
-        self.assertEqual(
-            combined.hexdigest(), implementation_manifest["implementation_sha256"]
+            },
+        )
+
+        def paired_ratios(
+            document: dict[str, object], app: str, metric: str
+        ) -> list[float]:
+            rows = [
+                row
+                for row in document["measurements"]
+                if row["app"] == app and row["warmup"] is False
+            ]
+            indexed = {
+                (row["variant"], row["round"]): row
+                for row in rows
+            }
+            rounds = sorted(
+                row["round"]
+                for row in rows
+                if row["variant"] == "typed_plain"
+            )
+            return [
+                indexed[("typeiso_perf", round_index)][metric]
+                / indexed[("typed_plain", round_index)][metric]
+                for round_index in rounds
+            ]
+
+        for app, prefix in (("oxipng", "broad"), ("ripgrep", "ripgrep_long")):
+            measurements: dict[str, dict[str, list[float]]] = {
+                "wall": {"baseline": [], "candidate": []},
+                "peak_rss": {"baseline": [], "candidate": []},
+            }
+            for order in ("a", "b"):
+                for label, metric in (
+                    ("wall", "wall_seconds"),
+                    ("peak_rss", "peak_rss_kib"),
+                ):
+                    for version in ("baseline", "candidate"):
+                        measurements[label][version].extend(
+                            paired_ratios(
+                                raw[f"{version}_{prefix}_{order}"], app, metric
+                            )
+                        )
+            workload = "ripgrep_long" if app == "ripgrep" else app
+            for label, values in measurements.items():
+                baseline = values["baseline"]
+                candidate = values["candidate"]
+                self.assertEqual(len(baseline), 30)
+                self.assertEqual(len(candidate), 30)
+                delta = (
+                    statistics.median(candidate) / statistics.median(baseline) - 1
+                )
+                recorded = screen["workloads"][workload][label]
+                self.assertAlmostEqual(
+                    delta,
+                    recorded["candidate_vs_baseline_ratio_of_ratios_delta"],
+                )
+            wall_delta = screen["workloads"][workload]["wall"][
+                "candidate_vs_baseline_ratio_of_ratios_delta"
+            ]
+            self.assertLessEqual(
+                wall_delta,
+                screen["thresholds"]["maximum_wall_ratio_of_ratios_regression"],
+            )
+
+        ripgrep_rss = screen["workloads"]["ripgrep_long"]["peak_rss"]
+        self.assertLessEqual(
+            ripgrep_rss["candidate_max_peak_rss_kib"],
+            ripgrep_rss["baseline_max_peak_rss_kib"],
+        )
+        self.assertLessEqual(
+            screen["workloads"]["oxipng"]["peak_rss"][
+                "candidate_vs_baseline_ratio_of_ratios_delta"
+            ],
+            screen["thresholds"][
+                "maximum_oxipng_rss_ratio_of_ratios_regression"
+            ],
         )
 
 

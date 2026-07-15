@@ -1,0 +1,1225 @@
+{
+  "cases": [
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 332279,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+        "sha256": "103cebbc8406cd2e30d2a7dcd88348456018879509f1636ab149d62798deb90b"
+      },
+      "case_id": "RSH-002",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 562342,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-002-experiment.json",
+        "sha256": "93c61870c4675897a8cd7f31f9fe3f13524864fd4cb7539b6be12f46acebacd6"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-002-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 84542,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+        "sha256": "46624e92421debc93990f37908d934fcf0235bcc0cb9169d8e09517169c4398c"
+      },
+      "case_id": "RSH-008",
+      "claim_grade": false,
+      "coverage_scope": "derived_vulnerability_edge",
+      "raw_experiment": {
+        "bytes": 419505,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-008-experiment.json",
+        "sha256": "719b8d4ecabe403f01a74064326cbd18ab226d9d78849be401b0544c32c91bd7"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-008-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 181139,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+        "sha256": "07f6a76453353cf350eb003c890d4965b2c28578509b62dc17cd9ad0aa9e1a0b"
+      },
+      "case_id": "RSH-041",
+      "claim_grade": false,
+      "coverage_scope": "derived_vulnerability_edge",
+      "raw_experiment": {
+        "bytes": 408842,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-041-experiment.json",
+        "sha256": "4c2cc90254dbb9ecfbbd32bca75d4ae88bdb669209d9da19727370ca0ed7252b"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-041-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 72446,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+        "sha256": "a6f70ec56fb7999a1a84439312e3ddb8474f4a2193f1700e1c2d89e02b95d77c"
+      },
+      "case_id": "RSH-042",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 451187,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-042-experiment.json",
+        "sha256": "1a79860e6ef70917cd4e005ef5561d2ee0692dea02f54ce5681cc124f1022a77"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-042-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 91349,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+        "sha256": "a67e4a2b8923922d88d3063a0a33ae5e8d3c776a89f37ae9ef994753a3faf538"
+      },
+      "case_id": "RSH-052",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 431655,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-052-experiment.json",
+        "sha256": "d9a210a2771748f90888a4e73c2a4577e22884e2f025c5e5dcc34ce050e1d643"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-052-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 342792,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+        "sha256": "e94e2fd7b24a0e1e115f7aa1c85780b3e9eb80d05bb8b81e35716c20f4d21a9b"
+      },
+      "case_id": "RSH-055",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 1226950,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-055-experiment.json",
+        "sha256": "31e2147f27f1435a401cd883baf224108fecfe10a12ac99ced20d6d6966c06f5"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-055-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 663102,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+        "sha256": "d7c6ca16e3b51887ab35700e98eb154080a2e818b63c80aa73c0475d9887cee6"
+      },
+      "case_id": "RSH-064",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 429213,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-064-experiment.json",
+        "sha256": "b256b302ec1cc2047ddb38ad25a7c6e4bea92116f0444b4b5030248f99ebfc00"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-064-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 120047,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+        "sha256": "cb0eb2e9449c4490592cfd00196620285cd63562a65ff4ad565915113bb9e08e"
+      },
+      "case_id": "RSH-065",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 567417,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-065-experiment.json",
+        "sha256": "05d03f1b9b8d0af4886190ff36291687674292fbefe72e60c16cc9d3ac3263c4"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-065-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 147337,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+        "sha256": "47bfd0f9076dbc4406617703f4659d5dc580999c99fe007d208379d34b999e96"
+      },
+      "case_id": "RSH-066",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 417435,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-066-experiment.json",
+        "sha256": "49de2ed8b6c7e32982f60eb679311616fcd86a42c522a074a6a546993edb7769"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-066-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 1252647,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+        "sha256": "c166f124e805328446fde21135a0335e0721744edf34834da3bdb235e654e7f3"
+      },
+      "case_id": "RSH-067",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 411208,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-067-experiment.json",
+        "sha256": "638a0949dfe71886d92d505665ca805d81f5fbf7ddb84e46a2a2defc625b6079"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-067-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 114969,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+        "sha256": "936cc1f6f90391d247704aba3b1c36b08bcfe26bb2ae6100d9530657b03d5852"
+      },
+      "case_id": "RSH-068",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 412003,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-068-experiment.json",
+        "sha256": "7072c29872828c6d4a88de0d5f0823e0b7b7b88d5fff954fba86235cc616e5c8"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-068-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    },
+    {
+      "arms": 6,
+      "audit_archive": {
+        "bytes": 1255866,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+        "sha256": "aaec312797dd92638087e2ad6487ad0ba1aca895165b03a71db4b5afbee7ab26"
+      },
+      "case_id": "RSH-069",
+      "claim_grade": false,
+      "coverage_scope": "source_shaped_derived",
+      "raw_experiment": {
+        "bytes": 414917,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/raw/RSH-069-experiment.json",
+        "sha256": "314f6cf4dbdb376a737e27cc77202ee8634609649187b95883539c234054ad28"
+      },
+      "repetitions": 3,
+      "scenario_id": "RSH-069-derived-reuse",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": true
+    }
+  ],
+  "claim_boundary": "The bundle validates compiler-bound mitigation of twelve measured derived or source-shaped cross-identity reuse edges. It records zero autonomous source-vulnerability detections and zero vulnerability-specific detector signals.",
+  "claim_grade": false,
+  "common_digests": {
+    "compiler_pass_source_sha256": "ad4e1d1593c3aabc02a3f43ec32a6cb95749f533346d42a73773e3f2e2610acb",
+    "compiler_wrapper_sha256": "db88d2c340b53019608088f717e2a9cfa929a6da13b1857b8fee1dfb32092de9",
+    "experiment_runner_sha256": "e380805e432e834aff9ebeb6c0bc2212ed663bd1efb08be337a40d1cc2cdcd57",
+    "unialloc_implementation_sha256": "7aab5d36646605915b9f6b29dc0b1d8c5611d835d6c9856a526d8a04bf4490e2"
+  },
+  "counts": {
+    "arm_count": 72,
+    "case_count": 12,
+    "full_pass_audit_count": 96,
+    "repetition_count": 216,
+    "source_vulnerability_detection_validated_count": 0,
+    "validated_mitigation_count": 12,
+    "vulnerability_specific_detection_signal_count": 0
+  },
+  "pass_audits": [
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/bitvec-3fe2b6e4a236ba92.json",
+      "bytes": 1666008,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typed_plain/audits/bitvec-3fe2b6e4a236ba92.json",
+      "sha256": "8145b63e66cd51778395c35343de09584676b470405d25793d5feaa50ca87896"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_002_harness-b67e51045f101b05.json",
+      "bytes": 86746,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typed_plain/audits/rsh_002_harness-b67e51045f101b05.json",
+      "sha256": "0d67575dd751c766f6ae05ec037dec6d447a61aca76b0cd0e60b5fc180a0cfa7"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/bitvec-7dac7eeb6687e6a6.json",
+      "bytes": 1661007,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/audits/bitvec-7dac7eeb6687e6a6.json",
+      "sha256": "15ca1fc5c82ce1fff16701ae8a46608c06d4f5613e9c2c61cbc845305c81c244"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_002_harness-0c7263a7aa14df79.json",
+      "bytes": 86725,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/typeiso/audits/rsh_002_harness-0c7263a7aa14df79.json",
+      "sha256": "0ddeb6e7fa413787995bdc3c77e10cce18d2c825a92166ba74964bfeedaf8601"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/bitvec-844358a4c6abd252.json",
+      "bytes": 1676186,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/patched/typed_plain/audits/bitvec-844358a4c6abd252.json",
+      "sha256": "e718a62c7adef7e9a14c0abcd0591beed33ba7a96e9557210ede3a6a9031a0df"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_002_harness-4aec593cce1268bf.json",
+      "bytes": 82962,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/patched/typed_plain/audits/rsh_002_harness-4aec593cce1268bf.json",
+      "sha256": "8d106f69bbec8c8725af9ddd430c1d1c3c8512e1e57dac73180ca541a24eb676"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/bitvec-06cef43aa05f7ad6.json",
+      "bytes": 1672899,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/patched/typeiso/audits/bitvec-06cef43aa05f7ad6.json",
+      "sha256": "7db8ed1c2eb78d81130e56182e649043b26a2280d92d4056ceca67a4573be621"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-002-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_002_harness-019f5d7706c91f5b.json",
+      "bytes": 82981,
+      "case_id": "RSH-002",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/patched/typeiso/audits/rsh_002_harness-019f5d7706c91f5b.json",
+      "sha256": "686475d9d8baf0850e6277cc9a5e989bb5b39946a5fc72e58ac5c757adf9bfc1"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/lru-78e466d2c0bfce6f.json",
+      "bytes": 196639,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typed_plain/audits/lru-78e466d2c0bfce6f.json",
+      "sha256": "5cc0e54ee066c27d389556ab27dddbe5d57b60b9fe931c6539804cae3a2b5d0c"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_008_harness-5f46ad2237a3e8e6.json",
+      "bytes": 98634,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typed_plain/audits/rsh_008_harness-5f46ad2237a3e8e6.json",
+      "sha256": "576991fce9092e4ea84fe623d0867a808a457bdb55aaa2b6657edc54621af48a"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/lru-e1de9055c66fc017.json",
+      "bytes": 196217,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/audits/lru-e1de9055c66fc017.json",
+      "sha256": "854a15f4b7f427429944e80463db9077717c12ebb893419d578ad5a33e05f041"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_008_harness-03374e1cca7f2e42.json",
+      "bytes": 98662,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/audits/rsh_008_harness-03374e1cca7f2e42.json",
+      "sha256": "ad73d332e8b8bafffee77ac83fb57d265f613c377c2095ac623195f2b5d622c7"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/lru-27c47e42d390a28c.json",
+      "bytes": 196300,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/patched/typed_plain/audits/lru-27c47e42d390a28c.json",
+      "sha256": "b8dd8a889f086cb06723fcd0c4c8ee165c70673d455ade72c6de51bcbeb309c9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_008_harness-a78c1ab742e34472.json",
+      "bytes": 102780,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/patched/typed_plain/audits/rsh_008_harness-a78c1ab742e34472.json",
+      "sha256": "5cd1a1456c2f8baff2a5c1181b7e3c87817d9e780090dd251eaa77b9a8de515e"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/lru-c954b2dd1ed0b678.json",
+      "bytes": 195992,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/patched/typeiso/audits/lru-c954b2dd1ed0b678.json",
+      "sha256": "583ecb3961a9fda580303021496a6acf531f18ffccb3c92048b3a8c8be1ab6ae"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-008-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_008_harness-6f2a74e303d26e37.json",
+      "bytes": 102812,
+      "case_id": "RSH-008",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/patched/typeiso/audits/rsh_008_harness-6f2a74e303d26e37.json",
+      "sha256": "547208cd064af3630879733e1f57eece207f6b0179f3017e85f5dfe0d5bce2ab"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/oneringbuf-9ab351281961fe02.json",
+      "bytes": 868377,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/typed_plain/audits/oneringbuf-9ab351281961fe02.json",
+      "sha256": "bb3cc0472cd4110ebf513e9663515cc19c60ff3942d07da4513f5ba3fc8ec272"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_041_harness-58605da615c9e894.json",
+      "bytes": 105136,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/typed_plain/audits/rsh_041_harness-58605da615c9e894.json",
+      "sha256": "e498d18505613028d532a1fc0dd8a5b6339edcb800a78418aba62d130b7ff809"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/oneringbuf-75b292ec469fc2ed.json",
+      "bytes": 867141,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/typeiso/audits/oneringbuf-75b292ec469fc2ed.json",
+      "sha256": "c842aebba957f9c251c420d6081381d079dd1154adb4aa8c6032588f6c282d78"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_041_harness-7a53a1a5867f8e9f.json",
+      "bytes": 105114,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/typeiso/audits/rsh_041_harness-7a53a1a5867f8e9f.json",
+      "sha256": "24df9343afebde4a1044399b4f6fbec12fbca2c448cbfb576231fd1e03512ca9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/oneringbuf-6aa549ede5228bb4.json",
+      "bytes": 858553,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/patched/typed_plain/audits/oneringbuf-6aa549ede5228bb4.json",
+      "sha256": "b5651732d2cffe37c74334fb36c6b3fdf679da4dbcd7fd02b00c7ab2fa485839"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_041_harness-85fe72cbf764e416.json",
+      "bytes": 95506,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/patched/typed_plain/audits/rsh_041_harness-85fe72cbf764e416.json",
+      "sha256": "1f5be41c2c66f1acd677a1205c58f836b5a70126de4156774a979e20957862c8"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/oneringbuf-b0907ced094c95b6.json",
+      "bytes": 856189,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/patched/typeiso/audits/oneringbuf-b0907ced094c95b6.json",
+      "sha256": "7d96c9ebdb482525b69b7edf4afe5c3661a35978a0a59f053f1e1416f67c32fb"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-041-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_041_harness-52494f1e84bc7b5c.json",
+      "bytes": 95436,
+      "case_id": "RSH-041",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/patched/typeiso/audits/rsh_041_harness-52494f1e84bc7b5c.json",
+      "sha256": "766547c1bd94a990bc8aa950c45cb1eeb29dfb851ffafc74138c652a507038e9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/emap-ba78b80d3f4e46ca.json",
+      "bytes": 147641,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/vulnerable/typed_plain/audits/emap-ba78b80d3f4e46ca.json",
+      "sha256": "70ccf317d77e736c1c1651d9a26011920710c8a71f8fa8dcd8a1491ad127a654"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_042_harness-e7414cda5c9b4717.json",
+      "bytes": 89314,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/vulnerable/typed_plain/audits/rsh_042_harness-e7414cda5c9b4717.json",
+      "sha256": "f29ea2b5472d22be7908a1a3abc486dac6ec63c8ee4bfcc204441d8ad16132d4"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/emap-3d2825df0403cdd5.json",
+      "bytes": 147503,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/vulnerable/typeiso/audits/emap-3d2825df0403cdd5.json",
+      "sha256": "9900dfec726c24324fb2268b4abb8647fa55c84e070c750c0fecbb1ffd0ca5cb"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_042_harness-b26ba020a1db964b.json",
+      "bytes": 89244,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/vulnerable/typeiso/audits/rsh_042_harness-b26ba020a1db964b.json",
+      "sha256": "019ac2923a4c9a9c9294a7d4668704573f3c68d47f5fb1580b56b1256af81a6f"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/emap-a7f0bc6f440f16a9.json",
+      "bytes": 140393,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typed_plain/audits/emap-a7f0bc6f440f16a9.json",
+      "sha256": "0c4dc75869ebdd93214034fd48b6be05d4f673bcf40e4eb88665d70e03ce14ec"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_042_harness-a0b8a2e0776fe99e.json",
+      "bytes": 86338,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typed_plain/audits/rsh_042_harness-a0b8a2e0776fe99e.json",
+      "sha256": "22861336abc3b0f4beab4cd572781897bd76b22abc91d6da48144db67b10ee6e"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/emap-cc4f0d8d5549d36c.json",
+      "bytes": 140126,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/audits/emap-cc4f0d8d5549d36c.json",
+      "sha256": "1f9477511262fb4bf0808fea2b057e3b48df3a6b5d684c383e7732ebd6ea3e77"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-042-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_042_harness-fe9127c041a9f126.json",
+      "bytes": 86270,
+      "case_id": "RSH-042",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/audits/rsh_042_harness-fe9127c041a9f126.json",
+      "sha256": "ed48bcc626fe1c3ce3d9240a9188c563285af1726f898bc1663937b394f1ef95"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_052_harness-119e48da479823aa.json",
+      "bytes": 94886,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/vulnerable/typed_plain/audits/rsh_052_harness-119e48da479823aa.json",
+      "sha256": "9c4735e51b4120aaf46f0343d59a9107c1f8011dd68cd699f690f214c79fa224"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/string_interner-7669c37ba6317ecb.json",
+      "bytes": 207497,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/vulnerable/typed_plain/audits/string_interner-7669c37ba6317ecb.json",
+      "sha256": "0a90fb893e27baf6bb9dd99619d1ab1af3bae0409d87f9ff85c1b5d05bb60a8b"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_052_harness-ce965d9a932ea87d.json",
+      "bytes": 94911,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/vulnerable/typeiso/audits/rsh_052_harness-ce965d9a932ea87d.json",
+      "sha256": "0e816da296029939f5d31b0bf283dc17153cd11dac6de7388c6fc6e5c6551c6e"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/string_interner-5d87e6734053b9b4.json",
+      "bytes": 207076,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/vulnerable/typeiso/audits/string_interner-5d87e6734053b9b4.json",
+      "sha256": "d599d2bb1ab450d501af762a1bc38e26ff5087e727ad7b443d34a805b3da4787"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_052_harness-9ffcbf7aa5b23c57.json",
+      "bytes": 93630,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/patched/typed_plain/audits/rsh_052_harness-9ffcbf7aa5b23c57.json",
+      "sha256": "9af664c336ed3db34955775baf907ef9db158f9cb20667274d85c4603bdf9836"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/string_interner-ec16312ee364acc1.json",
+      "bytes": 238685,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/patched/typed_plain/audits/string_interner-ec16312ee364acc1.json",
+      "sha256": "9e01240865f9a93bd07714527a6aa20b469f0335d819ffd51ee002d7d3d9d468"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_052_harness-cd74651f030960a9.json",
+      "bytes": 93561,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/patched/typeiso/audits/rsh_052_harness-cd74651f030960a9.json",
+      "sha256": "0d37104b987416bbf03663841a0167f8c6dfdb70f560c5e5179b8c6910735be3"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-052-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/string_interner-336a32963b1191f6.json",
+      "bytes": 238313,
+      "case_id": "RSH-052",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-052/arms/patched/typeiso/audits/string_interner-336a32963b1191f6.json",
+      "sha256": "b38df71e58d041281650bf2d5135dd9343d0acb030f8148f256b2515ee28e46d"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/heapless-33ac209946b3389b.json",
+      "bytes": 1874020,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/vulnerable/typed_plain/audits/heapless-33ac209946b3389b.json",
+      "sha256": "65ce49ec6493ace34e629958af769d15c4739bed40b44819ce6dca66354249a5"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_055_harness-0ea6c6af7f371193.json",
+      "bytes": 107016,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/vulnerable/typed_plain/audits/rsh_055_harness-0ea6c6af7f371193.json",
+      "sha256": "cd7bad89911a359b2568c59dedd9e81e0c40277e5408dadd51968915f6a90a2b"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/heapless-4aaf0f192e1ca1d0.json",
+      "bytes": 1868978,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/vulnerable/typeiso/audits/heapless-4aaf0f192e1ca1d0.json",
+      "sha256": "6758f5041cd7f5e47a3ecb736ece73f8689087b3ef4d0835846c9548a7bf6baa"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_055_harness-565dc6bf3eb9fb39.json",
+      "bytes": 107048,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/vulnerable/typeiso/audits/rsh_055_harness-565dc6bf3eb9fb39.json",
+      "sha256": "d83e286444b613aa2cf1b557bc765153b790fd20e6e43ea869336bd1ba4443f2"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/heapless-7450df1d45e477b1.json",
+      "bytes": 1890320,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/audits/heapless-7450df1d45e477b1.json",
+      "sha256": "671a8e0e5844f1f4928fd199f6d94c97b27a73a7841be61ebc58d045d1e3c3bc"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_055_harness-86d95099bc80a6dd.json",
+      "bytes": 110420,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/audits/rsh_055_harness-86d95099bc80a6dd.json",
+      "sha256": "cc0398d9b04bb19fd5caca5efcbf5116b871b2349e8ad23c92f1b7560eda87aa"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/heapless-a58ddb336a5c5087.json",
+      "bytes": 1885293,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typeiso/audits/heapless-a58ddb336a5c5087.json",
+      "sha256": "5c3e00554dd6965669db66fc534cfbf3234f25f276c21bddb9ea5f28a8d8afca"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-055-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_055_harness-3f2e141889709e8a.json",
+      "bytes": 110454,
+      "case_id": "RSH-055",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typeiso/audits/rsh_055_harness-3f2e141889709e8a.json",
+      "sha256": "fede83439c393389f8cf23ef6f75f73646c24d2a87859450cec0ef59b1a88150"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/neon-dab33f49d7f2630b.json",
+      "bytes": 4277429,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/vulnerable/typed_plain/audits/neon-dab33f49d7f2630b.json",
+      "sha256": "4b79266215a10d5cfee8dc49ef48477b212bc2b52433a7b85fa2f492c696aa04"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_064_harness-13f5eb576e20da6f.json",
+      "bytes": 89494,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/vulnerable/typed_plain/audits/rsh_064_harness-13f5eb576e20da6f.json",
+      "sha256": "b5912d8dccc89e2c995c110270fd6f0e87e2ae47101197bef9f3b3a21393a52a"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/neon-756c588829d5589f.json",
+      "bytes": 4268946,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/vulnerable/typeiso/audits/neon-756c588829d5589f.json",
+      "sha256": "852f2b97fd5cf3556dfdac81cee4599e4e69db8d21ed2d47ff75a48f50443c8b"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_064_harness-de4b00ab9c56d857.json",
+      "bytes": 89517,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/vulnerable/typeiso/audits/rsh_064_harness-de4b00ab9c56d857.json",
+      "sha256": "ac488e8078a8bb21c346bb80cc2d6431f3fb01ff6791cb3086a66450d614f57f"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/neon-57acd2bd4e4ef29c.json",
+      "bytes": 4270584,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/patched/typed_plain/audits/neon-57acd2bd4e4ef29c.json",
+      "sha256": "346bb76d14a49d55ba9b2f3ef9d378fd913c9202143d275ab31c3d41bad09dd9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_064_harness-d9f0622c83224169.json",
+      "bytes": 93430,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/patched/typed_plain/audits/rsh_064_harness-d9f0622c83224169.json",
+      "sha256": "71d9b5d386f8adf5d2e1f6d3da4095918d06b1605895639aa0be5f777f039b55"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/neon-84e53e3c67cfc3ef.json",
+      "bytes": 4265888,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/patched/typeiso/audits/neon-84e53e3c67cfc3ef.json",
+      "sha256": "0b19f1ba8edb724288c8b730af39c857543bf19f0798ad0a3a8c32fb2334d025"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-064-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_064_harness-8a2efc816c1857dd.json",
+      "bytes": 93359,
+      "case_id": "RSH-064",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-064/arms/patched/typeiso/audits/rsh_064_harness-8a2efc816c1857dd.json",
+      "sha256": "5934413a5f46c369a94b6146be83c25a235b1f3809e7eed1297b5adda5511280"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/mail_internals-82b3791a49a3217e.json",
+      "bytes": 350885,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/vulnerable/typed_plain/audits/mail_internals-82b3791a49a3217e.json",
+      "sha256": "1e3afabc9b9c6247f5ec1d69e3fae737c5ea6454e18640b2031a23b715ba8883"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_065_harness-e07360db824305f1.json",
+      "bytes": 96068,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/vulnerable/typed_plain/audits/rsh_065_harness-e07360db824305f1.json",
+      "sha256": "422483836e0b7378b5cce57feebc5627a866288cfe5d216aaff9034d58b94fcd"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/mail_internals-228f8212f3e82e8f.json",
+      "bytes": 350209,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/vulnerable/typeiso/audits/mail_internals-228f8212f3e82e8f.json",
+      "sha256": "317bc9bdb23b37da5136b566a0d22f2c36ab2e5214a0ac46a5b90cc059118e53"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_065_harness-8fadff8db9218752.json",
+      "bytes": 96046,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/vulnerable/typeiso/audits/rsh_065_harness-8fadff8db9218752.json",
+      "sha256": "cd16eff072d0bf162d8260fdd82711bd3cabdea468af3faba9940540d0d80a06"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/mail_internals-bd644feedbde4f95.json",
+      "bytes": 350378,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/patched/typed_plain/audits/mail_internals-bd644feedbde4f95.json",
+      "sha256": "39899c9312a919ed5f393c0f410c7962105840845694db0aa9e7315d8634d846"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_065_harness-45c04e96a1be68cb.json",
+      "bytes": 95186,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/patched/typed_plain/audits/rsh_065_harness-45c04e96a1be68cb.json",
+      "sha256": "6c4eb7981f38a70e574a363edcd1d8606ddf9909fdafcdab1a403127ceb2a41e"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/mail_internals-dc301f9a583e9c70.json",
+      "bytes": 349850,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/patched/typeiso/audits/mail_internals-dc301f9a583e9c70.json",
+      "sha256": "3d1bcf1eb3bec53e5d05517997b95da9848d5143b93568e616ab02a26332fb94"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-065-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_065_harness-bcf3ae91e4b04b48.json",
+      "bytes": 95117,
+      "case_id": "RSH-065",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-065/arms/patched/typeiso/audits/rsh_065_harness-bcf3ae91e4b04b48.json",
+      "sha256": "706f7190255260d9487088404fdadae9e5d63a152d8c579bedd37c18dd3b9acd"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_066_harness-5600389174f67083.json",
+      "bytes": 101227,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/vulnerable/typed_plain/audits/rsh_066_harness-5600389174f67083.json",
+      "sha256": "61656e3c68447af99c2987770165e72be340ae8120c226daee6d29e704e0843f"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rust_i18n_support-72a912e462dcba59.json",
+      "bytes": 487176,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/vulnerable/typed_plain/audits/rust_i18n_support-72a912e462dcba59.json",
+      "sha256": "1ca9e5bf97a5c45c2e62c8c708725e2b35faffd841bf334fb012e66956d068b0"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_066_harness-7d1bf53c872ebe91.json",
+      "bytes": 101206,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/vulnerable/typeiso/audits/rsh_066_harness-7d1bf53c872ebe91.json",
+      "sha256": "94bbbdc4e19b049bc3a298a0302f940ca67637fef95ea5384f8d88e389fdeb5f"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rust_i18n_support-411cbc29be9b57e2.json",
+      "bytes": 486477,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/vulnerable/typeiso/audits/rust_i18n_support-411cbc29be9b57e2.json",
+      "sha256": "92e6d89e41bd652fd56c7b110ad528111706bbd4cd5297fb401640e4895b1c94"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_066_harness-7cc47dcd047f05bb.json",
+      "bytes": 103397,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/typed_plain/audits/rsh_066_harness-7cc47dcd047f05bb.json",
+      "sha256": "08bd5ddfa019c6b43eab75a5fb9e2cc236c0826d49c3158e0041b40ad1f06c58"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rust_i18n_support-676745a50a11ec4d.json",
+      "bytes": 471493,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/typed_plain/audits/rust_i18n_support-676745a50a11ec4d.json",
+      "sha256": "88f586953ed109b9b38105ba23f3befc8b1be7953357266037e90523780a09e7"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_066_harness-43abf89a9dcb7d7e.json",
+      "bytes": 103264,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/typeiso/audits/rsh_066_harness-43abf89a9dcb7d7e.json",
+      "sha256": "3ac5c23346e8a40a831da4b103ac6a810919ab7872613de7c07c264b4f45a4ea"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-066-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rust_i18n_support-d2a307322a07b6ba.json",
+      "bytes": 470579,
+      "case_id": "RSH-066",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/typeiso/audits/rust_i18n_support-d2a307322a07b6ba.json",
+      "sha256": "8599cd9f5a8d304ad51551a290ac9b79cfec125d1b76f69963a757b0a4ea7191"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/openssl-0b125240374128f1.json",
+      "bytes": 6837591,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/vulnerable/typed_plain/audits/openssl-0b125240374128f1.json",
+      "sha256": "4caea4c3a8e05938e375b3c16ad7c9fccb41f3bdf389192a671dad9dc8641ed9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_067_harness-7cc11b475b9b11e9.json",
+      "bytes": 88114,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/vulnerable/typed_plain/audits/rsh_067_harness-7cc11b475b9b11e9.json",
+      "sha256": "b5ce811505a9a4ca74ff0f3c7871c67cab837033cf29aee28e0a139f4b4dcf11"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/openssl-ec7d169a41a3433b.json",
+      "bytes": 6825504,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/vulnerable/typeiso/audits/openssl-ec7d169a41a3433b.json",
+      "sha256": "fe937334285cc1653076ab67abc8e807190a59273bd85da925938c042b18bee8"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_067_harness-0c9ba6bb46a14274.json",
+      "bytes": 88046,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/vulnerable/typeiso/audits/rsh_067_harness-0c9ba6bb46a14274.json",
+      "sha256": "fa9593253d42580a1cb8ed94aba140926c6284860a3b000385ecd2a75214f4f9"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/openssl-52d366763d9d034f.json",
+      "bytes": 6832227,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/patched/typed_plain/audits/openssl-52d366763d9d034f.json",
+      "sha256": "b9bd3bdf31918aec4f9aa8bda77ae000bd8b2f128dc2b1cc6067b5e618901f1f"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_067_harness-6e9324b149f4a5fe.json",
+      "bytes": 95245,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/patched/typed_plain/audits/rsh_067_harness-6e9324b149f4a5fe.json",
+      "sha256": "2de6c79f64eb2cce498a669b7ac6835b269d1b141789fe87164161e9c0fbdd50"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/openssl-141712da4ee45ea5.json",
+      "bytes": 6816292,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/patched/typeiso/audits/openssl-141712da4ee45ea5.json",
+      "sha256": "a05e4138b8b796aa14a444a154d8050743840272fd19660384055762d1f4240f"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-067-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_067_harness-cca610e0475d7f83.json",
+      "bytes": 95172,
+      "case_id": "RSH-067",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-067/arms/patched/typeiso/audits/rsh_067_harness-cca610e0475d7f83.json",
+      "sha256": "b21cff7c2e4952b6dacedb4111b1844f1d961601d38ac7b5d93833c94d59c543"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/pared-cb7e06784c61b023.json",
+      "bytes": 382608,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/vulnerable/typed_plain/audits/pared-cb7e06784c61b023.json",
+      "sha256": "d3c062a5e82fb8e91fc2f83d6b74558bc9d46d8e157cde65c3ea8f67a38b4048"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_068_harness-3bb715cff26bc30c.json",
+      "bytes": 99817,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/vulnerable/typed_plain/audits/rsh_068_harness-3bb715cff26bc30c.json",
+      "sha256": "1c88de3d87b4a928ab3532a4a370f3a33843c0b098399101ee4fad224cc449f1"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/pared-50bb228d5c1c6fe1.json",
+      "bytes": 381799,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/vulnerable/typeiso/audits/pared-50bb228d5c1c6fe1.json",
+      "sha256": "94bfb6bf29489673859714813bde0457d615849c7fd5ea358dd7f7783d408b68"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_068_harness-3192d6703cdf60ad.json",
+      "bytes": 99793,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/vulnerable/typeiso/audits/rsh_068_harness-3192d6703cdf60ad.json",
+      "sha256": "630c53aca1e40aecd4ac2830c4d53d4a649c90cab10c20c438a10a2d95cb16e2"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/pared-7cd2955cb9f1c4bf.json",
+      "bytes": 382045,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/patched/typed_plain/audits/pared-7cd2955cb9f1c4bf.json",
+      "sha256": "aec354aff92c480c0ecb2a2abc70e3fcdb914a35bcf22a756590ca5718b1604b"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_068_harness-0bc486810d04616b.json",
+      "bytes": 107172,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/patched/typed_plain/audits/rsh_068_harness-0bc486810d04616b.json",
+      "sha256": "0c1d3a65b77b79e926dcfb9660362775fe2d16000db3856b666df7114a271ec2"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/pared-8bbe1dc908dfb0e3.json",
+      "bytes": 381036,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/patched/typeiso/audits/pared-8bbe1dc908dfb0e3.json",
+      "sha256": "e98093378e3e586e335fc2bb8bf85d16cc1267d9c3b010f89612f6bd212a881c"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-068-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_068_harness-22bdafac75c439d9.json",
+      "bytes": 107092,
+      "case_id": "RSH-068",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-068/arms/patched/typeiso/audits/rsh_068_harness-22bdafac75c439d9.json",
+      "sha256": "f8f0f2a2f731ba05584fe63046a075c08c14b2788b8bd94783cfadfbf33a0c59"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/openssl-c743cae5c6c0f20e.json",
+      "bytes": 6837769,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/vulnerable/typed_plain/audits/openssl-c743cae5c6c0f20e.json",
+      "sha256": "c2a8e40e338c54b34a810afe24cc16a1d07fe736c719a7cf2391010214659804"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typed_plain/audits/rsh_069_harness-9cc54a2c829c83b1.json",
+      "bytes": 98225,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/vulnerable/typed_plain/audits/rsh_069_harness-9cc54a2c829c83b1.json",
+      "sha256": "c4a223ac7f870f635f8de11ccbbed3b87c3c58567fb118e6b4c61ebb2c9bd2a1"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/openssl-8a4f4056cb3144d8.json",
+      "bytes": 6825511,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/vulnerable/typeiso/audits/openssl-8a4f4056cb3144d8.json",
+      "sha256": "f2e0e456f3f7223f2ecdc62d1233c33071f2dff4ce46a7feb1922e45baac8e6f"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/vulnerable/typeiso/audits/rsh_069_harness-15e2479cd5bf801a.json",
+      "bytes": 98201,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/vulnerable/typeiso/audits/rsh_069_harness-15e2479cd5bf801a.json",
+      "sha256": "77670c92ec0ff94e4fd857a1b2d7d4fd0ed5d6e511eb9834522be6d9a5764d07"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/openssl-8e3c0a41b8a21998.json",
+      "bytes": 6829236,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/patched/typed_plain/audits/openssl-8e3c0a41b8a21998.json",
+      "sha256": "2f19db00103565ef92732c3ba861f87b6a1619bfaf62a91bb99e22518aca8c6f"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typed_plain/audits/rsh_069_harness-d1203318ba021e6a.json",
+      "bytes": 101370,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/patched/typed_plain/audits/rsh_069_harness-d1203318ba021e6a.json",
+      "sha256": "c4cd10a342b8e90efe727e7bc4eef436890755fa99418fb39893a95fb4b8da53"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/openssl-7915fb4f513c6a88.json",
+      "bytes": 6816999,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/patched/typeiso/audits/openssl-7915fb4f513c6a88.json",
+      "sha256": "4d3bcbc4e07723b56b83944e10a07f824056dc2e08f6ee8435e40481babe7698"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "audit_archive": "docs/evidence/rustsec-typeiso-automatic-20260715/audit-archives/RSH-069-audits.tar.gz",
+      "audit_archive_member": "arms/patched/typeiso/audits/rsh_069_harness-1f4ee44c25277037.json",
+      "bytes": 101401,
+      "case_id": "RSH-069",
+      "recorded_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-069/arms/patched/typeiso/audits/rsh_069_harness-1f4ee44c25277037.json",
+      "sha256": "2ac8660fefbebe89afc763229f46275bf92f2bf456136d9a3bf16e62e76fe3a7"
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-typeiso-automatic-durable-evidence-manifest"
+}

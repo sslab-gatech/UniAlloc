@@ -2709,7 +2709,7 @@
   "created_at": "2026-07-14",
   "harness_bundle": {
     "catalog_path": "evaluation/config/rustsec_heap_harnesses.json",
-    "catalog_sha256": "ed557f2231db288e08fad746c1fc6b2c007010aba07cf502fe3ab06f47557173",
+    "catalog_sha256": "db019cfa387e2b068be114f21ee89201f68551998265d0b7a4ff75a74ffe3386",
     "claim_grade": false,
     "distinct_advisory_count": 40,
     "harness_case_count": 22,

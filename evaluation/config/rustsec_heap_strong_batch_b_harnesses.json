@@ -127,9 +127,9 @@
             "rsh-055-harness"
           ],
           "compiler_target_exclusion": {
-            "claim_boundary": "The experiment validates allocator policy for the manually attributed one-word payload allocation and reclaim; automatic compiler victim coverage remains unvalidated.",
+            "claim_boundary": "The default manual experiment preserves its original target set. The explicit automatic-edge-identity probe compiles the subject and harness and validates both critical sites against the coverage contract.",
             "compiler_automatic_victim_coverage": false,
-            "reason": "Indirect generic materialize/reclaim helpers preserve the manual identity for the Vec<u64> payload backing; the compiler audit separately binds the foreign Box<Replacement> allocation.",
+            "reason": "Manual-mode provenance remains reproducible; automatic mode disables the manual scope and requires exact compiler audit and runtime bindings.",
             "subject_crate": "heapless"
           },
           "oracle": {
@@ -141,7 +141,7 @@
           "origin_url": "https://github.com/rust-embedded/heapless/issues/181",
           "patched_source": {
             "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-055/derived_reuse_patched.rs",
-            "source_sha256": "b2d790af6201f5ab517f85b8b37fd587e0c3e9da4aa9c58f5b27aa891926e79e"
+            "source_sha256": "b770ca00c0746a4a386649898d6fce4515612a533c06bb162344432fa3673bb8"
           },
           "provenance": "derived_adapter",
           "required_environment": {},
@@ -150,12 +150,30 @@
           ],
           "scenario_id": "RSH-055-derived-reuse",
           "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-055/derived_reuse.rs",
-          "source_sha256": "93ccd3eaa9e3f0accbbec1944b718b19e5230e1c0dd1bbd398d72fd396160d45",
+          "source_sha256": "480e5eeb5ead5bd3a0231269c00c005f25a5fed10bc41a5ff132ec0f30553f7a",
           "type_isolation_edge_annotation": {
             "annotation_scope": [
-              "indirect generic materialization of the heapless IntoIter consumed one-word Vec<u64> payload backing",
-              "indirect generic reclaim of the consumed DropDetector and its one-word Vec<u64> payload backing"
+              "concrete materialize_payload Vec<u64> one-word backing allocation",
+              "consumed heapless IntoIter reclaim of the DropDetector payload backing"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "source_shaped_derived",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:85:23:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_enter_exit_rewrite_applied"
+                ],
+                "semantic_type_fragment": "std::vec::Vec<u64",
+                "source_file_fragment": "src/witness.rs:53:10:"
+              }
+            },
             "claim_scope": "derived RSH-055 collision-gated consumed one-word Vec<u64>-payload-to-Replacement cross-identity reuse edge only",
             "expected_layout": {
               "align": 8,
@@ -344,12 +362,12 @@
   "claim_grade": false,
   "counts": {
     "blocked_case_count": 3,
+    "derived_reuse_scenario_count": 1,
     "distinct_advisory_count": 4,
     "executable_case_count": 4,
     "published_scenario_count": 3,
     "repository_scenario_count": 5,
-    "scope_case_count": 7,
-    "derived_reuse_scenario_count": 1
+    "scope_case_count": 7
   },
   "schema_version": 1,
   "source": "unialloc-strong-candidate-batch-b-fragment"

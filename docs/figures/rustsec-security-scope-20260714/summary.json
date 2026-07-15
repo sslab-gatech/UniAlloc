@@ -149,16 +149,35 @@
   "rustsec_commit": "9f3e138091487e69144f536d36976e427a7a3307",
   "scope_count": 49,
   "type_isolation_claim_boundary": {
-    "automatic_source_true_positive_case_count": 0,
+    "automatic_full_source_vulnerability_detection_case_count": 0,
+    "causal_mitigated_derived_edge_case_count": 12,
     "claim_grade": false,
-    "compiler_automatic_victim_coverage": false,
-    "manual_derived_reuse_edge_case_count": 12,
+    "compiler_automatic_victim_coverage": true,
+    "compiler_automatic_victim_coverage_case_count": 12,
+    "compiler_automatic_victim_coverage_case_ids": [
+      "RSH-052",
+      "RSH-002",
+      "RSH-055",
+      "RSH-008",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-042",
+      "RSH-041"
+    ],
+    "full_source_vulnerability_detection_case_count": 0,
+    "manual_derived_reuse_edge_case_count": 0,
+    "manual_derived_reuse_edge_case_ids": [],
     "source_vulnerability_detection_validated": false,
     "synthetic_reduction_case_count": 2,
     "synthetic_reduction_case_ids": [
       "RSH-065",
       "RSH-069"
-    ]
+    ],
+    "vulnerability_specific_detection_case_count": 0
   },
   "unresolved_integration_case_ids": [],
   "unresolved_integration_count": 0

@@ -1167,6 +1167,15 @@ def evaluate_type_isolation_edge(
         repetitions = raw_repetitions
     edge_value = scenario.get("edge_evaluation")
     edge = edge_value if isinstance(edge_value, dict) else {}
+    automatic_probe_value = scenario.get("automatic_edge_identity_probe", False)
+    automatic_probe_valid = isinstance(automatic_probe_value, bool)
+    if not automatic_probe_valid:
+        evidence_gaps.append(
+            "scenario.automatic_edge_identity_probe:invalid_boolean"
+        )
+    automatic_probe = (
+        automatic_probe_value if automatic_probe_valid else False
+    )
     raw_arms = scenario.get("arms", [])
     if not isinstance(raw_arms, list):
         raise ResultError("derived reuse arms must be a list")
@@ -1356,6 +1365,48 @@ def evaluate_type_isolation_edge(
     if not synthetic_reduction_marker_present:
         evidence_gaps.append("scenario.claim_scope:synthetic_reduction_marker_missing")
 
+    annotation_value = scenario.get("annotation")
+    annotation = annotation_value if isinstance(annotation_value, dict) else {}
+    automatic_coverage_contract = annotation.get(
+        "automatic_compiler_coverage_contract"
+    )
+    vulnerability_specific_detection_boundary_valid = edge.get(
+        "vulnerability_specific_detection_signal"
+    ) in (None, False)
+    if not vulnerability_specific_detection_boundary_valid:
+        evidence_gaps.append(
+            "scenario.vulnerability_specific_detection_signal:unsupported"
+        )
+    legacy_typeiso_semantics_absent = "causal_mitigation_true_positive" not in edge
+    if not legacy_typeiso_semantics_absent:
+        evidence_gaps.append("scenario.legacy_typeiso_true_positive_semantics:present")
+    if automatic_probe:
+        edge_identity_contract_valid = (
+            edge.get("manual_victim_identity_annotation") is False
+            and edge.get("compiler_automatic_victim_coverage") is True
+            and edge.get("source_vulnerability_detection_validated") is False
+            and edge.get(
+                "causal_compiler_bound_reuse_edge_mitigation"
+            )
+            is True
+            and edge.get("result_semantics")
+            == "causal_compiler_bound_reuse_edge_mitigation"
+            and isinstance(automatic_coverage_contract, dict)
+            and automatic_coverage_contract.get("schema_version") == 1
+            and isinstance(
+                automatic_coverage_contract.get("coverage_scope"), str
+            )
+            and bool(automatic_coverage_contract["coverage_scope"].strip())
+        )
+    else:
+        edge_identity_contract_valid = (
+            edge.get("manual_victim_identity_annotation") is True
+            and edge.get("compiler_automatic_victim_coverage") is False
+            and edge.get("source_vulnerability_detection_validated") is False
+        )
+    if not edge_identity_contract_valid:
+        evidence_gaps.append("scenario.edge_identity_contract:invalid")
+
     typed_oracle_policy = scenario.get("typed_allocator_expected_oracle", True)
     typed_oracle_policy_valid = isinstance(typed_oracle_policy, bool)
     if not typed_oracle_policy_valid:
@@ -1380,6 +1431,14 @@ def evaluate_type_isolation_edge(
     )
 
     checks = {
+        "automatic_edge_identity_probe_mode_valid": automatic_probe_valid,
+        "edge_identity_contract_valid": edge_identity_contract_valid,
+        "vulnerability_specific_detection_boundary_valid": (
+            vulnerability_specific_detection_boundary_valid
+        ),
+        "legacy_typeiso_true_positive_semantics_absent": (
+            legacy_typeiso_semantics_absent
+        ),
         "minimum_repetitions_met": repetitions >= minimum_repetitions,
         "orchestration_success": scenario.get("orchestration_success") is True
         and scenario.get("unexpected_arm_count") == 0,
@@ -1459,7 +1518,6 @@ def evaluate_type_isolation_edge(
         reason = "derived_reuse_arm_evidence_missing_or_invalid"
     else:
         reason = "derived_reuse_evidence_requirements_not_met"
-    true_positive = validated
     return {
         "advisory_id": advisory_id,
         "case_id": case_id,
@@ -1467,9 +1525,11 @@ def evaluate_type_isolation_edge(
         "mechanism": "type_isolation",
         "outcome": "mitigated" if validated else "inconclusive",
         "reason": reason,
-        "true_positive": true_positive,
+        "validated_mitigation": validated,
         "result_semantics": (
-            "causal_mitigation_true_positive" if validated else "evidence_gap"
+            "causal_compiler_bound_reuse_edge_mitigation"
+            if validated
+            else "evidence_gap"
         ),
         "positive_scope": (
             "exploit_enabling_cross_identity_reuse_edge" if validated else None
@@ -1482,17 +1542,27 @@ def evaluate_type_isolation_edge(
         "failed_checks": failed_checks,
         "claim_scope": claim_scope,
         "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
+        "automatic_edge_identity_probe": automatic_probe,
+        "manual_victim_identity_annotation": edge.get(
+            "manual_victim_identity_annotation"
+        ),
         "compiler_automatic_victim_coverage": edge.get(
             "compiler_automatic_victim_coverage"
         ),
         "source_vulnerability_detection_validated": edge.get(
             "source_vulnerability_detection_validated"
         ),
+        "vulnerability_specific_detection_signal": False,
+        "full_source_vulnerability_detection": False,
+        "causal_compiler_bound_reuse_edge_mitigation": validated,
         "automatic_source_coverage": False,
-        "source_level_true_positive": False,
         "claim_grade": False,
         "reduction_fidelity": (
-            "synthetic_manual_reduction"
+            "compiler_automatic_synthetic_reduction"
+            if automatic_probe and synthetic_reduction
+            else "compiler_automatic_derived_reduction"
+            if automatic_probe
+            else "synthetic_manual_reduction"
             if synthetic_reduction
             else "manual_derived_reduction"
         ),
@@ -1557,10 +1627,12 @@ def export(
         "source": "unialloc-rustsec-mechanism-results",
         "claim_grade": False,
         "boundary": (
-            "Detected true positives reproduce an exact allocator diagnostic in "
+            "Detector true positives reproduce an exact allocator diagnostic in "
             "every vulnerable repetition with matched baseline and patched controls. "
-            "Mitigated true positives causally block and report one matched "
-            "exploit-enabling cross-identity reuse edge. No-signal rows are "
+            "Type Isolation validated mitigations causally block and report measured "
+            "compiler-bound cross-identity reuse edges. These rows carry "
+            "zero credit for vulnerability-specific or full-source detection. "
+            "No-signal rows are "
             "feature-matched negatives for the integrated witness only."
         ),
         "minimum_repetitions": minimum_repetitions,

@@ -37,11 +37,10 @@ struct Victim<T>(Vec<T>);
 
 struct Replacement([u8; PAYLOAD_SIZE]);
 
-// These generic helpers are called indirectly so the definition-level compiler
-// pass leaves the inner Vec<T> allocation and emap Keys<V> reclaim to the
-// surrounding, explicitly labeled victim scope.
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_victim<T: Clone, const N: usize>(seed: &[T; N]) -> Victim<T> {
+fn materialize_victim(seed: &[u8; PAYLOAD_SIZE]) -> Victim<u8> {
     Victim(seed.to_vec())
 }
 

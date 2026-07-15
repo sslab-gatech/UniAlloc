@@ -2,59 +2,92 @@
 
 ## Final terminal update
 
-The expanded review is complete for 53 strong candidates. The final efficacy
-scope contains 49 executable witness/control integrations. RSH-054, RSH-056,
-RSH-059, and RSH-073 retain evidence-backed attempt reasons outside that
-denominator. The exclusive case-level partition contains 31 other-feature-only,
-11 Type-Isolation-only, 1 multiple-mechanism, 3 matched no-signal, and 3
-inconclusive/unresolved cases. The no-signal set is RSH-049, RSH-050, and
-RSH-075; the unresolved set is RSH-003, RSH-006, and RSH-019. The strict
-case-level positive result is **43/49**. The generated case report records 32
-`detected`, 11 `mitigated`, 3 `no_signal`, and 3 `inconclusive` cases. The
-mechanism-row ledger contains 62
-rows: 32 `detected`, 12 `mitigated`, 12 `no_signal`, and 6 `inconclusive`.
-Its 44 positive mechanism rows cover 43 unique cases: 31 reclaim checks, 1
-recovery-layout validation, and 12 Type Isolation edges. RSH-002 is the sole
-overlap, and 13 cases retain multiple rows.
+The expanded review covers **53 strong heap-participating, Rust-global allocator
+candidates**. The final efficacy denominator contains **49** executable
+witness/control integrations. RSH-054, RSH-056, RSH-059, and RSH-073 retain
+evidence-backed audit-only exclusions. The executable partition contains 31
+other-feature-only cases, 11 TypeIso measured-reuse-edge-only cases, 1 measured reuse edge plus other feature
+case, 3 matched no-signal cases, and 3 inconclusive or unresolved cases.
 
-The 12 Type Isolation-positive cases are manually attributed derived
-cross-identity reuse experiments. They count as causal true positives for the
-bounded allocator decision because the matched control reuses the
-exploit-enabling address while Type Isolation withholds and reports that reuse.
-Each strict row validates the matching treatment denial and report binding.
-All 12 rows record `compiler_automatic_victim_coverage=false` and
-`source_vulnerability_detection_validated=false`. Published and upstream source
-witnesses retain a separate denominator, and the full automatic
-source-vulnerability Type Isolation true-positive count is **0**.
+Allocator mechanisms provide qualified coverage for **43/49** executable
+candidates: 31 exact duplicate-reclaim detections, 1 exact recovery-layout
+validation, and 12 compiler-bound causal mitigations of measured cross-identity
+reuse edges, with RSH-002 counted once. Eleven of the Type Isolation rows are
+TypeIso measured-reuse-edge-only; RSH-002 overlaps with `reclaim_checks`. This ratio describes
+the integrated allocator mechanisms and witnesses. Type Isolation automatic
+source-level vulnerability detections remain **0/12**.
 
-RSH-064 (`neon`) moved from blocked to executable after integration of a real
-Node/V8-hosted N-API addon. Neon 0.10.0 reproduces the stale external-buffer
-read, and Neon 0.10.1 rejects the identical source with its added `'static`
-bound. The source Type Isolation row remains inconclusive because the compiler
-audit records zero applied rewrites at the critical allocation path. A separate
-manually attributed derived reuse experiment contributes RSH-064's bounded
-Type Isolation-positive case-level result while preserving the source row and
-its automatic-coverage boundary.
+The 12 Type Isolation experiments comprise two
+`derived_vulnerability_edge` scopes (RSH-008 and RSH-041) and ten
+`source_shaped_derived` scopes. None has `published_source` coverage. Each
+vulnerable system and `typed_plain` arm collides at the witness's reclaimed
+address in all three repetitions. Type Isolation withholds that address in all
+three repetitions. The stats record's `last_wrong_identity_retained_ptr` must
+equal the harness's parsed `original` or `stale_value` pointer, which binds the
+withheld cache object to the measured witness edge.
 
-RSH-031 contributes the policy-independent recovery-layout detection. Its
-derived native matrix binds an exact allocation/deallocation layout diagnostic
-to the Vec Drop edge, while the pinned upstream Miri matrix supplies source
-ground truth. RSH-065 and RSH-069 retain explicit synthetic-reduction caveats
-inside the manual Type Isolation set.
+The compiler contract binds both preregistered sides of the decision. The
+requested and victim sites must each select one unique applied compiler-audit
+candidate, and the runtime requested/retained identities, modules, requested
+callsite, size, and alignment must join those candidates. The automatic probe
+turns the historical manual metadata helper into a no-op. Every strict row
+records `compiler_automatic_victim_coverage=true`,
+`manual_victim_identity_annotation=false`,
+`source_vulnerability_detection_validated=false`,
+`vulnerability_specific_detection_signal=false`, and `claim_grade=false`.
 
-All 12 strict Type Isolation matrices bind to one frozen isolated WIP evidence
-snapshot with UniAlloc implementation digest
+Coverage comes from generic `Box<T>` runtime identity, monomorphized runtime
+`TypeId` for exact `Global` `Vec::with_capacity<T>`, authenticated primitive
+`alloc::slice::to_vec`, and exact source-shaped `String` sites/transfers.
+RSH-052 proves an exact `String` allocation origin followed by an audited
+pointer-preserving `String -> Box<str>` ownership transfer. RSH-066 moves its
+exact `String` owner into `AtomicStr`. RSH-068 and RSH-069 retain identities
+from their allocation origins through the relevant `String` and `CString`
+ownership chains. The pass fails closed for custom allocators, unresolved or
+ambiguous generic owners, lookalike methods, and element types with user-defined
+`Clone` or drop behavior.
+
+All patched system, `typed_plain`, and `typeiso` arms exercise safe
+same-identity functionality and complete without a matching attribution event.
+Allocator unit controls separately preserve same-identity reuse and withhold an
+eligible cross-identity cache entry. RSH-065 retains a synthetic reserve-
+relocation reduction, and RSH-069 retains synthetic grooming of the FFI-read
+edge. RSH-064's real Node/V8 source witness remains a complete ownership-chain
+coverage gap while its separate derived edge supplies bounded causal evidence.
+
+The attribution fields are `stats`-gated evaluation telemetry. The retained-
+pointer field uses one companion atomic and leaves cache layouts and the public
+semantic-stats snapshot unchanged. Production enforcement remains the ordinary
+exact-identity cache decision. The completed paired
+`typeiso_perf / typed_plain` ratio-of-ratios screen passed its merge gates:
+Oxipng wall time changed **-1.6649%** and peak RSS changed **+0.583%**; the long
+Ripgrep workload changed **+0.8107%** in wall time (95% bootstrap CI
+**[-0.180%, +1.399%]**) and retained the same **7168 KiB** maximum RSS. The
+gates require wall-time regression at or below 2%, Oxipng RSS regression at or
+below 1%, and unchanged Ripgrep maximum RSS. Aggregate semantic-rewrite counts
+were unchanged in these selected macros, so active new-site evidence comes
+from the 12 RustSec matrices and compiler regression tests. Evidence is under
+`docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/`.
+
+RSH-002's bounded denial precedes a later `type-cache pointer already retained`
+duplicate-reclaim abort. Its Type Isolation row covers the earlier
+cross-identity reuse decision; its distinct `reclaim_checks` row covers the
+later exact duplicate reclaim. RSH-031 contributes the separate policy-
+independent recovery-layout validation.
+
+The frozen manually annotated matrices remain historical calibration under
+UniAlloc implementation digest
 `ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2`.
-This hash names the captured evidence snapshot. The current shared-session
-working tree and current HEAD have separate live provenance. The complete report records Type Isolation
-snapshot digests separately from historical replay-arm digests.
+The automatic compiler-bound provenance epoch is
+`docs/evidence/rustsec-typeiso-automatic-20260715/`; its per-case records and
+`summary.json` remain separate from the historical manual and replay-arm
+artifacts.
 
 The scope freezes RustSec advisory-db at
 `9f3e138091487e69144f536d36976e427a7a3307` and Rudra-PoC at
 `6226dd030fffbed5601099cb0e24f73e4150a7f5`. Its primary witness taxonomy is 30
 double-free, 19 use-after-free, 2 uninitialized-drop, 1 invalid-free, and 1
-out-of-bounds-read advisory. Every result remains exploratory with
-`claim_grade=false`.
+out-of-bounds-read advisory.
 
 The feature-attribution campaign evaluates 42 reclaim scenarios with the six
 logical arms `vulnerable,patched x system,reclaim_plain,reclaim_checks` and
@@ -66,20 +99,13 @@ the deterministic RSH-013 refresh binds all six arms to digest
 `b9bd5442c557b3d39c34cf391e8c32388ba84ea643e6adc91ea4987d85adbc5a`.
 Cargo metadata resolves `reclaim_plain` to `stats` and `reclaim_checks` to
 `reclaim_checks,stats`. The direct observations include 29 vulnerable check-arm
-signals, zero plain-arm signals, and zero patched signals. The original strict
-exporter accepts all 29 direct detections; supplemental RSH-001 and RSH-060
-experiments raise the final reclaim-positive case count to 31. RSH-013 uses a
-deterministic terminal `drop(values)`, which prevents corrupted-string
-formatting from preempting the duplicate reclaim. RSH-020 uses a fail-closed
-double-panic parser that accepts repeated identical source checkpoints followed
-by the standard destructor-cleanup abort and rejects distinct checkpoints as
-ambiguous. The final merged ledger records 12 reclaim no-signal rows, 1
-evidence-inconclusive reclaim row, and 5 inconclusive Type Isolation source
-rows; case-level reconciliation uses the positive derived Type Isolation and
-recovery-layout rows before assigning one outcome per case. RSH-006 supplies
-the evidence-inconclusive reclaim row because its matched SIGSEGV lacks a
-normalized source-bound fault/checkpoint fingerprint; source analysis still
-indicates a stack-lifetime boundary.
+signals, zero plain-arm signals, and zero patched signals. Supplemental RSH-001
+and RSH-060 experiments raise the final reclaim-detection count to 31. RSH-013
+uses deterministic terminal `drop(values)`, and RSH-020 uses a fail-closed
+double-panic parser. The final merged ledger retains 12 reclaim no-signal rows,
+1 evidence-inconclusive reclaim row, and 5 inconclusive Type Isolation source
+rows. Case-level reconciliation applies the distinct derived Type Isolation
+and recovery-layout evidence before assigning one outcome per case.
 
 The campaign manifest and derived records are retained as
 `docs/evidence/rustsec-reclaim-checks-20260714/feature-matched-campaign.json`,
@@ -286,8 +312,8 @@ and two derived reuse probes. The retained evidence is in
 
 | Case | Published baseline and patched control | Published allocator result | Derived Type Isolation result |
 |---|---|---|---|
-| RSH-041 / `oneringbuf` | ASan UAF 3/3; patched clean 3/3 | no allocator signal; observed allocations used fallback | manually attributed 40-byte A-to-B edge: `typed_plain` reused 3/3, `typeiso` reused 0/3 and reported 3/3 |
-| RSH-042 / `emap` | ASan UAF 3/3; patched clean 3/3 | no allocator signal; published witness contains no measured replacement edge | manually attributed 64-byte A-to-B edge: `typed_plain` reused 3/3, `typeiso` reused 0/3 and reported 3/3 |
+| RSH-041 / `oneringbuf` | ASan UAF 3/3; patched clean 3/3 | no allocator signal; observed allocations used fallback | historical manually attributed 40-byte A-to-B edge: `typed_plain` reused 3/3, `typeiso` reused 0/3 with a historical stats attribution event 3/3 |
+| RSH-042 / `emap` | ASan UAF 3/3; patched clean 3/3 | no allocator signal; published witness contains no measured replacement edge | historical manually attributed 64-byte A-to-B edge: `typed_plain` reused 3/3, `typeiso` reused 0/3 with a historical stats attribution event 3/3 |
 | RSH-043 / `bitchomp` | ASan double free 3/3; patched clean 3/3 | `typed_plain` and `typeiso` both reported pointer-already-released 3/3 | not applicable |
 | RSH-044 / `qwutils` | ASan double free 3/3; patched safe panic 3/3 | `typed_plain` and `typeiso` both reported pointer-already-released 3/3 | not applicable |
 | RSH-045 / `stack_dst` | ASan double free 3/3; patched safe panic 3/3 | `typed_plain` and `typeiso` both reported pointer-already-released 3/3 | not applicable |
@@ -295,10 +321,12 @@ and two derived reuse probes. The retained evidence is in
 The published-witness denominator yields five reproduced baselines, five
 matched patched controls, three common UniAlloc tracked-reclaim signals, and
 zero Type-Isolation-specific published signals. The derived denominator yields
-two validated, manually attributed cross-identity reuse-policy observations.
-Automatic compiler victim coverage and source-vulnerability detection remain
-zero for those two derived scenarios, so neither result is a general UAF
-mitigation claim.
+two validated, historically manually attributed cross-identity reuse-policy
+observations. That first-wave snapshot recorded zero automatic compiler victim
+coverage. The terminal automatic probe now covers both derived edges without manual
+metadata and binds the withheld pointer to each harness witness. Source-level
+vulnerability detection remains zero, and both rows remain bounded allocator
+reuse-edge mitigations.
 
 ## Evaluation denominators
 
@@ -348,8 +376,10 @@ Results must remain separated by mechanism:
 - guard pages and force initialization: separate spatial and initialization
   treatments.
 
-The supported Type Isolation claim is that a covered cross-identity reuse edge
-is withheld. The supported tracked-reclaim claim is that a second allocator
-operation is rejected before duplicate backend release. Source-level UAF repair,
-ordinary stale-load detection, and general pointer provenance remain outside
-those claims.
+The supported Type Isolation claim is a compiler-bound causal mitigation of a
+measured derived or source-shaped cross-identity reuse edge. The supported
+tracked-reclaim claim is rejection of a second allocator operation before
+duplicate backend release. Type Isolation source-level vulnerability detection
+and vulnerability-specific detector signals remain zero; source-level UAF
+repair, ordinary stale-load detection, and general pointer provenance stay
+outside these mechanism contracts.

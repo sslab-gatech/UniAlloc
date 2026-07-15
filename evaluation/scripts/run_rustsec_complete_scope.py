@@ -230,8 +230,91 @@ def indexed_rows(
     return result
 
 
+def mechanism_result_has_validated_positive(
+    result: dict[str, Any], *, case_id: object
+) -> bool:
+    """Validate the mechanism-specific semantic field and return its value."""
+    mechanism = result.get("mechanism")
+    outcome = result.get("outcome")
+    if mechanism == "type_isolation":
+        if "true_positive" in result:
+            raise CompleteScopeError(
+                f"Type Isolation result must use validated_mitigation exclusively "
+                f"for {case_id}"
+            )
+        validated = result.get("validated_mitigation")
+        if not isinstance(validated, bool):
+            raise CompleteScopeError(
+                f"Type Isolation result requires explicit validated_mitigation "
+                f"for {case_id}"
+            )
+        expected = outcome == "mitigated"
+        if validated is not expected:
+            raise CompleteScopeError(
+                f"validated_mitigation must be {expected} for outcome {outcome!r} "
+                f"in {case_id}"
+            )
+        return validated
+
+    if "validated_mitigation" in result:
+        raise CompleteScopeError(
+            f"detector result must use true_positive exclusively for {case_id}"
+        )
+    true_positive = result.get("true_positive")
+    if not isinstance(true_positive, bool):
+        raise CompleteScopeError(
+            f"detector result requires explicit true_positive for {case_id}"
+        )
+    expected = outcome == "detected"
+    if true_positive is not expected:
+        raise CompleteScopeError(
+            f"true_positive must be {expected} for outcome {outcome!r} in {case_id}"
+        )
+    return true_positive
+
+
+def normalize_historical_base_result(
+    result: dict[str, Any], *, case_id: object
+) -> None:
+    """Bind an archived pre-semantic result to the current boolean contract.
+
+    Historical replay scopes predate ``true_positive`` and
+    ``validated_mitigation``.  They remain hash-bound replay provenance, so the
+    loader performs the only deterministic migration available: the archived
+    mechanism/outcome pair supplies the mechanism-specific boolean.  Current
+    rows already carrying either semantic field still pass through the strict
+    validator unchanged.
+    """
+    if "true_positive" in result or "validated_mitigation" in result:
+        mechanism_result_has_validated_positive(result, case_id=case_id)
+        return
+
+    mechanism = result.get("mechanism")
+    outcome = result.get("outcome")
+    if mechanism == "type_isolation" and outcome in {
+        "mitigated",
+        "inconclusive",
+        "no_signal",
+    }:
+        result["validated_mitigation"] = outcome == "mitigated"
+    elif mechanism in {"reclaim_checks", "recovery_layout_validation"} and outcome in {
+        "detected",
+        "inconclusive",
+        "no_signal",
+    }:
+        result["true_positive"] = outcome == "detected"
+    else:
+        raise CompleteScopeError(
+            f"unsupported historical mechanism result for {case_id}: "
+            f"{mechanism!r}/{outcome!r}"
+        )
+    result["historical_schema_normalization"] = (
+        "mechanism_specific_boolean_derived_from_archived_outcome"
+    )
+
+
 def positive_mechanism_results(case: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return explicit positives while rejecting duplicate mechanism claims."""
+    """Return validated positives while rejecting duplicate mechanism claims."""
     raw_results = case.get("mechanism_results")
     if not isinstance(raw_results, list):
         raise CompleteScopeError(
@@ -243,7 +326,9 @@ def positive_mechanism_results(case: dict[str, Any]) -> list[dict[str, Any]]:
             raise CompleteScopeError(
                 f"mechanism result must be an object for {case.get('case_id')}"
             )
-        if result.get("true_positive") is True:
+        if mechanism_result_has_validated_positive(
+            result, case_id=case.get("case_id")
+        ):
             positives.append(result)
     by_mechanism: collections.Counter[str] = collections.Counter(
         require_string(result.get("mechanism"), "positive mechanism")
@@ -268,8 +353,7 @@ def select_representative_mechanism_result(
     Exact reclaim and recovery-layout diagnostics remain ahead of a bounded
     Type Isolation mitigation for deterministic case-level display. The
     complete mechanism ledger and overlap fields retain every distinct positive.
-    Legacy frozen scopes predate the true-positive contract, so homogeneous
-    rows retain the previous first-row selection rule.
+    Homogeneous non-positive rows retain the previous first-row selection rule.
     """
     raw_results = case.get("mechanism_results")
     if not isinstance(raw_results, list):
@@ -559,6 +643,12 @@ def load_base_scope(
         results = case.get("mechanism_results")
         if not isinstance(results, list):
             raise CompleteScopeError(f"mechanism_results must be a list for {case_id}")
+        for result in results:
+            if not isinstance(result, dict):
+                raise CompleteScopeError(
+                    f"mechanism result must be an object for {case_id}"
+                )
+            normalize_historical_base_result(result, case_id=case_id)
         if status == "blocked":
             require_string(
                 integration.get("blocker_reason"), f"{case_id} blocker_reason"
@@ -1328,6 +1418,102 @@ def strict_typeiso_evidence_implementation_digest(
     return next(iter(implementation_digests))
 
 
+def strict_typeiso_identity_provenance(
+    *, case_id: str, result: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate and normalize manual or compiler-automatic edge provenance."""
+
+    compiler_automatic = result.get("compiler_automatic_victim_coverage")
+    if not isinstance(compiler_automatic, bool):
+        raise CompleteScopeError(
+            f"strict Type Isolation compiler coverage is invalid for {case_id}"
+        )
+    if result.get("source_vulnerability_detection_validated") is not False:
+        raise CompleteScopeError(
+            f"strict Type Isolation source boundary is invalid for {case_id}"
+        )
+    if result.get("vulnerability_specific_detection_signal") not in (None, False):
+        raise CompleteScopeError(
+            f"strict Type Isolation vulnerability-specific detection is invalid for {case_id}"
+        )
+    if result.get("full_source_vulnerability_detection") not in (None, False):
+        raise CompleteScopeError(
+            f"strict Type Isolation full-source detection is invalid for {case_id}"
+        )
+    if "source_level_true_positive" in result:
+        raise CompleteScopeError(
+            f"strict Type Isolation result uses legacy true-positive terminology "
+            f"for {case_id}"
+        )
+    automatic_value = result.get("automatic_edge_identity_probe", False)
+    if not isinstance(automatic_value, bool):
+        raise CompleteScopeError(
+            f"strict Type Isolation automatic probe marker is invalid for {case_id}"
+        )
+    manual_value = result.get("manual_victim_identity_annotation")
+    if automatic_value:
+        if compiler_automatic is not True or manual_value is not False:
+            raise CompleteScopeError(
+                f"strict Type Isolation automatic provenance is invalid for {case_id}"
+            )
+        for field in ("automatic_source_coverage",):
+            if result.get(field) is not False:
+                raise CompleteScopeError(
+                    f"strict Type Isolation {field} is invalid for {case_id}"
+                )
+    elif compiler_automatic is not False or manual_value not in (None, True):
+        raise CompleteScopeError(
+            f"strict Type Isolation manual provenance is invalid for {case_id}"
+        )
+
+    synthetic = case_id in SYNTHETIC_TYPEISO_REDUCTION_CASES
+    if (
+        "synthetic_reduction" in result
+        and result["synthetic_reduction"] is not synthetic
+    ):
+        raise CompleteScopeError(
+            f"strict Type Isolation synthetic marker is invalid for {case_id}"
+        )
+    expected_fidelity = (
+        "compiler_automatic_synthetic_reduction"
+        if automatic_value and synthetic
+        else "compiler_automatic_derived_reduction"
+        if automatic_value
+        else "synthetic_manual_reduction"
+        if synthetic
+        else "manual_derived_reduction"
+    )
+    fidelity = result.get("reduction_fidelity")
+    if (automatic_value and fidelity != expected_fidelity) or (
+        fidelity is not None and fidelity != expected_fidelity
+    ):
+        raise CompleteScopeError(
+            f"strict Type Isolation reduction fidelity is invalid for {case_id}"
+        )
+    checks = result.get("checks")
+    if automatic_value and (
+        not isinstance(checks, dict)
+        or checks.get("automatic_edge_identity_probe_mode_valid") is not True
+        or checks.get("edge_identity_contract_valid") is not True
+        or checks.get("vulnerability_specific_detection_boundary_valid") is not True
+    ):
+        raise CompleteScopeError(
+            f"strict Type Isolation automatic checks are incomplete for {case_id}"
+        )
+    return {
+        "automatic_edge_identity_probe": automatic_value,
+        "manual_victim_identity_annotation": not automatic_value,
+        "compiler_automatic_victim_coverage": compiler_automatic,
+        "source_vulnerability_detection_validated": False,
+        "vulnerability_specific_detection_signal": False,
+        "full_source_vulnerability_detection": False,
+        "automatic_source_coverage": False,
+        "claim_grade": False,
+        "reduction_fidelity": expected_fidelity,
+        "synthetic_reduction": synthetic,
+    }
+
+
 def validate_strict_current_result(
     *,
     case: dict[str, Any],
@@ -1350,11 +1536,6 @@ def validate_strict_current_result(
             f"strict result override cannot locate selected result for {case_id}"
         )
     result_index = result_indexes[0]
-    true_positive = result.get("true_positive")
-    if not isinstance(true_positive, bool):
-        raise CompleteScopeError(
-            f"strict result override requires explicit true_positive for {case_id}"
-        )
     if require_representative_binding:
         if result is not selected_result:
             raise CompleteScopeError(
@@ -1393,6 +1574,9 @@ def validate_strict_current_result(
     )
     mechanism = result.get("mechanism")
     outcome = result.get("outcome")
+    validated_positive = mechanism_result_has_validated_positive(
+        result, case_id=case_id
+    )
     reason = require_string(
         result.get("reason"), f"{case_id} strict result override reason"
     )
@@ -1412,7 +1596,7 @@ def validate_strict_current_result(
         "feature_matched_exact_allocator_diagnostic",
         "exact_diagnostic_true_positive",
     ):
-        if true_positive is not True:
+        if validated_positive is not True:
             raise CompleteScopeError(
                 f"strict result override detected row is not positive for {case_id}"
             )
@@ -1469,7 +1653,7 @@ def validate_strict_current_result(
         "feature_matched_execution_without_exact_allocator_diagnostic",
         "matched_negative_without_exact_reclaim_diagnostic",
     ):
-        if true_positive is not False or result.get("positive_scope") is not None:
+        if validated_positive is not False or result.get("positive_scope") is not None:
             raise CompleteScopeError(
                 f"strict result override no-signal row has positive semantics for {case_id}"
             )
@@ -1520,7 +1704,7 @@ def validate_strict_current_result(
         "matched_exact_recovery_layout_diagnostic",
         "exact_diagnostic_true_positive",
     ):
-        if true_positive is not True:
+        if validated_positive is not True:
             raise CompleteScopeError(
                 f"strict recovery-layout result is not positive for {case_id}"
             )
@@ -1583,9 +1767,9 @@ def validate_strict_current_result(
         "type_isolation",
         "mitigated",
         "matched_cross_identity_reuse_edge_blocked_and_reported",
-        "causal_mitigation_true_positive",
+        "causal_compiler_bound_reuse_edge_mitigation",
     ):
-        if true_positive is not True:
+        if validated_positive is not True:
             raise CompleteScopeError(
                 f"strict result override mitigated row is not positive for {case_id}"
             )
@@ -1608,14 +1792,7 @@ def validate_strict_current_result(
                 raise CompleteScopeError(
                     f"strict result override {field} is nonempty for {case_id}"
                 )
-        if result.get("source_vulnerability_detection_validated") is not False:
-            raise CompleteScopeError(
-                f"strict result override source boundary is invalid for {case_id}"
-            )
-        if result.get("compiler_automatic_victim_coverage") is not False:
-            raise CompleteScopeError(
-                f"strict result override compiler boundary is invalid for {case_id}"
-            )
+        strict_typeiso_identity_provenance(case_id=case_id, result=result)
         strict_typeiso_evidence_implementation_digest(
             case_id=case_id,
             result=result,
@@ -1672,33 +1849,26 @@ def validate_and_bind_positive_mechanism_results(
             "scenario_id": result["scenario_id"],
             "reason": result["reason"],
             "result_semantics": result["result_semantics"],
-            "true_positive": True,
             "positive_scope": result.get("positive_scope"),
             "claim_scope": result["claim_scope"],
             "repetitions": result["repetitions"],
             "evidence": evidence,
         }
         if mechanism == "type_isolation":
-            bound_result["compiler_automatic_victim_coverage"] = False
-            bound_result["source_vulnerability_detection_validated"] = False
-            bound_result["automatic_source_coverage"] = False
-            bound_result["source_level_true_positive"] = False
-            bound_result["claim_grade"] = False
+            bound_result["validated_mitigation"] = True
+            bound_result.update(
+                strict_typeiso_identity_provenance(
+                    case_id=case["case_id"], result=result
+                )
+            )
             bound_result["implementation_sha256"] = (
                 strict_typeiso_evidence_implementation_digest(
                     case_id=case["case_id"],
                     result=result,
                 )
             )
-            synthetic_reduction = (
-                case["case_id"] in SYNTHETIC_TYPEISO_REDUCTION_CASES
-            )
-            bound_result["reduction_fidelity"] = (
-                "synthetic_manual_reduction"
-                if synthetic_reduction
-                else "manual_derived_reduction"
-            )
-            bound_result["synthetic_reduction"] = synthetic_reduction
+        else:
+            bound_result["true_positive"] = True
         if mechanism == "recovery_layout_validation":
             bound_result["allocator_signal_signatures"] = dict(
                 result["allocator_signal_signatures"]
@@ -1811,13 +1981,13 @@ def apply_strict_result_override(
         "scenario_id": scenario_id,
         "reason": reason,
         "result_semantics": semantics,
-        "true_positive": result["true_positive"],
         "positive_scope": result.get("positive_scope"),
         "repetitions": repetitions,
         "evidence": evidence,
         "checks": dict(result["checks"]),
     }
     if mechanism == "reclaim_checks":
+        override["true_positive"] = result["true_positive"]
         override["allocator_signal_signatures"] = dict(
             result["allocator_signal_signatures"]
         )
@@ -1830,6 +2000,7 @@ def apply_strict_result_override(
             for name in sorted(STRICT_RECLAIM_PROVENANCE)
         }
     elif mechanism == "recovery_layout_validation":
+        override["true_positive"] = result["true_positive"]
         override["allocator_signal_signatures"] = dict(
             result["allocator_signal_signatures"]
         )
@@ -1845,8 +2016,10 @@ def apply_strict_result_override(
             result["ground_truth_validation"]
         )
     else:
-        override["source_vulnerability_detection_validated"] = False
-        override["compiler_automatic_victim_coverage"] = False
+        override["validated_mitigation"] = result["validated_mitigation"]
+        override.update(
+            strict_typeiso_identity_provenance(case_id=case_id, result=result)
+        )
     record["strict_result_override"] = override
 
 def validate_supplemental_execution(
@@ -1945,7 +2118,8 @@ def validate_supplemental_executable(
         outcome="inconclusive",
     )
     if (
-        mechanism_result.get("true_positive") is not False
+        mechanism_result.get("validated_mitigation") is not False
+        or "true_positive" in mechanism_result
         or mechanism_result.get("result_semantics") != "evidence_gap"
         or mechanism_result.get("positive_scope") is not None
     ):
@@ -2654,6 +2828,8 @@ def build_report(
     strict_typeiso_implementation_counts: collections.Counter[str] = (
         collections.Counter()
     )
+    strict_typeiso_automatic_case_ids: set[str] = set()
+    strict_typeiso_manual_case_ids: set[str] = set()
     binary_available_arm_count = 0
     archived_binary_unavailable_arm_count = 0
     for record in case_records:
@@ -2665,8 +2841,13 @@ def build_report(
                     isinstance(result, dict)
                     and result.get("mechanism") == "type_isolation"
                     and result.get("outcome") == "mitigated"
-                    and result.get("true_positive") is True
+                    and result.get("validated_mitigation") is True
+                    and "true_positive" not in result
                 ):
+                    if result.get("compiler_automatic_victim_coverage") is True:
+                        strict_typeiso_automatic_case_ids.add(record["case_id"])
+                    else:
+                        strict_typeiso_manual_case_ids.add(record["case_id"])
                     strict_typeiso_implementation_counts.update(
                         [
                             validate_sha256(
@@ -2735,6 +2916,14 @@ def build_report(
             "typeiso_reuse_denial_case_count": sum(
                 record["typeiso_reuse_denial_observed"] for record in case_records
             ),
+            "typeiso_compiler_automatic_victim_coverage_case_count": (
+                len(strict_typeiso_automatic_case_ids)
+            ),
+            "typeiso_manual_victim_annotation_case_count": (
+                len(strict_typeiso_manual_case_ids)
+            ),
+            "typeiso_vulnerability_specific_detection_case_count": 0,
+            "typeiso_full_source_vulnerability_detection_case_count": 0,
             "scope_review_required_count": sum(
                 record["scope_review_required"] for record in case_records
             ),

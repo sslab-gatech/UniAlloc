@@ -16,7 +16,7 @@ RUNNER = ROOT / "evaluation" / "scripts" / "run_rustsec_heap_harness.py"
 HARNESS = ROOT / "evaluation" / "harnesses" / "rustsec_heap_expansion" / "RSH-066"
 VULNERABLE = HARNESS / "derived_reuse.rs"
 PATCHED = HARNESS / "derived_reuse_patched.rs"
-VULNERABLE_SHA256 = "5d8a5b15070bf275c16acb3a03badb43b773fb9ae9a1a08bfe5cb03d26888115"
+VULNERABLE_SHA256 = "149082fe2e1c5d51e51bdd23a0d603895a63a1268fb922235b7acf0af664b71f"
 PATCHED_SHA256 = "aaab7486d537889e1df49db364ff0d0f9a358339fcb1ca7cbb50d77d77f74151"
 
 spec = importlib.util.spec_from_file_location("rustsec_heap_harness", RUNNER)
@@ -53,16 +53,19 @@ class Rsh066TypeIsolationEdgeTests(unittest.TestCase):
         self.assertEqual(source.count("0x5253_4842_0000_0001"), 1)
         self.assertEqual(source.count("0x5253_4842_0000_0002"), 1)
 
-    def test_manual_victim_scope_avoids_harness_identity_shadowing(self) -> None:
-        for path in (VULNERABLE, PATCHED):
-            source = path.read_text(encoding="utf-8")
-            self.assertIn("fn materialize_atomic(value: &str) -> AtomicStr", source)
+    def test_victim_materialization_avoids_harness_identity_shadowing(self) -> None:
+        vulnerable = VULNERABLE.read_text(encoding="utf-8")
+        patched = PATCHED.read_text(encoding="utf-8")
+        self.assertIn("fn materialize_string(byte: u8) -> String", vulnerable)
+        self.assertIn("fn materialize_atomic(value: String) -> AtomicStr", vulnerable)
+        self.assertIn("let victim_seed = materialize_string(b'A');", vulnerable)
+        self.assertIn("fn materialize_atomic(value: &str) -> AtomicStr", patched)
+        for source in (vulnerable, patched):
             self.assertIn("fn reclaim_value<T>(value: T)", source)
             self.assertIn("black_box(materialize)", source)
             self.assertIn("black_box(reclaim)", source)
             self.assertIn("#![forbid(unsafe_code)]", source)
             self.assertNotIn("unsafe {", source)
-        vulnerable = VULNERABLE.read_text(encoding="utf-8")
         self.assertIn("let reclaim: fn(Arc<String>) = reclaim_value;", vulnerable)
         self.assertNotIn("|| drop(old_owner)", vulnerable)
 
@@ -87,13 +90,13 @@ class Rsh066TypeIsolationEdgeTests(unittest.TestCase):
         )
         self.assertIn("report_vulnerability_edge_reuse_denial", source)
 
-    def test_registered_manual_annotation_is_bounded_to_string_buffer_edge(self) -> None:
+    def test_registered_annotation_is_bounded_to_string_buffer_edge(self) -> None:
         self.assertEqual(self.scenario["compiler_target_crates"], ["rsh-066-harness"])
         exclusion = self.scenario["compiler_target_exclusion"]
         self.assertEqual(exclusion["subject_crate"], "rust-i18n-support")
         self.assertFalse(exclusion["compiler_automatic_victim_coverage"])
-        self.assertIn("manual", exclusion["reason"])
-        self.assertIn("allocator policy", exclusion["claim_boundary"])
+        self.assertIn("automatic mode disables the manual scope", exclusion["reason"])
+        self.assertIn("automatic-edge-identity probe", exclusion["claim_boundary"])
 
         annotation = self.scenario["type_isolation_edge_annotation"]
         self.assertEqual(
@@ -106,6 +109,10 @@ class Rsh066TypeIsolationEdgeTests(unittest.TestCase):
             annotation["replacement_semantic_type_fragment"],
             "Box<witness::Replacement",
         )
+        contract = annotation["automatic_compiler_coverage_contract"]
+        self.assertEqual(contract["coverage_scope"], "source_shaped_derived")
+        self.assertIn("String", contract["victim"]["semantic_type_fragment"])
+        self.assertIn("Replacement", contract["replacement"]["semantic_type_fragment"])
         self.assertIn("the claim stops at this reuse edge", VULNERABLE.read_text())
 
 

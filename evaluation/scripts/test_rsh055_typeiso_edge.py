@@ -35,11 +35,11 @@ class Rsh055TypeIsolationEdgeTests(unittest.TestCase):
     def test_sources_are_hash_pinned_for_catalog_registration(self) -> None:
         self.assertEqual(
             sha256(VULNERABLE),
-            "93ccd3eaa9e3f0accbbec1944b718b19e5230e1c0dd1bbd398d72fd396160d45",
+            "480e5eeb5ead5bd3a0231269c00c005f25a5fed10bc41a5ff132ec0f30553f7a",
         )
         self.assertEqual(
             sha256(PATCHED),
-            "b2d790af6201f5ab517f85b8b37fd587e0c3e9da4aa9c58f5b27aa891926e79e",
+            "b770ca00c0746a4a386649898d6fce4515612a533c06bb162344432fa3673bb8",
         )
         self.assertEqual(
             self.scenario["source_path"], VULNERABLE.relative_to(ROOT).as_posix()
@@ -90,7 +90,7 @@ class Rsh055TypeIsolationEdgeTests(unittest.TestCase):
         )
         self.assertIn("report_vulnerability_edge_reuse_denial", source)
 
-    def test_registered_manual_annotation_is_bounded_to_eight_byte_edge(self) -> None:
+    def test_registered_annotation_is_bounded_to_eight_byte_edge(self) -> None:
         expected_annotation = {
             "kind": "manual_exact_vulnerability_edge_identity",
             "expected_layout": {"size": 8, "align": 8},
@@ -105,10 +105,12 @@ class Rsh055TypeIsolationEdgeTests(unittest.TestCase):
         self.assertIn("collision-gated", annotation["claim_scope"])
         exclusion = self.scenario["compiler_target_exclusion"]
         self.assertFalse(exclusion["compiler_automatic_victim_coverage"])
-        self.assertIn("Indirect generic", exclusion["reason"])
-        self.assertIn(
-            "automatic compiler victim coverage", exclusion["claim_boundary"]
-        )
+        self.assertIn("automatic mode disables the manual scope", exclusion["reason"])
+        self.assertIn("automatic-edge-identity probe", exclusion["claim_boundary"])
+        contract = annotation["automatic_compiler_coverage_contract"]
+        self.assertEqual(contract["coverage_scope"], "source_shaped_derived")
+        self.assertIn("Vec<u64", contract["victim"]["semantic_type_fragment"])
+        self.assertIn("Replacement", contract["replacement"]["semantic_type_fragment"])
         self.assertIn("only that equality gates", self.scenario["oracle"]["vulnerable"])
         self.assertIn("the claim stops at this reuse edge", VULNERABLE.read_text())
 

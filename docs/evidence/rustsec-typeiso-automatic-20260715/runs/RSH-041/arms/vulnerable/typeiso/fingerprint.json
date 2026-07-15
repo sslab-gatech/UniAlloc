@@ -1,0 +1,12 @@
+{
+  "fingerprint": "946054ff900421aa53cb58b2393f911561bd6823913f16f68c2aeb5f262f4f12",
+  "full_rebuild_required": true,
+  "previous_fingerprint": null,
+  "schema_version": 1,
+  "target_existed_before_reset": false,
+  "target_reset": false,
+  "target_reset_reasons": [
+    "fingerprint_changed",
+    "typeiso_complete_pass_audit_regeneration"
+  ]
+}

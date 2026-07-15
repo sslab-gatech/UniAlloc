@@ -1,0 +1,63 @@
+   Compiling serde_core v1.0.228
+   Compiling memchr v2.8.3
+   Compiling serde v1.0.228
+   Compiling crossbeam-utils v0.8.22
+   Compiling crossbeam-epoch v0.9.20
+   Compiling regex-syntax v0.8.11
+   Compiling aho-corasick v1.1.4
+   Compiling autocfg v1.5.1
+   Compiling rustversion v1.0.23
+   Compiling crossbeam-deque v0.8.7
+   Compiling indexmap v1.9.3
+   Compiling regex-automata v0.4.15
+   Compiling bstr v1.12.3
+   Compiling hashbrown v0.17.1
+   Compiling log v0.4.33
+   Compiling zmij v1.0.23
+   Compiling same-file v1.0.6
+   Compiling equivalent v1.0.2
+   Compiling walkdir v2.5.0
+   Compiling toml_datetime v0.6.11
+   Compiling indexmap v2.14.0
+   Compiling serde_spanned v0.6.9
+   Compiling globset v0.4.18
+   Compiling hashbrown v0.12.3
+   Compiling proc-macro2 v1.0.106
+   Compiling serde_json v1.0.150
+   Compiling linked-hash-map v0.5.6
+   Compiling winnow v0.5.40
+   Compiling yaml-rust v0.4.5
+   Compiling arc-swap v1.9.2
+   Compiling ignore v0.4.28
+   Compiling itoa v1.0.18
+   Compiling bitflags v1.3.2
+   Compiling unicode-ident v1.0.24
+   Compiling stable_deref_trait v1.2.1
+   Compiling ryu v1.0.23
+   Compiling globwalk v0.8.1
+   Compiling toml_edit v0.19.15
+   Compiling serde_yaml v0.8.26
+   Compiling triomphe v0.1.16
+   Compiling regex v1.13.0
+   Compiling normpath v1.5.1
+   Compiling lazy_static v1.5.0
+   Compiling once_cell v1.21.4
+   Compiling toml v0.7.8
+   Compiling rust-i18n-support v3.0.1 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/system/work/subject/rust-i18n-support-3.0.1)
+   Compiling rsh-066-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-066/arms/patched/system/work/project)
+warning: function `with_vulnerability_edge_identity` is never used
+  --> src/witness.rs:22:15
+   |
+22 | pub(crate) fn with_vulnerability_edge_identity<R>(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `report_vulnerability_edge_reuse_denial` is never used
+  --> src/witness.rs:31:15
+   |
+31 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `rsh-066-harness` (bin "rsh-066-harness") generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.32s

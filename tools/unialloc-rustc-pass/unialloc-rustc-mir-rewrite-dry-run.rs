@@ -93,7 +93,7 @@ const RUNTIME_SEMANTIC_TYPE_ID_DOMAIN: &[u8] = b"rust-type-id-v2";
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "every allocator-authorizing nonzero type_id is derived from one exact resolved rustc_middle Ty: tcx.type_id_hash(owner_ty) supplies core TypeId's stable Hash128, core hashes the second target-native-endian u64 word, and UniAlloc applies nonzero(FNV-1a-64(rust-type-id-v2 || that u64 in target-native-endian bytes)); semantic_object_type and all callee/type debug strings are audit display only and never authorize reuse; exact canonical semantic allocation scopes carry a compiler-derived numeric id, while exact Global Box scopes use the monomorphized generic runtime helper that computes the same semantic_type_id<T>; ownership transfers carry exact old/new Ty values and abstain unless both compiler-derived ids resolve; owner scans and ambiguity dedup key each supported owner by compiler-derived id plus display text, preserving distinct same-display nominal types; unresolved types, aliases, inference/placeholder/escaping-variable types, text-only Layout provenance, and composite/reconstructed Layouts use neutral type_id=0 and recovery-backed metadata; every direct allocator call remains neutral and recovery-backed until a CFG-proven exact owner link exists; Layout provenance remains audit-only because the current block-order map is not a CFG reaching-definition proof; built-in owners and methods remain authenticated against compiler lang/diagnostic items and canonical core/alloc/std CrateNums; hashbrown/indexmap and callback-capable receiver calls remain audit-only; exact Clone lowering remains limited to compiler-authenticated alloc String and Vec<u8, Global>; effectful owner, wrapper-owned, and dropful Box Drops stay unwrapped and recover identity from authenticated allocation records; the pinned rustc TypeId algorithm, the 64-bit runtime identity width, and the unique unialloc replacement-ABI CrateNum are explicit compiler/build provenance trust boundaries";
+    "every allocator-authorizing nonzero type_id is derived from one exact resolved rustc_middle Ty: tcx.type_id_hash(owner_ty) supplies core TypeId's stable Hash128, core hashes the second target-native-endian u64 word, and UniAlloc applies nonzero(FNV-1a-64(rust-type-id-v2 || that u64 in target-native-endian bytes)); semantic_object_type and all callee/type debug strings are audit display only and never authorize reuse; exact canonical semantic allocation scopes carry a compiler-derived numeric id, while exact Global Box and Vec::with_capacity scopes use the monomorphized generic runtime helper that computes the same semantic_type_id<T>; ownership transfers carry exact old/new Ty values and abstain unless both compiler-derived ids resolve; owner scans and ambiguity dedup key each supported owner by compiler-derived id plus display text, preserving distinct same-display nominal types; unresolved types, aliases, inference/placeholder/escaping-variable types, text-only Layout provenance, and composite/reconstructed Layouts use neutral type_id=0 and recovery-backed metadata; every direct allocator call remains neutral and recovery-backed until a CFG-proven exact owner link exists; Layout provenance remains audit-only because the current block-order map is not a CFG reaching-definition proof; built-in owners and methods remain authenticated against compiler lang/diagnostic items and canonical core/alloc/std CrateNums; hashbrown/indexmap and callback-capable receiver calls remain audit-only; exact Clone lowering remains limited to compiler-authenticated alloc String and Vec<u8, Global>, while exact slice::to_vec whole-call scopes require compiler primitive scalar elements; effectful owner, wrapper-owned, and dropful Box Drops stay unwrapped and recover identity from authenticated allocation records; the pinned rustc TypeId algorithm, the 64-bit runtime identity width, and the unique unialloc replacement-ABI CrateNum are explicit compiler/build provenance trust boundaries";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 const LIFETIME_PROFILE_FORMAT_V1: &str = "unialloc-lifetime-profile-v1";
@@ -3190,6 +3190,30 @@ fn exact_alloc_slice_into_vec_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && exact_alloc_slice_into_vec_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_alloc_slice_to_vec_def_path(path: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if matches!(
+        normalized.as_str(),
+        "alloc::slice::<impl [T]>::to_vec" | "std::slice::<impl [T]>::to_vec"
+    ) {
+        return true;
+    }
+    let impl_index = match normalized
+        .strip_prefix("alloc::slice::{impl#")
+        .and_then(|rest| rest.strip_suffix("}::to_vec"))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_alloc_slice_to_vec_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_alloc_crate_def_id(tcx, def_id)
+        && tcx.trait_item_of(def_id).is_none()
+        && exact_alloc_slice_to_vec_def_path(&tcx.def_path_str(def_id))
+}
+
 fn exact_alloc_vec_into_boxed_slice_def_path(path: &str) -> bool {
     let normalized = strip_rustc_crate_disambiguators(path);
     if matches!(
@@ -5201,6 +5225,67 @@ fn box_new_runtime_identity_owner_ty<'tcx>(
     (payload_ty == argument_tys[0]).then_some(destination_ty)
 }
 
+fn vec_with_capacity_runtime_identity_owner_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<Ty<'tcx>> {
+    // Route every exact Global Vec::with_capacity through the monomorphized
+    // generic ABI. Definition-level MIR can contain Vec<T, Global>, while the
+    // runtime helper is instantiated as Vec<Concrete, Global> by codegen. The
+    // same route is used for already-concrete MIR so one Rust owner cannot be
+    // split between runtime TypeId and the older compiler-hash namespace.
+    if !exact_alloc_vec_with_capacity_def_id(tcx, callee_def_id)
+        || argument_tys.len() != 1
+        || !matches!(argument_tys[0].kind(), ty::Uint(ty::UintTy::Usize))
+    {
+        return None;
+    }
+    let (owner_def, owner_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, owner_def.did())
+        || owner_def.did().krate != callee_def_id.krate
+        || !matches!(owner_args.len(), 1 | 2)
+    {
+        return None;
+    }
+
+    let element_ty = generic_arg_type(owner_args.get(0)?)?;
+    let allocator_ty = if owner_args.len() == 2 {
+        let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+        let (allocator_def, allocator_args) = match allocator_ty.kind() {
+            ty::Adt(def, args) => (def, args),
+            _ => return None,
+        };
+        if !allocator_args.is_empty()
+            || allocator_def.did().krate != owner_def.did().krate
+            || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        {
+            return None;
+        }
+        Some(allocator_ty)
+    } else {
+        None
+    };
+
+    // Bind the canonical method's instantiated type arguments back to the
+    // exact destination. Current rustc exposes only T for Global-only
+    // `with_capacity`; compatible surfaces may also expose the allocator type.
+    match callee_generic_types {
+        [callee_element] if *callee_element == element_ty => {}
+        [callee_element, callee_allocator]
+            if *callee_element == element_ty && allocator_ty == Some(*callee_allocator) => {}
+        _ => return None,
+    }
+
+    Some(destination_ty)
+}
+
 fn type_is_structurally_drop_inert<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, depth: usize) -> bool {
     const MAX_DROP_INERT_DEPTH: usize = 8;
     if depth > MAX_DROP_INERT_DEPTH {
@@ -5481,6 +5566,78 @@ fn direct_outer_std_dir_entry_path_destination_owner<'tcx>(
     // PathBuf result prove that allocations inside the precompiled platform
     // implementation belong to the returned PathBuf. Generic wrappers and
     // same-name methods retain the fail-closed factory path below.
+    Some(format!("{:?}", destination_ty))
+}
+
+fn callback_free_slice_to_vec_primitive_element(ty: Ty<'_>) -> bool {
+    matches!(
+        ty.kind(),
+        ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_)
+    )
+}
+
+fn direct_outer_vec_from_primitive_slice_to_vec_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_alloc_slice_to_vec_def_id(tcx, callee_def_id)
+        || clone_result_has_unresolved_params(destination_ty)
+        || argument_tys.len() != 1
+        || clone_result_has_unresolved_params(argument_tys[0])
+    {
+        return None;
+    }
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, destination_def.did())
+        || destination_def.did().krate != callee_def_id.krate
+        || !matches!(destination_args.len(), 1 | 2)
+    {
+        return None;
+    }
+    let destination_element = generic_arg_type(destination_args.get(0)?)?;
+    if !callback_free_slice_to_vec_primitive_element(destination_element)
+        || callee_generic_types != [destination_element]
+    {
+        return None;
+    }
+
+    let source_element = match argument_tys[0].kind() {
+        ty::Ref(_, inner, rustc_ast::Mutability::Not) => match inner.kind() {
+            ty::Slice(element) => *element,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    if source_element != destination_element {
+        return None;
+    }
+
+    if destination_args.len() == 2 {
+        let allocator_ty = generic_arg_type(destination_args.get(1)?)?;
+        let (allocator_def, allocator_args) = match allocator_ty.kind() {
+            ty::Adt(def, args) => (def, args),
+            _ => return None,
+        };
+        if !allocator_args.is_empty()
+            || allocator_def.did().krate != destination_def.did().krate
+            || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        {
+            return None;
+        }
+    }
+
+    // Canonical slice::to_vec can invoke T::clone. Restrict the whole-call
+    // scope to compiler primitive scalar types whose clone is callback-free
+    // and drop-inert. Generic T, user Clone implementations, custom methods,
+    // and allocator-specific factories retain the fail-closed path.
     Some(format!("{:?}", destination_ty))
 }
 
@@ -5967,6 +6124,7 @@ fn fail_closed_unproven_factory(heap_class: SemanticScopeHeapClass) -> SemanticS
 fn non_plain_semantic_scope_heap_class<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: Option<DefId>,
+    callee_generic_types: &[Ty<'tcx>],
     destination_ty: Ty<'tcx>,
     argument_tys: &[Ty<'tcx>],
     callee: &str,
@@ -6041,6 +6199,19 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // PathBuf buffer. Restrict join to canonical immutable borrowed Path,
         // OsStr, and str arguments so user AsRef callbacks and consumed owners
         // retain the fail-closed factory path below.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_vec_from_primitive_slice_to_vec_destination_owner(
+            tcx,
+            def_id,
+            callee_generic_types,
+            destination_ty,
+            argument_tys,
+        )
+    }) {
+        // Exact alloc slice::to_vec for primitive scalar elements has a
+        // callback-free clone path and allocates only the returned Global Vec.
+        // Generic or user-defined Clone element types remain audit-only.
         SemanticScopeHeapClass::Single(owner)
     } else if let Some(owner) = callee_def_id.and_then(|def_id| {
         direct_outer_vec_u8_from_u8_slice_to_owned_destination_owner(
@@ -6846,6 +7017,24 @@ mod tests {
 
     #[test]
     fn box_slice_into_vec_matcher_is_def_path_exact_and_one_way() {
+        assert!(exact_alloc_slice_to_vec_def_path(
+            "alloc[d734]::slice::{impl#0}::to_vec"
+        ));
+        assert!(exact_alloc_slice_to_vec_def_path(
+            "alloc::slice::{impl#27}::to_vec"
+        ));
+        assert!(exact_alloc_slice_to_vec_def_path(
+            "std::slice::<impl [T]>::to_vec"
+        ));
+        assert!(!exact_alloc_slice_to_vec_def_path(
+            "alloc::slice::{impl#0}::to_vec_unchecked"
+        ));
+        assert!(!exact_alloc_slice_to_vec_def_path(
+            "alloc::slice::{impl#x}::to_vec"
+        ));
+        assert!(!exact_alloc_slice_to_vec_def_path(
+            "my_crate::alloc::slice::{impl#0}::to_vec"
+        ));
         assert!(exact_alloc_slice_into_vec_def_path(
             "alloc[d734]::slice::{impl#0}::into_vec"
         ));
@@ -11625,6 +11814,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 Some(non_plain_semantic_scope_heap_class(
                     tcx,
                     callee_def_id,
+                    &callee_generic_types,
                     destination_ty,
                     &argument_tys,
                     &callee,
@@ -11634,7 +11824,18 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             };
         let runtime_identity_owner_ty = callee_def_id
             .and_then(|def_id| {
-                box_new_runtime_identity_owner_ty(tcx, def_id, destination_ty, &argument_tys)
+                vec_with_capacity_runtime_identity_owner_ty(
+                    tcx,
+                    def_id,
+                    &callee_generic_types,
+                    destination_ty,
+                    &argument_tys,
+                )
+            })
+            .or_else(|| {
+                callee_def_id.and_then(|def_id| {
+                    box_new_runtime_identity_owner_ty(tcx, def_id, destination_ty, &argument_tys)
+                })
             })
             .or_else(|| {
                 callee_def_id.and_then(|def_id| {

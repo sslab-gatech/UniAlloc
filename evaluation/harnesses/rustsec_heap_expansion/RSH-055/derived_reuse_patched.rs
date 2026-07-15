@@ -32,8 +32,10 @@ struct DropDetector {
     payload: std::vec::Vec<u64>,
 }
 
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_payload<T: Clone, const N: usize>(seed: &[T; N]) -> std::vec::Vec<T> {
+fn materialize_payload(seed: &[u64; 1]) -> std::vec::Vec<u64> {
     seed.to_vec()
 }
 

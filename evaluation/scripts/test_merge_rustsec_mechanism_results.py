@@ -60,7 +60,161 @@ def recovery_payload(advisory: str = "RUSTSEC-TEST-0001") -> dict[str, object]:
     return value
 
 
+def typeiso_payload(*, automatic: bool) -> dict[str, object]:
+    return {
+        "boundary": "derived edge only",
+        "results": [
+            {
+                "advisory_id": "RUSTSEC-TEST-0001",
+                "case_id": "RSH-001",
+                "scenario_id": "RSH-001-derived-reuse",
+                "mechanism": "type_isolation",
+                "outcome": "mitigated",
+                "validated_mitigation": True,
+                "result_semantics": (
+                    "causal_compiler_bound_reuse_edge_mitigation"
+                ),
+                "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
+                "negative_boundary": None,
+                "automatic_edge_identity_probe": automatic,
+                "manual_victim_identity_annotation": not automatic,
+                "compiler_automatic_victim_coverage": automatic,
+                "source_vulnerability_detection_validated": False,
+                "vulnerability_specific_detection_signal": False,
+                "full_source_vulnerability_detection": False,
+                "automatic_source_coverage": False,
+                "synthetic_reduction": False,
+                "reduction_fidelity": (
+                    "compiler_automatic_derived_reduction"
+                    if automatic
+                    else "manual_derived_reduction"
+                ),
+            }
+        ],
+    }
+
+
+def legacy_typeiso_mitigation_row() -> dict[str, object]:
+    row = dict(typeiso_payload(automatic=False)["results"][0])
+    row.pop("validated_mitigation")
+    row["true_positive"] = True
+    row["result_semantics"] = "causal_mitigation_true_positive"
+    return row
+
+
+def legacy_typeiso_source_row() -> dict[str, object]:
+    row = dict(typeiso_payload(automatic=False)["results"][0])
+    row.update(
+        {
+            "scenario_id": "RSH-001-upstream",
+            "outcome": "inconclusive",
+            "true_positive": False,
+            "result_semantics": "evidence_gap",
+            "positive_scope": None,
+        }
+    )
+    row.pop("validated_mitigation")
+    return row
+
+
 class MergeMechanismResultsTests(unittest.TestCase):
+    def test_normalizes_legacy_source_rows_and_replaces_old_mitigations(self) -> None:
+        current = typeiso_payload(automatic=True)
+        current_row = current["results"][0]
+        legacy = {
+            "boundary": "legacy mixed evidence",
+            "results": [
+                payload("RUSTSEC-TEST-0002", "no_signal")["results"][0],
+                legacy_typeiso_mitigation_row(),
+                legacy_typeiso_source_row(),
+            ],
+        }
+
+        normalized = module.normalize_legacy_payload(
+            legacy,
+            superseding_typeiso_keys=frozenset(
+                {module.result_key(current_row)}
+            ),
+        )
+        result = module.merge(
+            [(normalized, {"path": "legacy"}), (current, {"path": "current"})]
+        )
+
+        self.assertEqual(
+            result["counts"],
+            {"inconclusive": 1, "mitigated": 1, "no_signal": 1},
+        )
+        typeiso_rows = [
+            row for row in result["results"] if row["mechanism"] == "type_isolation"
+        ]
+        self.assertEqual(len(typeiso_rows), 2)
+        source = next(row for row in typeiso_rows if row["outcome"] == "inconclusive")
+        self.assertIs(source["validated_mitigation"], False)
+        self.assertNotIn("true_positive", source)
+        self.assertIs(source["vulnerability_specific_detection_signal"], False)
+        self.assertIs(source["full_source_vulnerability_detection"], False)
+        self.assertEqual(
+            normalized["legacy_normalization"],
+            {
+                "normalized_typeiso_inconclusive_count": 1,
+                "superseded_typeiso_mitigation_count": 1,
+            },
+        )
+
+    def test_legacy_mitigation_requires_a_strict_current_replacement(self) -> None:
+        legacy = {
+            "results": [legacy_typeiso_mitigation_row()],
+        }
+
+        with self.assertRaisesRegex(module.MergeError, "lacks current replacement"):
+            module.normalize_legacy_payload(
+                legacy,
+                superseding_typeiso_keys=frozenset(),
+            )
+
+    def test_legacy_source_normalization_rejects_positive_or_ambiguous_rows(self) -> None:
+        mutations = (
+            {"true_positive": True},
+            {"result_semantics": "causal_mitigation_true_positive"},
+            {"positive_scope": "source_vulnerability"},
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                row = legacy_typeiso_source_row()
+                row.update(mutation)
+                with self.assertRaisesRegex(
+                    module.MergeError, "unsupported legacy Type Isolation source"
+                ):
+                    module.normalize_legacy_payload(
+                        {"results": [row]},
+                        superseding_typeiso_keys=frozenset(),
+                    )
+
+    def test_accepts_manual_and_automatic_typeiso_provenance(self) -> None:
+        for automatic in (False, True):
+            with self.subTest(automatic=automatic):
+                result = module.merge(
+                    [(typeiso_payload(automatic=automatic), {"path": "typeiso"})]
+                )
+                row = result["results"][0]
+                self.assertIs(
+                    row["compiler_automatic_victim_coverage"], automatic
+                )
+
+    def test_rejects_inconsistent_automatic_typeiso_provenance(self) -> None:
+        invalid = typeiso_payload(automatic=True)
+        invalid["results"][0]["manual_victim_identity_annotation"] = True
+
+        with self.assertRaisesRegex(module.MergeError, "internally inconsistent"):
+            module.merge([(invalid, {"path": "typeiso"})])
+
+    def test_rejects_typeiso_detection_claim_in_a_mitigation_row(self) -> None:
+        invalid = typeiso_payload(automatic=True)
+        invalid["results"][0]["vulnerability_specific_detection_signal"] = True
+
+        with self.assertRaisesRegex(module.MergeError, "vulnerability-specific"):
+            module.merge([(invalid, {"path": "typeiso"})])
+
     def test_accepts_recovery_layout_exact_diagnostic(self) -> None:
         result = module.merge([(recovery_payload(), {"path": "layout"})])
 
@@ -128,6 +282,28 @@ class MergeMechanismResultsTests(unittest.TestCase):
         mislabeled["results"][0]["true_positive"] = True
         with self.assertRaisesRegex(module.MergeError, "true_positive"):
             module.merge([(mislabeled, {"path": "b"})])
+
+    def test_rejects_implicit_or_inconsistent_typeiso_mitigation(self) -> None:
+        implicit = typeiso_payload(automatic=True)
+        del implicit["results"][0]["validated_mitigation"]
+        with self.assertRaisesRegex(module.MergeError, "validated_mitigation"):
+            module.merge([(implicit, {"path": "typeiso"})])
+
+        mislabeled = typeiso_payload(automatic=True)
+        mislabeled["results"][0]["validated_mitigation"] = False
+        with self.assertRaisesRegex(module.MergeError, "validated_mitigation"):
+            module.merge([(mislabeled, {"path": "typeiso"})])
+
+    def test_rejects_cross_mechanism_semantic_fields(self) -> None:
+        typeiso = typeiso_payload(automatic=True)
+        typeiso["results"][0]["true_positive"] = True
+        with self.assertRaisesRegex(module.MergeError, "exclusively"):
+            module.merge([(typeiso, {"path": "typeiso"})])
+
+        detector = payload("RUSTSEC-TEST-0001", "detected")
+        detector["results"][0]["validated_mitigation"] = True
+        with self.assertRaisesRegex(module.MergeError, "exclusively"):
+            module.merge([(detector, {"path": "detector"})])
 
     def test_rejects_semantically_spoofed_positive_tuple(self) -> None:
         spoofed = payload("RUSTSEC-TEST-0001", "detected")

@@ -1,0 +1,11 @@
+{
+  "fingerprint": "1559e0f115ac7f03e8e21bcf5ccdef1e91e0abb789fb5b94fe3b309cd40eeb12",
+  "full_rebuild_required": true,
+  "previous_fingerprint": null,
+  "schema_version": 1,
+  "target_existed_before_reset": false,
+  "target_reset": false,
+  "target_reset_reasons": [
+    "fingerprint_changed"
+  ]
+}

@@ -34,11 +34,10 @@ pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 
 struct Replacement([u8; PAYLOAD_SIZE]);
 
-// Indirect generic helpers keep the victim allocation and reclaim inside the
-// surrounding manually attributed identity scope. Automatic compiler coverage
-// of those victim sites remains outside this adapter's claim.
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_server<T: Clone, const N: usize>(seed: &[T; N]) -> Vec<T> {
+fn materialize_server(seed: &[u8; PAYLOAD_SIZE]) -> Vec<u8> {
     seed.to_vec()
 }
 

@@ -123,11 +123,7 @@ class Rsh008TypeIsolationEdgeTests(unittest.TestCase):
 
         self.assertEqual(mechanism["counts"], {"mitigated": 1})
         result = mechanism["results"][0]
-        self.assertTrue(result["true_positive"])
-        self.assertEqual(result["outcome"], "mitigated")
-        self.assertEqual(
-            result["result_semantics"], "causal_mitigation_true_positive"
-        )
+        self.assertFalse(result["claim_grade"])
         self.assertEqual(result["failed_checks"], [])
         self.assertEqual(result["evidence_gaps"], [])
         self.assertTrue(all(result["checks"].values()))

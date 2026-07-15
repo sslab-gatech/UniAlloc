@@ -46,12 +46,10 @@ impl ExternalView {
 #[repr(transparent)]
 struct Replacement([u8; PAYLOAD_SIZE]);
 
-// Indirect generic helpers keep the definition-level compiler pass from
-// replacing the manually scoped victim identity with a callsite-derived Vec
-// identity. The concrete function pointer still fixes the exact Vec<u8>
-// owner and four-byte layout used by this adapter.
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_victim<T: Clone, const N: usize>(seed: &[T; N]) -> Vec<T> {
+fn materialize_victim(seed: &[u8; PAYLOAD_SIZE]) -> Vec<u8> {
     seed.to_vec()
 }
 

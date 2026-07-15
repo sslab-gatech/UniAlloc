@@ -8,8 +8,8 @@
         "features": [
           "napi-6"
         ],
-        "vulnerable_extra_dependencies": {},
-        "patched_extra_dependencies": {}
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
       },
       "case_id": "RSH-064",
       "crate": "neon",
@@ -104,19 +104,37 @@
           "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/neon/RUSTSEC-2022-0028.md",
           "patched_source": {
             "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/derived_reuse_patched.rs",
-            "source_sha256": "b5acdaef2f3c929a54f49723e7900e8da6e81fa1b85313b4b70f81fa6336c2df"
+            "source_sha256": "11ea0d717d04996d7e18614bf2473d101cd444e9d9f59ad6f21b57a99333e7b9"
           },
           "provenance": "derived_adapter",
           "required_environment": {},
           "rustflags": [],
           "scenario_id": "RSH-064-derived-reuse",
           "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/derived_reuse.rs",
-          "source_sha256": "1ac8fdd766d3b42b68149f711b5a172c249a0bc2c01b76051c6f5358de7ea40b",
+          "source_sha256": "31d28848f848bbc0487c0f8d598048f4f823ac02ebc31c577aa2c719fd527747",
           "type_isolation_edge_annotation": {
             "annotation_scope": [
-              "Rust Vec<u8> backing-store allocation exposed through an external view",
-              "Rust Vec<u8> owner reclaim before the external view is read"
+              "concrete materialize_victim Vec<u8> backing allocation exposed through the modeled external view",
+              "Vec<u8> owner reclaim before the modeled external view is read"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "source_shaped_derived",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:89:23:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_enter_exit_rewrite_applied"
+                ],
+                "semantic_type_fragment": "std::vec::Vec<u8",
+                "source_file_fragment": "src/witness.rs:53:10:"
+              }
+            },
             "claim_scope": "derived RSH-064 cross-identity Vec<u8>-backing-store-to-Replacement reuse edge only",
             "expected_layout": {
               "align": 1,

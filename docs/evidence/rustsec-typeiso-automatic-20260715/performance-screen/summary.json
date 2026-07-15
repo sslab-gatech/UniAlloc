@@ -1,0 +1,212 @@
+{
+  "boundary": "A paired ratio-of-ratios screen checks whether the compiler/runtime patch materially changes Type Isolation overhead relative to typed_plain. Coverage builds use stats and remain excluded from performance claims. The selected macro workloads do not execute the newly admitted Vec::with_capacity or primitive slice::to_vec sites; the twelve security matrices and compiler regression tests supply active-site coverage.",
+  "claim_grade": false,
+  "coverage": {
+    "baseline_coverage": {
+      "apps": {
+        "oxipng": {
+          "audit_file_count": 2,
+          "semantic_rewrites_applied": 207,
+          "total_allocations": 10368,
+          "typed_allocations": 9645
+        },
+        "ripgrep": {
+          "audit_file_count": 9,
+          "semantic_rewrites_applied": 648,
+          "total_allocations": 9573,
+          "typed_allocations": 573
+        }
+      },
+      "implementation_sha256": "86a35c52d5e33a45baa7dc4e4f996074c7e0505289e9ea1fe63390f1f75ea5e2",
+      "pass_source_sha256": "8bc7897d710ce2929abbd938b6f3b9ce0c96c2b47da7ac1f7473a8e3ddc14bc7",
+      "success": true
+    },
+    "candidate_coverage": {
+      "apps": {
+        "oxipng": {
+          "audit_file_count": 2,
+          "semantic_rewrites_applied": 207,
+          "total_allocations": 10368,
+          "typed_allocations": 9645
+        },
+        "ripgrep": {
+          "audit_file_count": 9,
+          "semantic_rewrites_applied": 648,
+          "total_allocations": 9573,
+          "typed_allocations": 573
+        }
+      },
+      "implementation_sha256": "2af12035e739a2f83ec19c3b4c61873eebf7e11ea61b42c3e37d60fb122ffab9",
+      "pass_source_sha256": "ad4e1d1593c3aabc02a3f43ec32a6cb95749f533346d42a73773e3f2e2610acb",
+      "success": true
+    }
+  },
+  "identity_gates": {
+    "all_runs_clean": true,
+    "google_tcmalloc_revision": "12f255231938d30493186b0a037feedd70f5a1c1",
+    "hpaa_active": 1,
+    "malloc_provider_is_self": 1,
+    "output_hash_stable_by_app": {
+      "oxipng": [
+        "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743"
+      ],
+      "ripgrep": [
+        "1b8c0b8897d5c4dcb0bef6ef78a108309f13c420ec8bd53383bc4e467ea6310b"
+      ]
+    },
+    "per_target_tcmalloc_marker_gate": true,
+    "performance_stats_disabled": true
+  },
+  "macro_incremental_rewrite_count_observed": false,
+  "passed": true,
+  "protocol": {
+    "bootstrap_resamples": 50000,
+    "bootstrap_seed": [
+      178412,
+      178413
+    ],
+    "broad_variants": [
+      "system",
+      "tcmalloc",
+      "typed_plain",
+      "typeiso_perf"
+    ],
+    "cpu_list": "20",
+    "measured_repetitions_per_run": 15,
+    "numa_node": 0,
+    "orders": [
+      "baseline_then_candidate",
+      "candidate_then_baseline"
+    ],
+    "ripgrep_long_path_repetitions": 32,
+    "toolchain": "nightly-2026-06-11",
+    "warmups_per_run": 3
+  },
+  "raw_artifacts": [
+    {
+      "bytes": 341578,
+      "id": "baseline_broad_a",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/baseline-broad-a.json",
+      "sha256": "fb887fc6904a72a2236ba8076a3351548587233c8ef78e413873ade1f042f27a"
+    },
+    {
+      "bytes": 341565,
+      "id": "baseline_broad_b",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/baseline-broad-b.json",
+      "sha256": "f08778bcecf63fd9c0b92b9b0ee008f4a5f4f492c6aa0ab4a5133b1e567a0bba"
+    },
+    {
+      "bytes": 69645,
+      "id": "baseline_coverage",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/baseline-coverage.json",
+      "sha256": "4cfe12658cf3e4262e7ee40ed0899cadc343ea401525cce5d839cf3593c8a3dc"
+    },
+    {
+      "bytes": 112825,
+      "id": "baseline_ripgrep_long_a",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/baseline-ripgrep-long-a.json",
+      "sha256": "d05e3b547fd5a46aa5a2263d553a026191cfaeb6da5cde6717efcd70e1336971"
+    },
+    {
+      "bytes": 112795,
+      "id": "baseline_ripgrep_long_b",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/baseline-ripgrep-long-b.json",
+      "sha256": "0f6452733c05d04ff432df229cb384006b619c549f2a703bb70fc38fe8988833"
+    },
+    {
+      "bytes": 341571,
+      "id": "candidate_broad_a",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/candidate-broad-a.json",
+      "sha256": "c403ccd5b92437fde43f4e588014e374fb3fcc75b3965436803d375882efc633"
+    },
+    {
+      "bytes": 341539,
+      "id": "candidate_broad_b",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/candidate-broad-b.json",
+      "sha256": "d6ef4c65c0e04276c4e98aa760413d4dbd52f761c66259e28860a3f7f29844fe"
+    },
+    {
+      "bytes": 69633,
+      "id": "candidate_coverage",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/candidate-coverage.json",
+      "sha256": "90f31b6feac39f8a6af985c76acb22829adf2b4f79388c4c2d53a98c26b0c8b1"
+    },
+    {
+      "bytes": 112768,
+      "id": "candidate_ripgrep_long_a",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/candidate-ripgrep-long-a.json",
+      "sha256": "5d5e44ba53636610f864eea63ff98cb8142a442e609f4ff346ef0bdee6360af4"
+    },
+    {
+      "bytes": 112764,
+      "id": "candidate_ripgrep_long_b",
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/raw/candidate-ripgrep-long-b.json",
+      "sha256": "5c7ee2498d15da9d490152de9e5caf494ca4cae5f223a04435c83231e5364980"
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-compiler-pass-performance-screen",
+  "thresholds": {
+    "maximum_oxipng_rss_ratio_of_ratios_regression": 0.01,
+    "maximum_wall_ratio_of_ratios_regression": 0.02,
+    "ripgrep_rss_gate": "candidate maximum peak RSS <= baseline maximum peak RSS because GNU time reports this process in 1 MiB steps"
+  },
+  "workloads": {
+    "oxipng": {
+      "peak_rss": {
+        "baseline_typeiso_over_plain": -0.000626943205089936,
+        "candidate_typeiso_over_plain": 0.005199618167970765,
+        "candidate_vs_baseline_ratio_of_ratios_delta": 0.005830216587734638
+      },
+      "wall": {
+        "baseline_typeiso_over_plain": 0.013259798311926474,
+        "baseline_typeiso_over_plain_ci95": [
+          0.012359314199838156,
+          0.0139378342492269
+        ],
+        "candidate_typeiso_over_plain": -0.0036101374827763877,
+        "candidate_typeiso_over_plain_ci95": [
+          -0.004144489221819536,
+          -0.00271916270435113
+        ],
+        "candidate_vs_baseline_ratio_of_ratios_delta": -0.016649171143282238,
+        "order_a_ratio_of_ratios_delta": -0.016180599287195285,
+        "order_b_ratio_of_ratios_delta": -0.016692603842918152,
+        "ratio_of_ratios_delta_ci95": [
+          -0.01749761227567359,
+          -0.015348876287193725
+        ],
+        "sample_count_per_version": 30
+      }
+    },
+    "ripgrep_long": {
+      "peak_rss": {
+        "baseline_max_peak_rss_kib": 7168,
+        "baseline_typeiso_over_plain": 0.0,
+        "candidate_max_peak_rss_kib": 7168,
+        "candidate_typeiso_over_plain": 0.16666666666666674,
+        "candidate_vs_baseline_ratio_of_ratios_delta": 0.16666666666666674
+      },
+      "wall": {
+        "baseline_typeiso_over_plain": 0.0010886489462913485,
+        "baseline_typeiso_over_plain_ci95": [
+          -0.0017269255321807897,
+          0.009155034107466875
+        ],
+        "candidate_typeiso_over_plain": 0.009204223563981984,
+        "candidate_typeiso_over_plain_ci95": [
+          0.0038714711539138413,
+          0.013911786312653884
+        ],
+        "candidate_vs_baseline_ratio_of_ratios_delta": 0.008106749213701248,
+        "order_a_ratio_of_ratios_delta": 0.009410411074932234,
+        "order_b_ratio_of_ratios_delta": 0.007790930380475292,
+        "ratio_of_ratios_delta_ci95": [
+          -0.001798327670053168,
+          0.01398917919151943
+        ],
+        "sample_count_per_version": 30
+      }
+    }
+  }
+}

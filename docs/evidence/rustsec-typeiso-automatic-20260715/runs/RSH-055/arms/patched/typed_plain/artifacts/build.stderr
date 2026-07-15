@@ -1,0 +1,2185 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling heapless v0.6.1 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1)
+   Compiling byteorder v1.5.0
+   Compiling hash32 v0.1.1
+   Compiling generic-array v0.14.9
+   Compiling generic-array v0.13.3
+   Compiling generic-array v0.12.4
+   Compiling as-slice v0.1.5
+warning: unexpected `cfg` condition name: `has_cas`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/lib.rs:103:11
+    |
+103 | #[cfg(all(has_cas, feature = "cas"))]
+    |           ^^^^^^^
+    |
+    = help: expected names are: `docsrs`, `feature`, and `test` and 32 more
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_cas)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_cas)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+note: the lint level is defined here
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/lib.rs:76:9
+    |
+ 76 | #![deny(warnings)]
+    |         ^^^^^^^^
+    = note: `#[warn(unexpected_cfgs)]` implied by `#[warn(warnings)]`
+
+warning: unexpected `cfg` condition name: `has_cas`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/lib.rs:105:11
+    |
+105 | #[cfg(all(has_cas, feature = "cas"))]
+    |           ^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_cas)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_cas)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/lib.rs:107:7
+    |
+107 | #[cfg(has_atomics)]
+    |       ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/i.rs:5:7
+  |
+5 | #[cfg(has_atomics)]
+  |       ^^^^^^^^^^^
+  |
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/i.rs:20:7
+   |
+20 | #[cfg(has_atomics)]
+   |       ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7a`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/mod.rs:260:5
+    |
+260 |     armv7a,
+    |     ^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7a)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7a)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7r`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/mod.rs:261:5
+    |
+261 |     armv7r,
+    |     ^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7r)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7r)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7m`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/mod.rs:262:5
+    |
+262 |     armv7m,
+    |     ^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7m)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7m)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv8m_main`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/mod.rs:263:5
+    |
+263 |     armv8m_main,
+    |     ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv8m_main)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv8m_main)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7a`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/singleton.rs:19:5
+   |
+19 |     armv7a,
+   |     ^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7a)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7a)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7r`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/singleton.rs:20:5
+   |
+20 |     armv7r,
+   |     ^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7r)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7r)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv7m`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/singleton.rs:21:5
+   |
+21 |     armv7m,
+   |     ^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv7m)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv7m)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `armv8m_main`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/singleton.rs:22:5
+   |
+22 |     armv8m_main,
+   |     ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(armv8m_main)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(armv8m_main)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:3:11
+  |
+3 |     #[cfg(has_atomics)]
+  |           ^^^^^^^^^^^
+  |
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:6:11
+  |
+6 |     #[cfg(has_atomics)]
+  |           ^^^^^^^^^^^
+  |
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:13:11
+   |
+13 |     #[cfg(has_atomics)]
+   |           ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:20:11
+   |
+20 |     #[cfg(has_atomics)]
+   |           ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:34:15
+   |
+34 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:40:15
+   |
+40 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:44:15
+   |
+44 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:65:15
+   |
+65 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:79:15
+   |
+79 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:84:15
+   |
+84 |         #[cfg(has_atomics)]
+   |               ^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:112:15
+    |
+112 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:126:15
+    |
+126 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:131:15
+    |
+131 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:154:15
+    |
+154 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:168:15
+    |
+168 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `has_atomics`
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/sealed.rs:173:15
+    |
+173 |         #[cfg(has_atomics)]
+    |               ^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_atomics)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(has_atomics)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/lib.rs:80:24
+   |
+80 | pub use generic_array::ArrayLength;
+   |                        ^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` implied by `#[warn(warnings)]`
+
+warning: use of deprecated trait `generic_array::sequence::GenericSequence`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:1:31
+  |
+1 | use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+  |                               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:1:48
+  |
+1 | use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+  |                                                ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:1:61
+  |
+1 | use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+  |                                                             ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:39:8
+   |
+39 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:41:11
+   |
+41 |     data: GenericArray<T, N>,
+   |           ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:47:8
+   |
+47 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:82:8
+   |
+82 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:113:8
+    |
+113 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:173:8
+    |
+173 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:188:8
+    |
+188 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:100:19
+    |
+100 |             data: GenericArray::generate(|_| t.clone()),
+    |                   ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:10:42
+   |
+10 | use generic_array::{typenum::PowerOfTwo, ArrayLength, GenericArray};
+   |                                          ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:10:55
+   |
+10 | use generic_array::{typenum::PowerOfTwo, ArrayLength, GenericArray};
+   |                                                       ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:132:8
+    |
+132 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:132:36
+    |
+132 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:135:14
+    |
+135 |     indices: GenericArray<Option<Pos>, N>,
+    |              ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:141:8
+    |
+141 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:141:36
+    |
+141 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:318:8
+    |
+318 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:318:36
+    |
+318 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:379:8
+    |
+379 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:379:36
+    |
+379 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:389:8
+    |
+389 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>> + PowerOfTwo,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:389:36
+    |
+389 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>> + PowerOfTwo,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:407:8
+    |
+407 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:407:36
+    |
+407 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:770:8
+    |
+770 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:770:36
+    |
+770 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:784:8
+    |
+784 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:784:36
+    |
+784 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:796:8
+    |
+796 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:796:36
+    |
+796 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:811:8
+    |
+811 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:811:36
+    |
+811 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:822:8
+    |
+822 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:822:36
+    |
+822 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:837:8
+    |
+837 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:837:36
+    |
+837 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:839:9
+    |
+839 |     N2: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:839:37
+    |
+839 |     N2: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:854:8
+    |
+854 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:854:36
+    |
+854 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:862:8
+    |
+862 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:862:36
+    |
+862 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:879:8
+    |
+879 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:879:36
+    |
+879 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:893:8
+    |
+893 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:893:36
+    |
+893 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:909:8
+    |
+909 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:909:36
+    |
+909 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:923:8
+    |
+923 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexmap.rs:923:36
+    |
+923 |     N: ArrayLength<Bucket<K, V>> + ArrayLength<Option<Pos>>,
+    |                                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:3:42
+  |
+3 | use generic_array::{typenum::PowerOfTwo, ArrayLength};
+  |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:85:8
+   |
+85 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:85:37
+   |
+85 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+   |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:94:8
+   |
+94 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>> + PowerOfTwo,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:94:37
+   |
+94 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>> + PowerOfTwo,
+   |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:108:8
+    |
+108 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:108:37
+    |
+108 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:496:8
+    |
+496 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:496:37
+    |
+496 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:509:8
+    |
+509 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:509:37
+    |
+509 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:520:8
+    |
+520 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:520:37
+    |
+520 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:534:9
+    |
+534 |     N1: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:534:38
+    |
+534 |     N1: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                      ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:535:9
+    |
+535 |     N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:535:38
+    |
+535 |     N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                      ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:546:8
+    |
+546 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:546:37
+    |
+546 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:560:8
+    |
+560 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:560:37
+    |
+560 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:574:8
+    |
+574 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:574:37
+    |
+574 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:590:8
+    |
+590 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:590:37
+    |
+590 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:624:8
+    |
+624 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:624:37
+    |
+624 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:634:8
+    |
+634 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:634:37
+    |
+634 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:652:8
+    |
+652 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:652:37
+    |
+652 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:662:8
+    |
+662 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:662:37
+    |
+662 |     N: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                     ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:178:13
+    |
+178 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:178:42
+    |
+178 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:215:13
+    |
+215 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:215:42
+    |
+215 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:246:13
+    |
+246 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:246:42
+    |
+246 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:280:13
+    |
+280 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:280:42
+    |
+280 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:380:13
+    |
+380 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:380:42
+    |
+380 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:406:13
+    |
+406 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:406:42
+    |
+406 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:435:13
+    |
+435 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |             ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/indexset.rs:435:42
+    |
+435 |         N2: ArrayLength<Bucket<T, ()>> + ArrayLength<Option<Pos>>,
+    |                                          ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:9:21
+  |
+9 | use generic_array::{ArrayLength, GenericArray};
+  |                     ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:9:34
+  |
+9 | use generic_array::{ArrayLength, GenericArray};
+  |                                  ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:18:8
+   |
+18 |     N: ArrayLength<(K, V)>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:16:70
+   |
+16 | pub struct LinearMap<K, V, N>(#[doc(hidden)] pub crate::i::LinearMap<GenericArray<(K, V), N>>)
+   |                                                                      ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:33:8
+   |
+33 |     N: ArrayLength<(K, V)>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:383:8
+    |
+383 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:396:8
+    |
+396 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:407:8
+    |
+407 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:417:8
+    |
+417 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:430:8
+    |
+430 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:441:8
+    |
+441 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:456:8
+    |
+456 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:464:8
+    |
+464 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:475:8
+    |
+475 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:494:8
+    |
+494 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:527:8
+    |
+527 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:551:8
+    |
+551 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:552:9
+    |
+552 |     N2: ArrayLength<(K, V)>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:566:8
+    |
+566 |     N: ArrayLength<(K, V)>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:12:5
+   |
+12 |     ArrayLength, GenericArray,
+   |     ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:12:18
+   |
+12 |     ArrayLength, GenericArray,
+   |                  ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:21:8
+   |
+21 |     N: ArrayLength<u8>;
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:19:58
+   |
+19 | pub struct String<N>(#[doc(hidden)] pub crate::i::String<GenericArray<u8, N>>)
+   |                                                          ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:34:8
+   |
+34 |     N: ArrayLength<u8>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:383:8
+    |
+383 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:392:8
+    |
+392 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:403:8
+    |
+403 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:416:8
+    |
+416 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:427:8
+    |
+427 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:436:8
+    |
+436 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:445:8
+    |
+445 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:455:8
+    |
+455 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:465:8
+    |
+465 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:478:8
+    |
+478 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:489:8
+    |
+489 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:498:8
+    |
+498 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:508:8
+    |
+508 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:518:9
+    |
+518 |     N1: ArrayLength<u8>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:519:9
+    |
+519 |     N2: ArrayLength<u8>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:534:16
+    |
+534 |             N: ArrayLength<u8>,
+    |                ^^^^^^^^^^^
+...
+562 | impl_eq! { String<N>, str }
+    | --------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:548:16
+    |
+548 |             N: ArrayLength<u8>,
+    |                ^^^^^^^^^^^
+...
+562 | impl_eq! { String<N>, str }
+    | --------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:534:16
+    |
+534 |             N: ArrayLength<u8>,
+    |                ^^^^^^^^^^^
+...
+563 | impl_eq! { String<N>, &'a str }
+    | ------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:548:16
+    |
+548 |             N: ArrayLength<u8>,
+    |                ^^^^^^^^^^^
+...
+563 | impl_eq! { String<N>, &'a str }
+    | ------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:565:35
+    |
+565 | impl<N> Eq for String<N> where N: ArrayLength<u8> {}
+    |                                   ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+582 | impl_from_num!(i8, U4);
+    | ---------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+583 | impl_from_num!(i16, U6);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+584 | impl_from_num!(i32, U11);
+    | ------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+585 | impl_from_num!(i64, U20);
+    | ------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+587 | impl_from_num!(u8, U3);
+    | ---------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+588 | impl_from_num!(u16, U5);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+589 | impl_from_num!(u32, U10);
+    | ------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:571:16
+    |
+571 |             N: ArrayLength<u8> + IsGreaterOrEqual<$size, Output = True>,
+    |                ^^^^^^^^^^^
+...
+590 | impl_from_num!(u64, U20);
+    | ------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_from_num` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:206:54
+    |
+206 |         &mut *(&mut self.0.vec as *mut crate::i::Vec<GenericArray<u8, N>> as *mut Vec<u8, N>)
+    |                                                      ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:3:21
+  |
+3 | use generic_array::{ArrayLength, GenericArray};
+  |                     ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:3:34
+  |
+3 | use generic_array::{ArrayLength, GenericArray};
+  |                                  ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:18:8
+   |
+18 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:16:26
+   |
+16 | impl<T, N> crate::i::Vec<GenericArray<T, N>>
+   |                          ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:167:8
+    |
+167 |     N: ArrayLength<T>;
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:165:55
+    |
+165 | pub struct Vec<T, N>(#[doc(hidden)] pub crate::i::Vec<GenericArray<T, N>>)
+    |                                                       ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:171:8
+    |
+171 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:181:8
+    |
+181 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:520:8
+    |
+520 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:530:8
+    |
+530 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:539:8
+    |
+539 |     N: ArrayLength<u8>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:551:8
+    |
+551 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:560:8
+    |
+560 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:573:8
+    |
+573 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:586:8
+    |
+586 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:596:8
+    |
+596 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:605:8
+    |
+605 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:617:8
+    |
+617 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:629:8
+    |
+629 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:651:8
+    |
+651 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:659:8
+    |
+659 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:680:8
+    |
+680 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:701:8
+    |
+701 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:715:8
+    |
+715 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:727:9
+    |
+727 |     N1: ArrayLength<A>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:728:9
+    |
+728 |     N2: ArrayLength<B>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:741:16
+    |
+741 |             N: ArrayLength<A>,
+    |                ^^^^^^^^^^^
+...
+750 | eq!(Vec<A, N>, [B]);
+    | ------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:741:16
+    |
+741 |             N: ArrayLength<A>,
+    |                ^^^^^^^^^^^
+...
+751 | eq!(Vec<A, N>, &'a [B]);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:741:16
+    |
+741 |             N: ArrayLength<A>,
+    |                ^^^^^^^^^^^
+...
+752 | eq!(Vec<A, N>, &'a mut [B]);
+    | --------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:741:16
+    |
+741 |               N: ArrayLength<A>,
+    |                  ^^^^^^^^^^^
+...
+763 | / array!(
+764 | |     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+765 | |     26, 27, 28, 29, 30, 31, 32
+766 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `eq` which comes from the expansion of the macro `array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:770:8
+    |
+770 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:777:8
+    |
+777 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:788:8
+    |
+788 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:797:8
+    |
+797 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:807:8
+    |
+807 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:817:8
+    |
+817 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/vec.rs:827:8
+    |
+827 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:19:21
+   |
+19 | use generic_array::{ArrayLength, GenericArray};
+   |                     ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:19:34
+   |
+19 | use generic_array::{ArrayLength, GenericArray};
+   |                                  ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:92:8
+   |
+92 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:88:45
+   |
+88 |     #[doc(hidden)] pub crate::i::BinaryHeap<GenericArray<T, N>, KIND>,
+   |                                             ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:98:8
+   |
+98 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:443:8
+    |
+443 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:453:8
+    |
+453 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:466:8
+    |
+466 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:480:8
+    |
+480 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:493:8
+    |
+493 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:518:8
+    |
+518 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:528:8
+    |
+528 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:542:8
+    |
+542 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:553:8
+    |
+553 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/binary_heap.rs:564:8
+    |
+564 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:88:21
+   |
+88 | use generic_array::{ArrayLength, GenericArray};
+   |                     ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:88:34
+   |
+88 | use generic_array::{ArrayLength, GenericArray};
+   |                                  ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:168:8
+    |
+168 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated struct `generic_array::GenericArray`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:165:40
+    |
+165 |     #[doc(hidden)] pub crate::i::Queue<GenericArray<T, N>, U, C>,
+    |                                        ^^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:174:8
+    |
+174 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:217:8
+    |
+217 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:232:8
+    |
+232 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:244:8
+    |
+244 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:259:8
+    |
+259 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:274:8
+    |
+274 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:288:8
+    |
+288 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:482:8
+    |
+482 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:500:8
+    |
+500 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:304:16
+    |
+304 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+508 | impl_!(u8, u8_sc);
+    | ----------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:326:16
+    |
+326 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+508 | impl_!(u8, u8_sc);
+    | ----------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:348:16
+    |
+348 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+508 | impl_!(u8, u8_sc);
+    | ----------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:449:16
+    |
+449 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+508 | impl_!(u8, u8_sc);
+    | ----------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:304:16
+    |
+304 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+509 | impl_!(u16, u16_sc);
+    | ------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:326:16
+    |
+326 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+509 | impl_!(u16, u16_sc);
+    | ------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:348:16
+    |
+348 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+509 | impl_!(u16, u16_sc);
+    | ------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:449:16
+    |
+449 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+509 | impl_!(u16, u16_sc);
+    | ------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:304:16
+    |
+304 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+510 | impl_!(usize, usize_sc);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:326:16
+    |
+326 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+510 | impl_!(usize, usize_sc);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:348:16
+    |
+348 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+510 | impl_!(usize, usize_sc);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:449:16
+    |
+449 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+510 | impl_!(usize, usize_sc);
+    | ----------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:515:8
+    |
+515 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:518:9
+    |
+518 |     N2: ArrayLength<T>,
+    |         ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:531:8
+    |
+531 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:540:8
+    |
+540 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:551:8
+    |
+551 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:567:8
+    |
+567 |     N: ArrayLength<T>,
+    |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:580:16
+    |
+580 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+637 | iterator!(struct Iter -> &'a T, *const T, as_ptr, make_ref);
+    | ----------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `iterator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:603:16
+    |
+603 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+637 | iterator!(struct Iter -> &'a T, *const T, as_ptr, make_ref);
+    | ----------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `iterator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:580:16
+    |
+580 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+638 | iterator!(struct IterMut -> &'a mut T, *mut T, as_mut_ptr, make_ref_mut);
+    | ------------------------------------------------------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `iterator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/mod.rs:603:16
+    |
+603 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+638 | iterator!(struct IterMut -> &'a mut T, *mut T, as_mut_ptr, make_ref_mut);
+    | ------------------------------------------------------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `iterator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+ --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:3:20
+  |
+3 | use generic_array::ArrayLength;
+  |                    ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:12:8
+   |
+12 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:35:8
+   |
+35 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:45:8
+   |
+45 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:56:8
+   |
+56 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:66:8
+   |
+66 |     N: ArrayLength<T>,
+   |        ^^^^^^^^^^^
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:77:16
+    |
+ 77 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+265 | impl_!(u8);
+    | ---------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:178:16
+    |
+178 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+265 | impl_!(u8);
+    | ---------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:77:16
+    |
+ 77 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+266 | impl_!(u16);
+    | ----------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:178:16
+    |
+178 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+266 | impl_!(u16);
+    | ----------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:77:16
+    |
+ 77 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+267 | impl_!(usize);
+    | ------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated trait `generic_array::ArrayLength`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/spsc/split.rs:178:16
+    |
+178 |             N: ArrayLength<T>,
+    |                ^^^^^^^^^^^
+...
+267 | impl_!(usize);
+    | ------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated associated function `generic_array::sequence::GenericSequence::generate`: please upgrade to generic-array 1.x
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/histbuf.rs:100:33
+    |
+100 |             data: GenericArray::generate(|_| t.clone()),
+    |                                 ^^^^^^^^
+
+warning: the type `i::LinearMap<generic_array::GenericArray<(K, V), N>>` does not permit being left uninitialized
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/linear_map.rs:483:53
+    |
+483 |         let lm = mem::replace(&mut self.0, unsafe { MaybeUninit::uninit().assume_init() });
+    |                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |                                                     |
+    |                                                     this code causes undefined behavior when executed
+    |                                                     help: use `MaybeUninit<T>` instead, and only call `assume_init` after initialization is done
+    |
+note: in this struct field
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/i.rs:16:5
+    |
+ 16 |     pub(crate) buffer: Vec<A>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+note: integers must be initialized (in this struct field)
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/i.rs:39:5
+    |
+ 39 |     pub(crate) len: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(invalid_value)]` implied by `#[warn(warnings)]`
+
+warning: the type `i::Vec<generic_array::GenericArray<u8, N>>` does not permit being left uninitialized
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/string.rs:113:45
+    |
+113 |         let vec_ = mem::replace(&mut vec.0, MaybeUninit::uninit().assume_init());
+    |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |                                             |
+    |                                             this code causes undefined behavior when executed
+    |                                             help: use `MaybeUninit<T>` instead, and only call `assume_init` after initialization is done
+    |
+note: integers must be initialized (in this struct field)
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/i.rs:39:5
+    |
+ 39 |     pub(crate) len: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: creating a mutable reference to mutable static
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/subject/heapless-0.6.1/src/pool/cas.rs:93:15
+   |
+93 |     (unsafe { &mut ANCHOR } as *mut u8 as usize & !(mem::align_of::<T>() - 1)) as *mut T
+   |               ^^^^^^^^^^^ mutable reference to mutable static
+   |
+   = note: mutable references to mutable statics are dangerous; it's undefined behavior if any other pointer to the static is used or if any other reference is created for the static while the mutable reference lives
+   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+   = note: `#[warn(static_mut_refs)]` implied by `#[warn(warnings)]`
+help: use `&raw mut` instead to create a raw pointer
+   |
+93 |     (unsafe { &raw mut ANCHOR } as *mut u8 as usize & !(mem::align_of::<T>() - 1)) as *mut T
+   |                +++
+
+warning: `heapless` (lib) generated 350 warnings (65 duplicates)
+   Compiling rsh-055-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-055/arms/patched/typed_plain/work/project)
+warning: function `with_vulnerability_edge_identity` is never used
+  --> src/witness.rs:19:15
+   |
+19 | pub(crate) fn with_vulnerability_edge_identity<R>(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `report_vulnerability_edge_reuse_denial` is never used
+  --> src/witness.rs:28:15
+   |
+28 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `payload` is never read
+  --> src/witness.rs:32:5
+   |
+31 | struct DropDetector {
+   |        ------------ field in this struct
+32 |     payload: std::vec::Vec<u64>,
+   |     ^^^^^^^
+   |
+   = note: `DropDetector` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `rsh-055-harness` (bin "rsh-055-harness") generated 3 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.83s

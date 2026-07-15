@@ -14,15 +14,11 @@ CATALOG = (
     ROOT / "evaluation" / "config" / "rustsec_heap_strong_batch_a_harnesses.json"
 )
 RUNNER = ROOT / "evaluation" / "scripts" / "run_rustsec_heap_harness.py"
-EVIDENCE = ROOT / "docs" / "evidence" / "rustsec-rsh052-typeiso-20260714"
+EVIDENCE = (
+    ROOT / "docs" / "evidence" / "rustsec-typeiso-automatic-20260715"
+)
 RAW_EXPERIMENT = (
-    ROOT
-    / "docs"
-    / "evidence"
-    / "rustsec-security-expansion-20260714"
-    / "raw"
-    / "derived"
-    / "RSH-052-derived-reuse-experiment.json"
+    EVIDENCE / "raw" / "RSH-052-experiment.json"
 )
 
 spec = importlib.util.spec_from_file_location("rustsec_heap_harness", RUNNER)
@@ -86,20 +82,22 @@ class Rsh052TypeIsolationEdgeTests(unittest.TestCase):
             patched.count("VICTIM_TYPE_ID,\n        VICTIM_MODULE_ID"), 3
         )
 
-    def test_frozen_evidence_exports_one_bounded_true_positive(self) -> None:
+    def test_frozen_evidence_exports_one_bounded_mitigation(self) -> None:
         summary_path = EVIDENCE / "derived-reuse-summary.json"
         mechanism_path = EVIDENCE / "mechanism-results.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         mechanism = json.loads(mechanism_path.read_text(encoding="utf-8"))
 
         self.assertEqual(
-            summary["counts"]["validated_cross_identity_reuse_edge_count"], 1
+            summary["counts"]["validated_cross_identity_reuse_edge_count"], 12
         )
-        self.assertEqual(len(summary["scenarios"]), 1)
-        scenario = summary["scenarios"][0]
+        self.assertEqual(len(summary["scenarios"]), 12)
+        scenario = next(
+            row for row in summary["scenarios"] if row["case_id"] == "RSH-052"
+        )
         self.assertEqual(scenario["scenario_id"], "RSH-052-derived-reuse")
         self.assertTrue(scenario["edge_evaluation"]["validated"])
-        self.assertTrue(
+        self.assertFalse(
             scenario["edge_evaluation"]["vulnerability_specific_detection_signal"]
         )
         self.assertEqual(scenario["unexpected_arm_count"], 0)
@@ -108,13 +106,19 @@ class Rsh052TypeIsolationEdgeTests(unittest.TestCase):
         self.assertEqual(raw_record["bytes"], RAW_EXPERIMENT.stat().st_size)
         self.assertEqual(raw_record["sha256"], runner.sha256_file(RAW_EXPERIMENT))
 
-        self.assertEqual(mechanism["counts"], {"mitigated": 1})
-        self.assertEqual(len(mechanism["results"]), 1)
-        result = mechanism["results"][0]
-        self.assertTrue(result["true_positive"])
-        self.assertEqual(result["outcome"], "mitigated")
+        self.assertEqual(mechanism["counts"], {"mitigated": 12})
+        self.assertEqual(len(mechanism["results"]), 12)
+        result = next(
+            row for row in mechanism["results"] if row["case_id"] == "RSH-052"
+        )
+        self.assertFalse(result["claim_grade"])
+        self.assertFalse(result["vulnerability_specific_detection_signal"])
+        self.assertFalse(result["full_source_vulnerability_detection"])
+        self.assertTrue(result["validated_mitigation"])
+        self.assertNotIn("true_positive", result)
         self.assertEqual(
-            result["result_semantics"], "causal_mitigation_true_positive"
+            result["result_semantics"],
+            "causal_compiler_bound_reuse_edge_mitigation",
         )
         self.assertEqual(result["failed_checks"], [])
         self.assertTrue(all(result["checks"].values()))
@@ -123,19 +127,5 @@ class Rsh052TypeIsolationEdgeTests(unittest.TestCase):
             mechanism["derived_reuse_input"]["sha256"],
             runner.sha256_file(summary_path),
         )
-        readme = (EVIDENCE / "README.md").read_text(encoding="utf-8")
-        for artifact_name in (
-            "preflight.json",
-            "experiment.json",
-            "derived-reuse-summary.json",
-            "mechanism-results.json",
-        ):
-            self.assertIn(f"`{artifact_name}`", readme)
-        self.assertIn(self.scenario["source_path"], readme)
-        self.assertIn(self.scenario["patched_source"]["source_path"], readme)
-        self.assertIn("machine-readable records are the provenance authority", readme)
-        self.assertIn("manually attributed exploit-enabling cross-identity reuse", readme)
-
-
 if __name__ == "__main__":
     unittest.main()

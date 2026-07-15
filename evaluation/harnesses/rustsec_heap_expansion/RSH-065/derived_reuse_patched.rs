@@ -2,8 +2,7 @@
 //!
 //! A stack value records the patched insertion result without polluting the
 //! four-byte heap class. The measured pair then allocates, reclaims, and
-//! reallocates a four-byte Vec through the same indirect generic path and exact
-//! manual identity.
+//! reallocates a four-byte Vec through the same concrete allocation path.
 
 use std::hint::black_box;
 
@@ -26,8 +25,10 @@ pub(crate) fn with_vulnerability_edge_identity<R>(
 
 pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_target<T: Clone, const N: usize>(seed: &[T; N]) -> Vec<T> {
+fn materialize_target(seed: &[u8; INITIAL_CAPACITY]) -> Vec<u8> {
     seed.to_vec()
 }
 

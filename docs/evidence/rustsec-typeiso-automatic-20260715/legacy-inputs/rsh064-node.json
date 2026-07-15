@@ -1,0 +1,54 @@
+{
+  "boundary": "RSH-064 remains inconclusive until compiler coverage of the vulnerable Vec allocation, ownership transfer, and reclaim is validated and a controlled cross-identity replacement allocation is exercised.",
+  "claim_grade": false,
+  "counts": {
+    "inconclusive": 1
+  },
+  "results": [
+    {
+      "advisory_id": "RUSTSEC-2022-0028",
+      "case_id": "RSH-064",
+      "checks": {
+        "compiler_critical_site_coverage_validated": false,
+        "orchestration_success": true,
+        "patched_static_bound_compile_rejection_observed": true,
+        "patched_system_control_valid": true,
+        "typed_plain_arm_completed": true,
+        "typed_plain_uaf_reproduced_in_all_repetitions": true,
+        "typeiso_arm_completed": true,
+        "typeiso_reuse_denial_observed": false,
+        "typeiso_uaf_reproduced_in_all_repetitions": true,
+        "vulnerable_system_oracle_reproduced_in_all_repetitions": true
+      },
+      "claim_scope": "source witness in a real Node/V8 host with compiler critical-site coverage gate",
+      "evidence": {
+        "bytes": 68467,
+        "path": "docs/evidence/rustsec-all-53-live-20260714/rsh064/experiment.json",
+        "sha256": "c3ecb6b1fd8abbf0990286e198f31d2c0b97c016a8921398317d45cae5a105ba"
+      },
+      "feature_provenance": {
+        "compiler_runner_sha256": "42f86a8ff1d405f82d0b8d3ea44b80931af920c956964282e8598ed0010f0fc1",
+        "node": "v20.20.2",
+        "unialloc_implementation_sha256": "29ec9af086226428864e331e8a21fb9c3437c484e177a4973bb48312d8f9f8c7"
+      },
+      "mechanism": "type_isolation",
+      "negative_boundary": null,
+      "observations": {
+        "exact_reclaim_signal_count": 0,
+        "typed_plain_harness_rewrite_applied_count": 0,
+        "typeiso_harness_rewrite_applied_count": 0,
+        "typeiso_harness_semantic_scope_unsolved_candidate_count": 3,
+        "typeiso_reuse_denial_signal_count": 0
+      },
+      "outcome": "inconclusive",
+      "positive_scope": null,
+      "reason": "compiler_critical_site_coverage_not_validated",
+      "repetitions": 3,
+      "result_semantics": "evidence_gap",
+      "scenario_id": "RSH-064-node-addon",
+      "true_positive": false
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-mechanism-results"
+}

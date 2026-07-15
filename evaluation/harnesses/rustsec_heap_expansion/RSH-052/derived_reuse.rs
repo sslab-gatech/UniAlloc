@@ -37,11 +37,12 @@ fn materialize_old() -> (DefaultStringInterner, Sym, usize) {
     // allocation is the vulnerable Box<str> payload, rather than a Vec or
     // HashMap growth allocation with a different layout.
     let mut old = DefaultStringInterner::with_capacity(1);
+    let payload = PAYLOAD.to_owned();
     let symbol = crate::with_vulnerability_edge_identity(
         VICTIM_TYPE_ID,
         VICTIM_MODULE_ID,
         VICTIM_ALLOC_CALLSITE,
-        || old.get_or_intern(PAYLOAD),
+        || old.get_or_intern(payload),
     );
     let address = old
         .resolve(symbol)

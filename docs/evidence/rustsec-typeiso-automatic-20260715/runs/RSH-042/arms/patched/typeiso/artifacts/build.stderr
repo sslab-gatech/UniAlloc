@@ -1,0 +1,130 @@
+   Compiling emap v0.0.13 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13)
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/iterators.rs:28:5
+   |
+28 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+note: the lint level is defined here
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/lib.rs:38:9
+   |
+38 | #![deny(warnings)]
+   |         ^^^^^^^^
+   = note: `#[warn(unused_attributes)]` implied by `#[warn(warnings)]`
+
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/iterators.rs:47:5
+   |
+47 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/iterators.rs:66:5
+   |
+66 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/keys.rs:28:5
+   |
+28 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/values.rs:29:5
+   |
+29 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: `#[must_use]` attribute cannot be used on trait methods in impl blocks
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/values.rs:46:5
+   |
+46 |     #[must_use]
+   |     ^^^^^^^^^^^
+   |
+   = help: `#[must_use]` can be applied to data types, foreign functions, functions, inherent methods, provided trait methods, required trait methods, and traits
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+
+warning: struct `Foo` is never constructed
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/clone.rs:61:8
+   |
+61 | struct Foo {
+   |        ^^^
+   |
+   = note: `#[warn(dead_code)]` implied by `#[warn(warnings)]`
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/iterators.rs:103:23
+    |
+103 |     pub const fn iter(&self) -> Iter<V> {
+    |                       ^^^^^     ^^^^^^^ the same lifetime is hidden here
+    |                       |
+    |                       the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` implied by `#[warn(warnings)]`
+help: use `'_` for type paths
+    |
+103 |     pub const fn iter(&self) -> Iter<'_, V> {
+    |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/iterators.rs:135:27
+    |
+135 |     pub const fn iter_mut(&self) -> IterMut<V> {
+    |                           ^^^^^     ^^^^^^^^^^ the same lifetime is hidden here
+    |                           |
+    |                           the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+135 |     pub const fn iter_mut(&self) -> IterMut<'_, V> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/subject/emap-0.0.13/src/values.rs:67:25
+   |
+67 |     pub const fn values(&self) -> Values<V> {
+   |                         ^^^^^     ^^^^^^^^^ the same lifetime is hidden here
+   |                         |
+   |                         the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+67 |     pub const fn values(&self) -> Values<'_, V> {
+   |                                          +++
+
+warning: `emap` (lib) generated 10 warnings (run `cargo fix --lib -p emap` to apply 9 suggestions)
+   Compiling rsh-042-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-042/arms/patched/typeiso/work/project)
+warning: function `with_vulnerability_edge_identity` is never used
+  --> src/witness.rs:20:15
+   |
+20 | pub(crate) fn with_vulnerability_edge_identity<R>(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `report_vulnerability_edge_reuse_denial` is never used
+  --> src/witness.rs:29:15
+   |
+29 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `rsh-042-harness` (bin "rsh-042-harness") generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.58s

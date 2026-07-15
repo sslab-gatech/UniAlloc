@@ -8,10 +8,10 @@ use std::thread;
 
 use unialloc::{
     semantic_auto_metadata_disable, semantic_metadata_validation_snapshot,
-    semantic_stats_recording_disable, semantic_stats_reset, semantic_stats_snapshot,
-    semantic_type_stats_recording_disable, semantic_type_stats_snapshot,
-    type_isolation_side_cache_snapshot, SemanticTypeStatsSnapshot, TypeIsolationSideCacheSnapshot,
-    UniAlloc,
+    semantic_stats_last_wrong_identity_retained_ptr, semantic_stats_recording_disable,
+    semantic_stats_reset, semantic_stats_snapshot, semantic_type_stats_recording_disable,
+    semantic_type_stats_snapshot, type_isolation_side_cache_snapshot, SemanticTypeStatsSnapshot,
+    TypeIsolationSideCacheSnapshot, UniAlloc,
 };
 
 #[cfg(feature = "fixed_heap")]
@@ -338,6 +338,7 @@ fn main() {
         .join()
         .expect("type-isolation security worker should finish");
     let stats = semantic_stats_snapshot();
+    let last_wrong_identity_retained_ptr = semantic_stats_last_wrong_identity_retained_ptr();
     let validation = semantic_metadata_validation_snapshot();
     let mut rows = [SemanticTypeStatsSnapshot::empty(); 256];
     let row_count = semantic_type_stats_snapshot(&mut rows);
@@ -399,6 +400,7 @@ fn main() {
             "\"last_wrong_identity_requested_callsite\":{},",
             "\"last_wrong_identity_size\":{},",
             "\"last_wrong_identity_align\":{},",
+            "\"last_wrong_identity_retained_ptr\":{},",
             "\"generic_drop_typed_deallocations_delta\":{},",
             "\"generic_drop_fallback_deallocations_delta\":{},",
             "\"generic_drop_typed_cache_inserts_delta\":{},",
@@ -434,6 +436,7 @@ fn main() {
         stats.last_wrong_identity_requested_callsite,
         stats.last_wrong_identity_size,
         stats.last_wrong_identity_align,
+        last_wrong_identity_retained_ptr,
         evidence.generic_drop_typed_deallocations_delta,
         evidence.generic_drop_fallback_deallocations_delta,
         evidence.generic_drop_typed_cache_inserts_delta,

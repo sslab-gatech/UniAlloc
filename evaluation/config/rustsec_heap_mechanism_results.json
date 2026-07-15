@@ -1,5 +1,5 @@
 {
-  "boundary": "Detected true positives reproduce an exact allocator diagnostic in every vulnerable repetition with matched baseline and patched controls. Mitigated true positives causally block and report one matched exploit-enabling cross-identity reuse edge. No-signal rows are feature-matched negatives for the integrated witness only. These rows distinguish executed source witnesses from unrun candidates. They remain inconclusive until compiler critical-site identity coverage and a Type-Isolation-specific effect are validated. RSH-064 remains inconclusive until compiler coverage of the vulnerable Vec allocation, ownership transfer, and reclaim is validated and a controlled cross-identity replacement allocation is exercised. The derived pair validates allocator mechanism coverage; the pinned upstream Miri arm supplies source-vulnerability ground truth. The layout signal is policy-independent and is not attributed to TypeIso.",
+  "boundary": "Legacy mixed inputs contribute detector results and non-positive Type Isolation source-witness evidence only. Their superseded Type Isolation mitigation rows receive no credit; current automatic evidence supplies all validated Type Isolation mitigations. Detector true positives reproduce an exact allocator diagnostic in every vulnerable repetition with matched baseline and patched controls. Type Isolation validated mitigations causally block and report measured compiler-bound cross-identity reuse edges. These rows carry zero credit for vulnerability-specific or full-source detection. No-signal rows are feature-matched negatives for the integrated witness only.",
   "claim_grade": false,
   "counts": {
     "detected": 32,
@@ -9,119 +9,14 @@
   },
   "inputs": [
     {
-      "bytes": 29875,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-base.json",
-      "sha256": "cdc0501f83b31b29edcd5e7922b81d9427172857d1760c869a8aff68fc7d6619"
+      "bytes": 269426,
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/detector-source-results.json",
+      "sha256": "c4f42ae2813da16a5efd98810823279029c2a23cdf926b9e2a40539fd3128a16"
     },
     {
-      "bytes": 23226,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-expansion.json",
-      "sha256": "7360ac7b02b1b271143a542e4f503e97aea18309cf125c0030c5f6f8a0e4ee45"
-    },
-    {
-      "bytes": 41506,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-a.json",
-      "sha256": "e78e39b4a082f101af5e511c5a16e8821d0e47fcdff5a94e3d555cff704ebc9c"
-    },
-    {
-      "bytes": 23965,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-b.json",
-      "sha256": "13262f20c15b8d02176512b4b679dc062c1a98a162d31fdb06e306b0ad18786d"
-    },
-    {
-      "bytes": 41179,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-c.json",
-      "sha256": "af6e3d6aa78635dc2005e6fabaedc18cbd064192803e2b330d06e202ae882bd4"
-    },
-    {
-      "bytes": 36400,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-d.json",
-      "sha256": "7eec1b999fa9b25a3b3e55638d7c2987c5d18578d62f697aba3fe74a600a54b7"
-    },
-    {
-      "bytes": 29661,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-e.json",
-      "sha256": "6a1ef5a161c9ec6f8155dc465bfaf102877deea563166284e29e5255fd1f499d"
-    },
-    {
-      "bytes": 29699,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-feature-matched-batch-f.json",
-      "sha256": "03a5d59fae50ec54591b2042834e13d58814c7600f8253a833bb8fd2597a741a"
-    },
-    {
-      "bytes": 6349,
-      "path": "docs/evidence/rustsec-reclaim-checks-20260714/mechanism-results-typeiso-source-sweep.json",
-      "sha256": "d172ff7c71fab3ae7a9f5a3c145d5458a96d17f26eefcb127de8de491ab93188"
-    },
-    {
-      "bytes": 2261,
-      "path": "docs/evidence/rustsec-all-53-live-20260714/rsh064/mechanism-result.json",
-      "sha256": "da0378f4feffa2686d829d171616904b93b52eeff6e7167f96bec49ffeb664c1"
-    },
-    {
-      "bytes": 6492,
-      "path": "docs/evidence/rustsec-rsh001-reclaim-20260714/mechanism-results.json",
-      "sha256": "3b5f67c0fa2733a6c5d8c185d99218e066c9e81dd5ce9ec3712c6fa967b6b84c"
-    },
-    {
-      "bytes": 3161,
-      "path": "docs/evidence/rustsec-rsh008-typeiso-20260714/mechanism-results.json",
-      "sha256": "bbbe79cbf3d167c22b55cbdce6e66abf1f795e489fb7d24ed5941188a87e7e51"
-    },
-    {
-      "bytes": 3165,
-      "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/mechanism-results.json",
-      "sha256": "8cfa94d06e11dff1196b1a050173f508c56d530cebf17a731b02a3a5c59de824"
-    },
-    {
-      "bytes": 6549,
-      "path": "docs/evidence/rustsec-rsh060-partial-panic-20260714/mechanism-results.json",
-      "sha256": "8690da167d08ef751508ca42b3c75e51628298fdd315c54112ed80fad1d8dcc0"
-    },
-    {
-      "bytes": 3174,
-      "path": "docs/evidence/rustsec-rsh064-typeiso-20260714/mechanism-results.json",
-      "sha256": "dbda40c28274baeedb88dd6d761a750e68367f0be9d20969ee625291b7ae350e"
-    },
-    {
-      "bytes": 3144,
-      "path": "docs/evidence/rustsec-rsh002-typeiso-20260714/mechanism-results.json",
-      "sha256": "a7b6fdf1bfeabdc8887727f1d24e373191b4dc241bdb4d8b8dcb58b3fb56dce3"
-    },
-    {
-      "bytes": 2944,
-      "path": "docs/evidence/rustsec-rsh031-layout-20260715/mechanism-results.json",
-      "sha256": "6fcb44731c7ed81aa1771422a8faeebd8fb4fff129b5bcfe4c2dad58f6fea447"
-    },
-    {
-      "bytes": 3203,
-      "path": "docs/evidence/rustsec-rsh055-typeiso-20260715/mechanism-results.json",
-      "sha256": "2124655c463b28bdf83ba70583a771a60996ca7a9374044c0c776a7cb7a5790f"
-    },
-    {
-      "bytes": 3197,
-      "path": "docs/evidence/rustsec-rsh065-typeiso-20260715/mechanism-results.json",
-      "sha256": "a3410fd4f05d401dff5aa0ac75c7b7faab5bf327ae44b11aa820eb56e0ea45f2"
-    },
-    {
-      "bytes": 3182,
-      "path": "docs/evidence/rustsec-rsh066-typeiso-20260715/mechanism-results.json",
-      "sha256": "0d3ca7c3057461c5e954671efbd0188897e4845d64dfa4263831451521af2232"
-    },
-    {
-      "bytes": 3167,
-      "path": "docs/evidence/rustsec-rsh067-typeiso-20260715/mechanism-results.json",
-      "sha256": "c9c9e50266af59b2be6dca6c9b6f4aeace4bb847501dbae09a7b595f43a9960c"
-    },
-    {
-      "bytes": 3166,
-      "path": "docs/evidence/rustsec-rsh068-typeiso-20260715/mechanism-results.json",
-      "sha256": "e347ffd8d42e599074241711f775f0403a1fa75dd07e0df4432fc6fa907d18f9"
-    },
-    {
-      "bytes": 3204,
-      "path": "docs/evidence/rustsec-rsh069-typeiso-20260715/mechanism-results.json",
-      "sha256": "80da222f101fdf9b94cc222754e3ed3ab1644b07b8603bbb2c8fc9236180870b"
+      "bytes": 35807,
+      "path": "docs/evidence/rustsec-typeiso-automatic-20260715/mechanism-results.json",
+      "sha256": "d8bd0801f498e4170ee60b96f00c9ac23f924c74a6fb4fc129f01655cf34295d"
     }
   ],
   "results": [
@@ -931,6 +826,7 @@
         "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
       },
       "evidence_scope": "source_vulnerability_sweep",
+      "full_source_vulnerability_detection": false,
       "mechanism": "type_isolation",
       "negative_boundary": null,
       "observations": {
@@ -945,8 +841,10 @@
       "repetitions": 2,
       "result_semantics": "evidence_gap",
       "scenario_id": "RSH-001-upstream",
+      "schema_normalization": "legacy_nonpositive_typeiso_to_validated_mitigation",
       "source_vulnerability_detection_validated": false,
-      "true_positive": false
+      "validated_mitigation": false,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2019-0021",
@@ -1208,10 +1106,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2019-0023",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-052",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -1227,6 +1130,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -1235,29 +1139,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7675,
-        "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/derived-reuse-summary.json",
-        "sha256": "7f3d5c2b2956e491402d91a14a298a279afc8e6ecac04f77577c4adc3423611e"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-052-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2019-0034",
@@ -1521,10 +1427,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2020-0007",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-002",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -1540,6 +1451,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -1548,29 +1460,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-002 cross-identity A-to-B reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7508,
-        "path": "docs/evidence/rustsec-rsh002-typeiso-20260714/derived-reuse-summary.json",
-        "sha256": "6ae83244c8d03587b55d0bb6d45dda50f913b1aa69a991c65c4f1c44bbc08fab"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-002-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2020-0017",
@@ -1590,6 +1504,7 @@
         "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
       },
       "evidence_scope": "source_vulnerability_sweep",
+      "full_source_vulnerability_detection": false,
       "mechanism": "type_isolation",
       "negative_boundary": null,
       "observations": {
@@ -1604,8 +1519,10 @@
       "repetitions": 2,
       "result_semantics": "evidence_gap",
       "scenario_id": "RSH-003-upstream",
+      "schema_normalization": "legacy_nonpositive_typeiso_to_validated_mitigation",
       "source_vulnerability_detection_validated": false,
-      "true_positive": false
+      "validated_mitigation": false,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2020-0038",
@@ -2127,10 +2044,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2020-0145",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-055",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -2146,6 +2068,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -2154,29 +2077,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-055 collision-gated consumed one-word Vec<u64>-payload-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 8020,
-        "path": "docs/evidence/rustsec-rsh055-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "a5bc7bf06d5387cf4f03a980d259f041ca4bb0a596eae220eb444e097a5ffb6f"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-055-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2021-0009",
@@ -3996,10 +3921,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2021-0130",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-008",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -4015,6 +3945,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -4023,29 +3954,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-008 LruEntry-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7597,
-        "path": "docs/evidence/rustsec-rsh008-typeiso-20260714/derived-reuse-summary.json",
-        "sha256": "f2636fb17586601c9427890b28e2fe525575f46594596e57de4ea13f3cac4c88"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-008-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2021-0130",
@@ -4065,6 +3998,7 @@
         "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
       },
       "evidence_scope": "source_vulnerability_sweep",
+      "full_source_vulnerability_detection": false,
       "mechanism": "type_isolation",
       "negative_boundary": null,
       "observations": {
@@ -4079,15 +4013,22 @@
       "repetitions": 2,
       "result_semantics": "evidence_gap",
       "scenario_id": "RSH-008-published",
+      "schema_normalization": "legacy_nonpositive_typeiso_to_validated_mitigation",
       "source_vulnerability_detection_validated": false,
-      "true_positive": false
+      "validated_mitigation": false,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2022-0028",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-064",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -4103,6 +4044,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -4111,29 +4053,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-064 cross-identity Vec<u8>-backing-store-to-Replacement reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7696,
-        "path": "docs/evidence/rustsec-rsh064-typeiso-20260714/derived-reuse-summary.json",
-        "sha256": "67b81bbcef55f379482b3aa72c9a929bb79faf00d02594687d18a87dc1608e1f"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-064-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2022-0028",
@@ -4161,6 +4105,7 @@
         "node": "v20.20.2",
         "unialloc_implementation_sha256": "29ec9af086226428864e331e8a21fb9c3437c484e177a4973bb48312d8f9f8c7"
       },
+      "full_source_vulnerability_detection": false,
       "mechanism": "type_isolation",
       "negative_boundary": null,
       "observations": {
@@ -4176,7 +4121,10 @@
       "repetitions": 3,
       "result_semantics": "evidence_gap",
       "scenario_id": "RSH-064-node-addon",
-      "true_positive": false
+      "schema_normalization": "legacy_nonpositive_typeiso_to_validated_mitigation",
+      "source_vulnerability_detection_validated": false,
+      "validated_mitigation": false,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2023-0017",
@@ -4479,10 +4427,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2023-0054",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-065",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -4498,6 +4451,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -4506,29 +4460,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-065 manually modeled pre-reserve Vec<u8>-buffer-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7950,
-        "path": "docs/evidence/rustsec-rsh065-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "96ee4f4dc30da6046782d950389ee2b6fa7eb0d99dca0983cf90cd931b5ed13e"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "synthetic_manual_reduction",
+      "reduction_fidelity": "compiler_automatic_synthetic_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-065-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": true,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2024-0007",
@@ -4658,10 +4614,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2024-0007",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-066",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -4677,6 +4638,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -4685,29 +4647,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-066 stale AtomicStr String-buffer-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7826,
-        "path": "docs/evidence/rustsec-rsh066-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "1628a012d724b8ad3662543646b470c3d0685cfdfc06072d30314cd63d8dbe61"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-066-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2025-0004",
@@ -4837,10 +4801,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2025-0004",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-067",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -4856,6 +4825,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -4864,29 +4834,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-067 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7801,
-        "path": "docs/evidence/rustsec-rsh067-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "169f100909b9029019c82cc939b2c12f211fd3192c4b38c6aac47714afffe120"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-067-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2025-0016",
@@ -5016,10 +4988,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2025-0016",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-068",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -5035,6 +5012,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -5043,29 +5021,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-068 cross-identity String-buffer-to-Replacement reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 7797,
-        "path": "docs/evidence/rustsec-rsh068-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "05625e2c6d8f500df81e0e3cdcc0b6e34712c3d9ff9783e5c84bd5cbb2c44a3d"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-068-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2025-0022",
@@ -5197,10 +5177,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2025-0022",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-069",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -5216,6 +5201,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -5224,29 +5210,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-069 synthetically groomed 4096-byte properties-CString-to-Replacement cross-identity reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 8034,
-        "path": "docs/evidence/rustsec-rsh069-typeiso-20260715/derived-reuse-summary.json",
-        "sha256": "cb290100ee04f17f00d179e0d58a8b74191732b096eaa5b91c2c930c2f650806"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "synthetic_manual_reduction",
+      "reduction_fidelity": "compiler_automatic_synthetic_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-069-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": true,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2025-0024",
@@ -5656,6 +5644,7 @@
         "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
       },
       "evidence_scope": "source_vulnerability_sweep",
+      "full_source_vulnerability_detection": false,
       "mechanism": "type_isolation",
       "negative_boundary": null,
       "observations": {
@@ -5670,8 +5659,10 @@
       "repetitions": 2,
       "result_semantics": "evidence_gap",
       "scenario_id": "RSH-019-upstream",
+      "schema_normalization": "legacy_nonpositive_typeiso_to_validated_mitigation",
       "source_vulnerability_detection_validated": false,
-      "true_positive": false
+      "validated_mitigation": false,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2026-0103",
@@ -5935,10 +5926,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2026-0128",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-042",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -5954,6 +5950,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -5962,29 +5959,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 15550,
-        "path": "docs/evidence/rustsec-security-expansion-20260714/derived-reuse-summary.json",
-        "sha256": "6636dd55f1ee81d0a2574c061a346ef1cdecc1171b65e015be9f62510e862d4e"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-042-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2026-0131",
@@ -6410,10 +6409,15 @@
     },
     {
       "advisory_id": "RUSTSEC-2026-0152",
+      "automatic_edge_identity_probe": true,
       "automatic_source_coverage": false,
       "case_id": "RSH-041",
+      "causal_compiler_bound_reuse_edge_mitigation": true,
       "checks": {
+        "automatic_edge_identity_probe_mode_valid": true,
         "claim_scope_present": true,
+        "edge_identity_contract_valid": true,
+        "legacy_typeiso_true_positive_semantics_absent": true,
         "matched_arms_present": true,
         "minimum_repetitions_met": true,
         "orchestration_success": true,
@@ -6429,6 +6433,7 @@
         "typeiso_address_reuse_blocked_in_all_repetitions": true,
         "typeiso_denial_observed_in_all_repetitions": true,
         "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerability_specific_detection_boundary_valid": true,
         "vulnerable_system_completed_in_all_repetitions": true,
         "vulnerable_system_oracle_observed": true,
         "vulnerable_typed_plain_completed_in_all_repetitions": true,
@@ -6437,29 +6442,31 @@
       },
       "claim_grade": false,
       "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
-      "compiler_automatic_victim_coverage": false,
+      "compiler_automatic_victim_coverage": true,
       "evidence": {
-        "bytes": 15550,
-        "path": "docs/evidence/rustsec-security-expansion-20260714/derived-reuse-summary.json",
-        "sha256": "6636dd55f1ee81d0a2574c061a346ef1cdecc1171b65e015be9f62510e862d4e"
+        "bytes": 110405,
+        "path": "docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json",
+        "sha256": "423a5017651ac44fc7def6d91d558a9ebbcedbca711b81c8a94b637de0b9d151"
       },
       "evidence_gaps": [],
       "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
       "failed_checks": [],
+      "full_source_vulnerability_detection": false,
+      "manual_victim_identity_annotation": false,
       "mechanism": "type_isolation",
       "missing_arms": [],
       "negative_boundary": null,
       "outcome": "mitigated",
       "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
       "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-      "reduction_fidelity": "manual_derived_reduction",
+      "reduction_fidelity": "compiler_automatic_derived_reduction",
       "repetitions": 3,
-      "result_semantics": "causal_mitigation_true_positive",
+      "result_semantics": "causal_compiler_bound_reuse_edge_mitigation",
       "scenario_id": "RSH-041-derived-reuse",
-      "source_level_true_positive": false,
       "source_vulnerability_detection_validated": false,
       "synthetic_reduction": false,
-      "true_positive": true
+      "validated_mitigation": true,
+      "vulnerability_specific_detection_signal": false
     },
     {
       "advisory_id": "RUSTSEC-2026-0172",

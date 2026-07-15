@@ -1,0 +1,162 @@
+{
+  "boundary": "These rows distinguish executed source witnesses from unrun candidates. They remain inconclusive until compiler critical-site identity coverage and a Type-Isolation-specific effect are validated.",
+  "claim_grade": false,
+  "corpus_input": {
+    "bytes": 121186,
+    "path": "evaluation/config/rustsec_heap_security_corpus.json",
+    "sha256": "119d2e7b0b6e45afe341ab00eb5271edfa7f1e55c541c9a41700d6c9b259856c"
+  },
+  "counts": {
+    "inconclusive": 4
+  },
+  "minimum_repetitions": 2,
+  "results": [
+    {
+      "advisory_id": "RUSTSEC-2019-0016",
+      "case_id": "RSH-001",
+      "checks": {
+        "compiler_critical_site_coverage_validated": false,
+        "patched_system_control_valid": true,
+        "patched_typeiso_arm_completed": true,
+        "typed_plain_arm_completed": true,
+        "typeiso_arm_completed": true,
+        "vulnerable_system_oracle_reproduced": true
+      },
+      "claim_scope": "source witness with compiler critical-site coverage gate",
+      "evidence": {
+        "bytes": 133687,
+        "path": "docs/evidence/rustsec-security-evaluation-20260714/experiment-summary.json",
+        "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
+      },
+      "evidence_scope": "source_vulnerability_sweep",
+      "mechanism": "type_isolation",
+      "negative_boundary": null,
+      "observations": {
+        "typed_plain_compiler_rewrites": 31,
+        "typed_plain_native_diagnostic_signal_count": 0,
+        "typeiso_compiler_rewrites": 31,
+        "typeiso_native_diagnostic_signal_count": 0
+      },
+      "outcome": "inconclusive",
+      "positive_scope": null,
+      "reason": "compiler_critical_site_coverage_not_validated",
+      "repetitions": 2,
+      "result_semantics": "evidence_gap",
+      "scenario_id": "RSH-001-upstream",
+      "source_vulnerability_detection_validated": false,
+      "true_positive": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0017",
+      "case_id": "RSH-003",
+      "checks": {
+        "compiler_critical_site_coverage_validated": false,
+        "patched_system_control_valid": true,
+        "patched_typeiso_arm_completed": true,
+        "typed_plain_arm_completed": true,
+        "typeiso_arm_completed": true,
+        "vulnerable_system_oracle_reproduced": true
+      },
+      "claim_scope": "source witness with compiler critical-site coverage gate",
+      "evidence": {
+        "bytes": 133687,
+        "path": "docs/evidence/rustsec-security-evaluation-20260714/experiment-summary.json",
+        "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
+      },
+      "evidence_scope": "source_vulnerability_sweep",
+      "mechanism": "type_isolation",
+      "negative_boundary": null,
+      "observations": {
+        "typed_plain_compiler_rewrites": 2,
+        "typed_plain_native_diagnostic_signal_count": 2,
+        "typeiso_compiler_rewrites": 2,
+        "typeiso_native_diagnostic_signal_count": 2
+      },
+      "outcome": "inconclusive",
+      "positive_scope": null,
+      "reason": "compiler_critical_site_coverage_not_validated",
+      "repetitions": 2,
+      "result_semantics": "evidence_gap",
+      "scenario_id": "RSH-003-upstream",
+      "source_vulnerability_detection_validated": false,
+      "true_positive": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0130",
+      "case_id": "RSH-008",
+      "checks": {
+        "compiler_critical_site_coverage_validated": false,
+        "patched_system_control_valid": true,
+        "patched_typeiso_arm_completed": true,
+        "typed_plain_arm_completed": true,
+        "typeiso_arm_completed": true,
+        "vulnerable_system_oracle_reproduced": true
+      },
+      "claim_scope": "source witness with compiler critical-site coverage gate",
+      "evidence": {
+        "bytes": 133687,
+        "path": "docs/evidence/rustsec-security-evaluation-20260714/experiment-summary.json",
+        "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
+      },
+      "evidence_scope": "source_vulnerability_sweep",
+      "mechanism": "type_isolation",
+      "negative_boundary": null,
+      "observations": {
+        "typed_plain_compiler_rewrites": 7,
+        "typed_plain_native_diagnostic_signal_count": 0,
+        "typeiso_compiler_rewrites": 7,
+        "typeiso_native_diagnostic_signal_count": 0
+      },
+      "outcome": "inconclusive",
+      "positive_scope": null,
+      "reason": "compiler_critical_site_coverage_not_validated",
+      "repetitions": 2,
+      "result_semantics": "evidence_gap",
+      "scenario_id": "RSH-008-published",
+      "source_vulnerability_detection_validated": false,
+      "true_positive": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0005",
+      "case_id": "RSH-019",
+      "checks": {
+        "compiler_critical_site_coverage_validated": false,
+        "patched_system_control_valid": true,
+        "patched_typeiso_arm_completed": true,
+        "typed_plain_arm_completed": true,
+        "typeiso_arm_completed": true,
+        "vulnerable_system_oracle_reproduced": true
+      },
+      "claim_scope": "source witness with compiler critical-site coverage gate",
+      "evidence": {
+        "bytes": 133687,
+        "path": "docs/evidence/rustsec-security-evaluation-20260714/experiment-summary.json",
+        "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
+      },
+      "evidence_scope": "source_vulnerability_sweep",
+      "mechanism": "type_isolation",
+      "negative_boundary": null,
+      "observations": {
+        "typed_plain_compiler_rewrites": 0,
+        "typed_plain_native_diagnostic_signal_count": 0,
+        "typeiso_compiler_rewrites": 0,
+        "typeiso_native_diagnostic_signal_count": 0
+      },
+      "outcome": "inconclusive",
+      "positive_scope": null,
+      "reason": "compiler_critical_site_coverage_not_validated",
+      "repetitions": 2,
+      "result_semantics": "evidence_gap",
+      "scenario_id": "RSH-019-upstream",
+      "source_vulnerability_detection_validated": false,
+      "true_positive": false
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-mechanism-results",
+  "source_sweep_input": {
+    "bytes": 133687,
+    "path": "docs/evidence/rustsec-security-evaluation-20260714/experiment-summary.json",
+    "sha256": "4d17597cdcf6a75909cf54a4cc24b50ceaf9faf396b8186ace07387951dd1d01"
+  }
+}

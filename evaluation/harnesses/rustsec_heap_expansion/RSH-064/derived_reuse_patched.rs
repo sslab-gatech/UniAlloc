@@ -24,8 +24,10 @@ pub(crate) fn with_vulnerability_edge_identity<R>(
 
 pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_payload<T: Clone, const N: usize>(seed: &[T; N]) -> Vec<T> {
+fn materialize_payload(seed: &[u8; PAYLOAD_SIZE]) -> Vec<u8> {
     seed.to_vec()
 }
 

@@ -136,9 +136,9 @@
             "rsh-002-harness"
           ],
           "compiler_target_exclusion": {
-            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "claim_boundary": "The default manual experiment preserves its original target set. The explicit automatic-edge-identity probe compiles the subject and harness and validates both critical sites against the coverage contract.",
             "compiler_automatic_victim_coverage": false,
-            "reason": "The derived adapter supplies the vulnerable BitVec allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "reason": "Manual-mode provenance remains reproducible; automatic mode disables the manual scope and requires exact compiler audit and runtime bindings.",
             "subject_crate": "bitvec"
           },
           "oracle": {
@@ -163,9 +163,27 @@
           "source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
           "type_isolation_edge_annotation": {
             "annotation_scope": [
-              "BitVec::with_capacity victim allocation",
-              "BitVec-to-BitBox victim reclaim"
+              "bitvec::BitVec::with_capacity generic Vec<T> backing allocation",
+              "BitVec-to-BitBox conversion reclaims the original backing while the stale BitBox retains it"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "source_shaped_derived",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:50:23:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "std::vec::Vec<T/#1",
+                "source_file_fragment": "/src/vec/api.rs:54:11:"
+              }
+            },
             "claim_scope": "derived RSH-002 cross-identity A-to-B reuse edge only",
             "expected_layout": {
               "align": 8,
@@ -371,9 +389,9 @@
             "rsh-008-harness"
           ],
           "compiler_target_exclusion": {
-            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "claim_boundary": "The default manual experiment preserves its original target set. The explicit automatic-edge-identity probe compiles the subject and harness and validates both critical sites against the coverage contract.",
             "compiler_automatic_victim_coverage": false,
-            "reason": "The derived adapter supplies the vulnerable LruEntry allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "reason": "Manual-mode provenance remains reproducible; automatic mode disables the manual scope and requires exact compiler audit and runtime bindings.",
             "subject_crate": "lru"
           },
           "oracle": {
@@ -397,6 +415,24 @@
               "LruCache::put Box<LruEntry<u32, String>> victim allocation",
               "LruCache::pop Box<LruEntry<u32, String>> victim reclaim"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "derived_vulnerability_edge",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:50:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<LruEntry<",
+                "source_file_fragment": "/src/lib.rs:326:21:"
+              }
+            },
             "claim_scope": "derived RSH-008 LruEntry-to-Replacement cross-identity reuse edge only",
             "expected_layout": {
               "align": 8,

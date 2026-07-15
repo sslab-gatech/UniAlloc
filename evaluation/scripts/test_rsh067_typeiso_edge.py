@@ -22,8 +22,8 @@ VULNERABLE = (
     / "derived_reuse.rs"
 )
 PATCHED = VULNERABLE.with_name("derived_reuse_patched.rs")
-VULNERABLE_SHA256 = "5bc90e106316eeb2cd67876dea882360400d49f0b0915bdf45c4cdba7068ae4e"
-PATCHED_SHA256 = "1ddbec25a9cdb9885ab04a67a91a177d31f31840885e61ed4412665d93f1a09d"
+VULNERABLE_SHA256 = "2878001ac0887561f14c714d0d252d4b2f1b8fd4efa6a9a3ded68a87c8fb32a7"
+PATCHED_SHA256 = "2a8238533bd54bfeb75f34fcb42348ef58517d6ff980334e69ddd9a0ed55cbcf"
 
 spec = importlib.util.spec_from_file_location("rustsec_heap_harness", RUNNER)
 assert spec is not None and spec.loader is not None
@@ -32,12 +32,15 @@ spec.loader.exec_module(runner)
 
 
 class Rsh067TypeIsolationEdgeTests(unittest.TestCase):
-    def test_sources_are_hash_pinned_and_use_generic_victim_helpers(self) -> None:
+    def test_sources_are_hash_pinned_and_use_compiler_audited_victim_helpers(self) -> None:
         self.assertEqual(runner.sha256_file(VULNERABLE), VULNERABLE_SHA256)
         self.assertEqual(runner.sha256_file(PATCHED), PATCHED_SHA256)
         for path in (VULNERABLE, PATCHED):
             source = path.read_text(encoding="utf-8")
-            self.assertIn("fn materialize_server<T: Clone", source)
+            self.assertIn(
+                "fn materialize_server(seed: &[u8; PAYLOAD_SIZE]) -> Vec<u8>",
+                source,
+            )
             self.assertIn("seed.to_vec()", source)
             self.assertIn("fn reclaim_server<T>", source)
             self.assertIn("0x5253_4843_0000_0001", source)
@@ -85,8 +88,8 @@ class Rsh067TypeIsolationEdgeTests(unittest.TestCase):
         exclusion = scenario["compiler_target_exclusion"]
         self.assertEqual(exclusion["subject_crate"], "openssl")
         self.assertFalse(exclusion["compiler_automatic_victim_coverage"])
-        self.assertIn("manual", exclusion["reason"])
-        self.assertIn("allocator policy", exclusion["claim_boundary"])
+        self.assertIn("automatic mode disables the manual scope", exclusion["reason"])
+        self.assertIn("automatic-edge-identity probe", exclusion["claim_boundary"])
         annotation = scenario["type_isolation_edge_annotation"]
         self.assertEqual(
             annotation["kind"], "manual_exact_vulnerability_edge_identity"
@@ -94,6 +97,10 @@ class Rsh067TypeIsolationEdgeTests(unittest.TestCase):
         self.assertEqual(annotation["expected_layout"], {"size": 64, "align": 1})
         self.assertEqual(annotation["victim_type_id"], 0x5253_4843_0000_0001)
         self.assertEqual(annotation["victim_module_id"], 0x5253_4843_0000_0002)
+        contract = annotation["automatic_compiler_coverage_contract"]
+        self.assertEqual(contract["coverage_scope"], "source_shaped_derived")
+        self.assertIn("Vec<u8", contract["victim"]["semantic_type_fragment"])
+        self.assertIn("Replacement", contract["replacement"]["semantic_type_fragment"])
         runner.validate_repo_file(scenario["source_path"], VULNERABLE_SHA256)
         runner.validate_repo_file(
             scenario["patched_source"]["source_path"], PATCHED_SHA256

@@ -1,0 +1,52 @@
+warning: ../subject/lru-0.7.0/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`
+warning: `lru` (manifest) generated 1 warning
+   Compiling libc v0.2.186
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.4
+   Compiling once_cell v1.21.4
+   Compiling ahash v0.7.8
+   Compiling getrandom v0.2.17
+   Compiling hashbrown v0.11.2
+   Compiling lru v0.7.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/work/subject/lru-0.7.0)
+warning: `auto` traits are unstable
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/work/subject/lru-0.7.0/src/lib.rs:110:5
+    |
+110 | pub auto trait NotKeyRef {}
+    |     ^^^^
+    |
+    = note: see issue #13231 <https://github.com/rust-lang/rust/issues/13231> for more information
+    = help: add `#![feature(auto_traits)]` to the crate attributes to enable
+    = note: this compiler was built on 2026-06-10; consider upgrading it if it is out of date
+    = warning: unstable syntax can change at any point in the future, causing a hard error!
+    = note: for more information, see issue #154045 <https://github.com/rust-lang/rust/issues/154045>
+
+warning: negative impls are experimental
+   --> /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/work/subject/lru-0.7.0/src/lib.rs:113:9
+    |
+113 | impl<K> !NotKeyRef for KeyRef<K> {}
+    |         ^
+    |
+    = note: see issue #68318 <https://github.com/rust-lang/rust/issues/68318> for more information
+    = help: add `#![feature(negative_impls)]` to the crate attributes to enable
+    = note: this compiler was built on 2026-06-10; consider upgrading it if it is out of date
+    = warning: unstable syntax can change at any point in the future, causing a hard error!
+    = note: for more information, see issue #154045 <https://github.com/rust-lang/rust/issues/154045>
+
+warning: `lru` (lib) generated 2 warnings
+   Compiling rsh-008-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-008/arms/vulnerable/typeiso/work/project)
+warning: function `with_vulnerability_edge_identity` is never used
+  --> src/witness.rs:17:15
+   |
+17 | pub(crate) fn with_vulnerability_edge_identity<R>(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `report_vulnerability_edge_reuse_denial` is never used
+  --> src/witness.rs:26:15
+   |
+26 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `rsh-008-harness` (bin "rsh-008-harness") generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.72s

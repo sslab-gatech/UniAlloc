@@ -539,7 +539,12 @@ fn main() {}
         for field in experiment.REUSE_DENIAL_FIELDS:
             with self.subTest(field=field):
                 self.assertIn(rf'\"{field}\":{{}}', source)
-                self.assertIn(f"stats.{field}", source)
+                if field == "last_wrong_identity_retained_ptr":
+                    self.assertIn(
+                        "semantic_stats_last_wrong_identity_retained_ptr()", source
+                    )
+                else:
+                    self.assertIn(f"stats.{field}", source)
         self.assertIn(".with_flags(1)", source)
         self.assertIn(experiment.REUSE_DENIAL_PREFIX, source)
 
@@ -551,6 +556,21 @@ fn main() {}
         self.assertIn("with_vulnerability_edge_identity", source)
         self.assertIn(".with_flags(0)", source)
         self.assertIn("report_vulnerability_edge_reuse_denial", source)
+
+    def test_automatic_edge_probe_keeps_oracles_without_manual_metadata(self) -> None:
+        for variant in ("typed_plain", "typeiso"):
+            with self.subTest(variant=variant):
+                source = experiment.stats_wrapper(
+                    variant,
+                    vulnerability_edge_hooks=True,
+                    automatic_edge_identity_probe=True,
+                )
+
+                self.assertIn("with_vulnerability_edge_identity", source)
+                self.assertIn("report_vulnerability_edge_reuse_denial", source)
+                self.assertIn("f()", source)
+                self.assertNotIn("with_semantic_metadata", source)
+                self.assertNotIn("AllocationMetadata", source)
 
     def test_system_wrapper_exposes_noop_vulnerability_edge_hooks(self) -> None:
         source = experiment.wrapper_source(
@@ -670,6 +690,14 @@ fn main() {}
             experiment.compiler_target_crates(case, manual_exclusion),
             ("rsh_008_harness",),
         )
+        self.assertEqual(
+            experiment.compiler_target_crates(
+                case,
+                manual_exclusion,
+                automatic_edge_identity_probe=True,
+            ),
+            ("lru", "rsh_008_harness"),
+        )
 
         with self.assertRaisesRegex(
             experiment.ExperimentError, "manually attributed derived reuse"
@@ -709,6 +737,20 @@ fn main() {}
         self.assertEqual(record["path"], str(binary.resolve()))
         self.assertEqual(record["bytes"], len(b"pinned-binary"))
         self.assertEqual(record["sha256"], experiment.sha256_file(binary))
+
+    def test_in_tree_audit_paths_are_repo_relative_and_relocatable(self) -> None:
+        audit_dir = self.root / "docs/evidence/run/audits"
+        audit_dir.mkdir(parents=True)
+        audit = audit_dir / "subject.json"
+        experiment.write_json(audit, {"rewrite_candidates": [{"type_id": 7}]})
+
+        with mock.patch.object(experiment, "ROOT", self.root):
+            records = experiment.collect_file_records(audit_dir, ".json")
+            candidates = experiment.load_rewrite_candidates(audit_dir)
+
+        expected = "docs/evidence/run/audits/subject.json"
+        self.assertEqual(records[0]["path"], expected)
+        self.assertEqual(candidates[0]["audit_path"], expected)
 
     def test_sanitizer_ground_truth_is_system_only(self) -> None:
         report = {"rustflags": ["-Ainvalid_reference_casting"]}
@@ -1602,6 +1644,107 @@ fn main() {}
             "no_compiler_rewrite_observed", result["efficacy_blockers"]
         )
 
+    def test_pass_audit_validates_preregistered_automatic_critical_sites(self) -> None:
+        audit_dir = self.root / "coverage-audits"
+        audit_dir.mkdir()
+        experiment.write_json(
+            audit_dir / "demo.json",
+            {
+                "rewrite_candidates": [
+                    {
+                        "allocation_site_id": "victim",
+                        "type_id": 17,
+                        "source_span": "/subject/src/lib.rs:7:1: 7:20",
+                        "semantic_object_type": "alloc::vec::Vec<u8>",
+                        "rewrite_status": (
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ),
+                    },
+                    {
+                        "allocation_site_id": "replacement",
+                        "type_id": 0,
+                        "type_id_basis": "monomorphized_compiler_type_id_runtime",
+                        "source_span": "src/witness.rs:42:1: 42:20",
+                        "semantic_object_type": "Box<witness::Replacement>",
+                        "rewrite_status": (
+                            "actual_semantic_scope_generic_type_rewrite_applied"
+                        ),
+                        "replacement_symbol": (
+                            "__unialloc_semantic_scope_push_for_rust_type"
+                        ),
+                    },
+                ]
+            },
+        )
+        annotation = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "source_shaped_derived",
+                "victim": {
+                    "source_file_fragment": "/subject/src/lib.rs:7:",
+                    "semantic_type_fragment": "Vec<u8>",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:42:",
+                    "semantic_type_fragment": "Box<witness::Replacement>",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_generic_type_rewrite_applied"
+                    ],
+                },
+            }
+        }
+
+        with mock.patch.object(
+            experiment.realworld, "validate_typeiso_audit_presence"
+        ):
+            result = experiment.validate_audit_coverage(
+                allocator_variant="typeiso",
+                summary={
+                    "crate_names": ["demo", "rsh_demo_harness"],
+                    "semantic_rewrites_applied": 2,
+                },
+                target_crates=("demo", "rsh_demo_harness"),
+                build=execution(0),
+                audit_dir=audit_dir,
+                annotation=annotation,
+                automatic_edge_identity_probe=True,
+            )
+
+        self.assertTrue(result["valid"])
+        self.assertTrue(result["critical_site_coverage_validated"])
+        self.assertTrue(result["efficacy_eligible"])
+        self.assertEqual(result["efficacy_blockers"], [])
+        self.assertEqual(
+            result["automatic_critical_site_validation"]["status"],
+            "validated",
+        )
+
+    def test_automatic_coverage_contract_rejects_unknown_claim_scope(self) -> None:
+        annotation = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "unbounded_source_claim",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:1:",
+                    "semantic_type_fragment": "Vec<u8>",
+                    "rewrite_statuses": ["applied"],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:2:",
+                    "semantic_type_fragment": "Replacement",
+                    "rewrite_statuses": ["applied"],
+                },
+            }
+        }
+
+        with self.assertRaisesRegex(
+            experiment.ExperimentError, "coverage_scope must be one of"
+        ):
+            experiment.automatic_compiler_coverage_contract(annotation)
+
     def test_catalog_allocator_exclusion_covers_all_direct_reclaim_arms(self) -> None:
         scenario = {
             "unsupported_allocator_variants": {
@@ -1672,6 +1815,7 @@ fn main() {}
             "last_wrong_identity_requested_callsite": 0,
             "last_wrong_identity_size": 0,
             "last_wrong_identity_align": 0,
+            "last_wrong_identity_retained_ptr": 0,
             "side_cache_entries": 1,
             "side_cache_corrupt_slots": 0,
         }
@@ -1720,6 +1864,7 @@ fn main() {}
             "last_wrong_identity_requested_callsite": 505,
             "last_wrong_identity_size": 1016,
             "last_wrong_identity_align": 8,
+            "last_wrong_identity_retained_ptr": 0x1000,
         }
         audit_dir = self.root / "audits"
         audit_dir.mkdir()
@@ -1729,7 +1874,8 @@ fn main() {}
                 "rewrite_candidates": [
                     {
                         "allocation_site_id": "replacement-site",
-                        "type_id": 303,
+                        "type_id": 0,
+                        "type_id_basis": "monomorphized_compiler_type_id_runtime",
                         "module_id": 404,
                         "callsite": 505,
                         "source_span": "src/witness.rs:42:23: 42:74",
@@ -1738,7 +1884,10 @@ fn main() {}
                             "std::alloc::Global>"
                         ),
                         "rewrite_status": (
-                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                            "actual_semantic_scope_generic_type_rewrite_applied"
+                        ),
+                        "replacement_symbol": (
+                            "__unialloc_semantic_scope_push_for_rust_type"
                         ),
                     }
                 ]
@@ -1786,6 +1935,7 @@ fn main() {}
             "last_wrong_identity_requested_callsite": 505,
             "last_wrong_identity_size": 64,
             "last_wrong_identity_align": 1,
+            "last_wrong_identity_retained_ptr": 0x1000,
         }
         audit_dir = self.root / "audits"
         audit_dir.mkdir()
@@ -1834,6 +1984,465 @@ fn main() {}
         )
         self.assertEqual(binding["requested_runtime_type_id"], 303)
 
+    def test_automatic_probe_binds_victim_and_replacement_without_manual_ids(
+        self,
+    ) -> None:
+        annotation = {
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "victim_type_id": 999,
+            "victim_module_id": 998,
+            "expected_layout": {"size": 48, "align": 8},
+            "replacement_source_file_fragment": "src/witness.rs:50:",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "derived_vulnerability_edge",
+                "victim": {
+                    "source_file_fragment": "lru/src/lib.rs:326:",
+                    "semantic_type_fragment": "Box<LruEntry<",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_generic_type_rewrite_applied"
+                    ],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:50:",
+                    "semantic_type_fragment": "Box<witness::Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            },
+        }
+        report = {
+            "allocator": "typeiso",
+            "typed_cache_wrong_identity_denials": 1,
+            "last_wrong_identity_requested_type_id": 303,
+            "last_wrong_identity_retained_type_id": 101,
+            "last_wrong_identity_requested_module_id": 404,
+            "last_wrong_identity_retained_module_id": 202,
+            "last_wrong_identity_requested_callsite": 505,
+            "last_wrong_identity_size": 48,
+            "last_wrong_identity_align": 8,
+            "last_wrong_identity_retained_ptr": 0x1000,
+        }
+        audit_dir = self.root / "automatic-audits"
+        audit_dir.mkdir()
+        experiment.write_json(
+            audit_dir / "audits.json",
+            {
+                "rewrite_candidates": [
+                    {
+                        "allocation_site_id": "victim-site",
+                        "type_id": 0,
+                        "type_id_basis": "monomorphized_compiler_type_id_runtime",
+                        "module_id": 202,
+                        "callsite": 606,
+                        "source_span": "/tmp/lru/src/lib.rs:326:21: 326:50",
+                        "semantic_object_type": "alloc::boxed::Box<LruEntry<K, V>>",
+                        "rewrite_status": (
+                            "actual_semantic_scope_generic_type_rewrite_applied"
+                        ),
+                        "replacement_symbol": (
+                            "__unialloc_semantic_scope_push_for_rust_type"
+                        ),
+                    },
+                    {
+                        "allocation_site_id": "replacement-site",
+                        "type_id": 303,
+                        "module_id": 404,
+                        "callsite": 505,
+                        "source_span": "src/witness.rs:50:23: 50:72",
+                        "semantic_object_type": (
+                            "std::boxed::Box<witness::Replacement, Global>"
+                        ),
+                        "rewrite_status": (
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ),
+                    },
+                ]
+            },
+        )
+        run = execution(
+            0,
+            experiment.REUSE_DENIAL_PREFIX + json.dumps(report) + "\n"
+            "original=0x1000 replacement=0x2000",
+        )
+
+        result = experiment.validate_reuse_denial_evidence(
+            "typeiso",
+            [run],
+            annotation=annotation,
+            audit_dir=audit_dir,
+            automatic_edge_identity_probe=True,
+        )
+
+        self.assertTrue(result["direct_reuse_edge_coverage_observed"])
+        self.assertTrue(result["compiler_automatic_victim_coverage"])
+        self.assertFalse(result["manual_victim_identity_annotation"])
+        row = result["repetitions"][0]
+        self.assertEqual(row["victim_site_binding"]["allocation_site_id"], "victim-site")
+        self.assertEqual(
+            row["requested_site_binding"]["allocation_site_id"],
+            "replacement-site",
+        )
+
+    def test_automatic_probe_rejects_unproven_retained_pointer(self) -> None:
+        annotation = {
+            "expected_layout": {"size": 48, "align": 8},
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "derived_vulnerability_edge",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:10:",
+                    "semantic_type_fragment": "Box<Victim",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:20:",
+                    "semantic_type_fragment": "Box<Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            },
+        }
+        base_report = {
+            "allocator": "typeiso",
+            "typed_cache_wrong_identity_denials": 1,
+            "last_wrong_identity_requested_type_id": 303,
+            "last_wrong_identity_retained_type_id": 101,
+            "last_wrong_identity_requested_module_id": 404,
+            "last_wrong_identity_retained_module_id": 202,
+            "last_wrong_identity_requested_callsite": 505,
+            "last_wrong_identity_size": 48,
+            "last_wrong_identity_align": 8,
+            "last_wrong_identity_retained_ptr": 0x1000,
+        }
+        cases = {
+            "missing": (
+                {k: v for k, v in base_report.items() if k != "last_wrong_identity_retained_ptr"},
+                "original=0x1000 replacement=0x2000",
+            ),
+            "zero": (
+                {**base_report, "last_wrong_identity_retained_ptr": 0},
+                "original=0x1000 replacement=0x2000",
+            ),
+            "wrong": (
+                {**base_report, "last_wrong_identity_retained_ptr": 0x3000},
+                "original=0x1000 replacement=0x2000",
+            ),
+            "malformed_address": (base_report, "original=bogus replacement=0x2000"),
+        }
+        for name, (report, trace) in cases.items():
+            with self.subTest(name=name):
+                run = execution(
+                    0,
+                    experiment.REUSE_DENIAL_PREFIX + json.dumps(report) + "\n" + trace,
+                )
+                result = experiment.validate_reuse_denial_evidence(
+                    "typeiso",
+                    [run],
+                    annotation=annotation,
+                    audit_dir=self.root,
+                    automatic_edge_identity_probe=True,
+                )
+                self.assertFalse(result["valid"])
+                self.assertFalse(result["direct_reuse_edge_coverage_observed"])
+                self.assertTrue(result["repetitions"][0]["errors"])
+
+    def test_automatic_probe_accepts_zero_pointer_when_no_denial_occurred(self) -> None:
+        annotation = {
+            "expected_layout": {"size": 48, "align": 8},
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "derived_vulnerability_edge",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:10:",
+                    "semantic_type_fragment": "Box<Victim",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:20:",
+                    "semantic_type_fragment": "Box<Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            },
+        }
+        report = {
+            "allocator": "typed_plain",
+            "typed_cache_wrong_identity_denials": 0,
+            "last_wrong_identity_requested_type_id": 0,
+            "last_wrong_identity_retained_type_id": 0,
+            "last_wrong_identity_requested_module_id": 0,
+            "last_wrong_identity_retained_module_id": 0,
+            "last_wrong_identity_requested_callsite": 0,
+            "last_wrong_identity_size": 0,
+            "last_wrong_identity_align": 0,
+            "last_wrong_identity_retained_ptr": 0,
+        }
+        run = execution(
+            0,
+            experiment.REUSE_DENIAL_PREFIX
+            + json.dumps(report)
+            + "\noriginal=0x1000 replacement=0x1000",
+        )
+
+        result = experiment.validate_reuse_denial_evidence(
+            "typed_plain",
+            [run],
+            annotation=annotation,
+            audit_dir=self.root,
+            automatic_edge_identity_probe=True,
+        )
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["reuse_denial_event_count"], 0)
+        self.assertFalse(result["direct_reuse_edge_coverage_observed"])
+
+    def test_automatic_coverage_contract_rejects_unapplied_statuses(self) -> None:
+        annotation = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "derived_vulnerability_edge",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:",
+                    "semantic_type_fragment": "Victim",
+                    "rewrite_statuses": ["semantic_scope_rewrite_planned"],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:",
+                    "semantic_type_fragment": "Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            }
+        }
+        with self.assertRaisesRegex(experiment.ExperimentError, "unsupported status"):
+            experiment.automatic_compiler_coverage_contract(annotation)
+
+    def test_preserved_module_contract_requires_origin_chain(self) -> None:
+        annotation = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "source_shaped_derived",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:",
+                    "semantic_type_fragment": "Box<str",
+                    "rewrite_statuses": [
+                        "actual_semantic_ownership_transfer_rewrite_applied"
+                    ],
+                    "allow_preserved_origin_module": True,
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:",
+                    "semantic_type_fragment": "Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            }
+        }
+        with self.assertRaisesRegex(
+            experiment.ExperimentError, r"victim\.origin must be an object"
+        ):
+            experiment.automatic_compiler_coverage_contract(annotation)
+
+    def test_automatic_binding_accepts_preserved_origin_module_on_exact_transfer(
+        self,
+    ) -> None:
+        audit_dir = self.root / "transfer-audits"
+        audit_dir.mkdir()
+        experiment.write_json(
+            audit_dir / "subject.json",
+            {
+                "rewrite_candidates": [
+                    {
+                        "allocation_site_id": "string-to-boxed-str",
+                        "type_id": 101,
+                        "module_id": 303,
+                        "callsite": 404,
+                        "source_span": "/subject/src/lib.rs:334:38: 334:54",
+                        "semantic_object_type": "std::boxed::Box<str, Global>",
+                        "argument_types": ["std::string::String"],
+                        "rewrite_status": (
+                            "actual_semantic_ownership_transfer_rewrite_applied"
+                        ),
+                    },
+                    {
+                        "allocation_site_id": "string-origin",
+                        "type_id": 909,
+                        "module_id": 202,
+                        "callsite": 505,
+                        "source_span": "src/witness.rs:40:27: 40:37",
+                        "semantic_object_type": "std::string::String",
+                        "rewrite_status": (
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ),
+                    },
+                    {
+                        "allocation_site_id": "replacement-site",
+                        "type_id": 808,
+                        "module_id": 707,
+                        "callsite": 606,
+                        "source_span": "src/witness.rs:73:23: 73:55",
+                        "semantic_object_type": "std::boxed::Box<Replacement, Global>",
+                        "rewrite_status": (
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ),
+                    },
+                ]
+            },
+        )
+        victim_contract = {
+            "source_file_fragment": "/subject/src/lib.rs:334:",
+            "semantic_type_fragment": "Box<str",
+            "rewrite_statuses": [
+                "actual_semantic_ownership_transfer_rewrite_applied"
+            ],
+            "allow_preserved_origin_module": True,
+            "origin": {
+                "source_file_fragment": "src/witness.rs:40:",
+                "semantic_type_fragment": "std::string::String",
+                "rewrite_statuses": [
+                    "actual_semantic_scope_enter_exit_rewrite_applied"
+                ],
+            },
+        }
+        binding = experiment.bind_runtime_identity_to_audits(
+            runtime_type_id=101,
+            runtime_module_id=202,
+            runtime_callsite=None,
+            audit_dir=audit_dir,
+            site_contract=victim_contract,
+            role="victim",
+        )
+
+        self.assertTrue(binding["valid"])
+        self.assertEqual(
+            binding["module_binding"],
+            "preserved_origin_module_after_ownership_transfer",
+        )
+        self.assertTrue(binding["origin_binding"]["valid"])
+
+        annotation = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "source_shaped_derived",
+                "victim": victim_contract,
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:73:",
+                    "semantic_type_fragment": "Box<Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_enter_exit_rewrite_applied"
+                    ],
+                },
+            }
+        }
+        static = experiment.validate_automatic_critical_sites(
+            audit_dir=audit_dir, annotation=annotation
+        )
+        self.assertTrue(static["valid"])
+        self.assertTrue(static["sites"]["victim"]["origin"]["valid"])
+
+        audit = json.loads((audit_dir / "subject.json").read_text(encoding="utf-8"))
+        audit["rewrite_candidates"][0]["argument_types"] = ["other::Owner"]
+        experiment.write_json(audit_dir / "subject.json", audit)
+        broken = experiment.bind_runtime_identity_to_audits(
+            runtime_type_id=101,
+            runtime_module_id=202,
+            runtime_callsite=None,
+            audit_dir=audit_dir,
+            site_contract=victim_contract,
+            role="victim",
+        )
+        self.assertFalse(broken["valid"])
+        self.assertFalse(
+            experiment.validate_automatic_critical_sites(
+                audit_dir=audit_dir, annotation=annotation
+            )["valid"]
+        )
+
+    def test_automatic_probe_does_not_count_unbound_same_layout_denial(self) -> None:
+        annotation = {
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "expected_layout": {"size": 64, "align": 1},
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "source_shaped_derived",
+                "victim": {
+                    "source_file_fragment": "src/victim.rs:10:",
+                    "semantic_type_fragment": "Box<str",
+                    "rewrite_statuses": [
+                        "actual_semantic_ownership_transfer_rewrite_applied"
+                    ],
+                },
+                "replacement": {
+                    "source_file_fragment": "src/witness.rs:20:",
+                    "semantic_type_fragment": "Box<witness::Replacement",
+                    "rewrite_statuses": [
+                        "actual_semantic_scope_generic_type_rewrite_applied"
+                    ],
+                },
+            },
+        }
+        report = {
+            "allocator": "typeiso",
+            "typed_cache_wrong_identity_denials": 1,
+            "last_wrong_identity_requested_type_id": 303,
+            "last_wrong_identity_retained_type_id": 101,
+            "last_wrong_identity_requested_module_id": 404,
+            "last_wrong_identity_retained_module_id": 202,
+            "last_wrong_identity_requested_callsite": 505,
+            "last_wrong_identity_size": 64,
+            "last_wrong_identity_align": 1,
+            "last_wrong_identity_retained_ptr": 0x1000,
+        }
+        audit_dir = self.root / "unrelated-denial-audits"
+        audit_dir.mkdir()
+        experiment.write_json(
+            audit_dir / "audits.json",
+            {
+                "rewrite_candidates": [
+                    {
+                        "allocation_site_id": "safe-string-site",
+                        "type_id": 303,
+                        "module_id": 404,
+                        "callsite": 505,
+                        "source_span": "src/control.rs:30:9: 30:20",
+                        "semantic_object_type": "std::string::String",
+                        "rewrite_status": (
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ),
+                    }
+                ]
+            },
+        )
+        run = execution(
+            0,
+            experiment.REUSE_DENIAL_PREFIX + json.dumps(report) + "\n"
+            "original=0x1000 replacement=0x2000",
+        )
+
+        result = experiment.validate_reuse_denial_evidence(
+            "typeiso",
+            [run],
+            annotation=annotation,
+            audit_dir=audit_dir,
+            automatic_edge_identity_probe=True,
+        )
+
+        self.assertEqual(result["reuse_denial_event_count"], 1)
+        self.assertEqual(result["matching_reuse_denial_event_count"], 0)
+        self.assertEqual(result["bound_replacement_site_count"], 0)
+        self.assertFalse(result["direct_reuse_edge_coverage_observed"])
+
     def test_reuse_denial_zero_report_is_a_valid_ablation_observation(self) -> None:
         annotation = {
             "victim_type_id": 101,
@@ -1869,6 +2478,24 @@ fn main() {}
                     "The manually attributed derived RSH-042 A-to-B "
                     "replacement edge only."
                 ),
+                "automatic_compiler_coverage_contract": {
+                    "schema_version": 1,
+                    "coverage_scope": "derived_vulnerability_edge",
+                    "victim": {
+                        "source_file_fragment": "src/victim.rs:",
+                        "semantic_type_fragment": "Victim",
+                        "rewrite_statuses": [
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ],
+                    },
+                    "replacement": {
+                        "source_file_fragment": "src/witness.rs:",
+                        "semantic_type_fragment": "Replacement",
+                        "rewrite_statuses": [
+                            "actual_semantic_scope_enter_exit_rewrite_applied"
+                        ],
+                    },
+                },
             }
         }
         arms = [
@@ -1910,13 +2537,22 @@ fn main() {}
             {
                 "archive_variant": "patched",
                 "allocator_variant": "typeiso",
-                "repetition_summary": {"address_reuse_observation_count": 2},
+                "repetition_summary": {
+                    "address_reuse_observation_count": 2,
+                    "executed": 2,
+                    "clean_exit_count": 2,
+                    "timed_out_count": 0,
+                },
                 "reuse_denial_evidence": {
                     "matching_reuse_denial_event_count": 0,
                     "bound_replacement_site_count": 0,
                 },
             },
         ]
+        for arm in arms:
+            arm["repetition_summary"].update(
+                {"executed": 2, "clean_exit_count": 2, "timed_out_count": 0}
+            )
 
         result = experiment.evaluate_annotated_reuse_edge_matrix(
             scenario, arms, repetitions=2
@@ -1927,12 +2563,68 @@ fn main() {}
             result["status"], "cross_identity_reuse_edge_blocked_and_reported"
         )
         self.assertTrue(result["typeiso_reuse_edge_blocked_and_reported"])
-        self.assertTrue(result["vulnerability_specific_detection_signal"])
+        self.assertFalse(result["vulnerability_specific_detection_signal"])
+        self.assertTrue(result["causal_compiler_bound_reuse_edge_blocking"])
         self.assertFalse(result["source_vulnerability_detection_validated"])
         self.assertEqual(
             result["claim_scope"],
             "The manually attributed derived RSH-042 A-to-B replacement edge only.",
         )
+
+        automatic = experiment.evaluate_annotated_reuse_edge_matrix(
+            scenario,
+            [
+                {
+                    **arm,
+                    "reuse_denial_evidence": {
+                        **arm.get("reuse_denial_evidence", {}),
+                        "compiler_automatic_victim_coverage": (
+                            arm.get("archive_variant") == "vulnerable"
+                            and arm.get("allocator_variant") == "typeiso"
+                        ),
+                    },
+                }
+                for arm in arms
+            ],
+            repetitions=2,
+            automatic_edge_identity_probe=True,
+        )
+        self.assertTrue(automatic["validated"])
+        self.assertTrue(automatic["compiler_automatic_victim_coverage"])
+        self.assertTrue(
+            automatic["causal_compiler_bound_reuse_edge_mitigation"]
+        )
+        self.assertEqual(
+            automatic["result_semantics"],
+            "causal_compiler_bound_reuse_edge_mitigation",
+        )
+        self.assertFalse(automatic["manual_victim_identity_annotation"])
+        self.assertFalse(automatic["source_vulnerability_detection_validated"])
+
+        published_scenario = json.loads(json.dumps(scenario))
+        published_scenario["type_isolation_edge_annotation"][
+            "automatic_compiler_coverage_contract"
+        ]["coverage_scope"] = "published_source"
+        published = experiment.evaluate_annotated_reuse_edge_matrix(
+            published_scenario,
+            [
+                {
+                    **arm,
+                    "reuse_denial_evidence": {
+                        **arm.get("reuse_denial_evidence", {}),
+                        "compiler_automatic_victim_coverage": (
+                            arm.get("archive_variant") == "vulnerable"
+                            and arm.get("allocator_variant") == "typeiso"
+                        ),
+                    },
+                }
+                for arm in arms
+            ],
+            repetitions=2,
+            automatic_edge_identity_probe=True,
+        )
+        self.assertTrue(published["published_source_edge_mitigation_validated"])
+        self.assertFalse(published["source_vulnerability_detection_validated"])
 
     def test_reuse_edge_matrix_requires_both_patched_allocator_controls(
         self,
@@ -1984,6 +2676,10 @@ fn main() {}
                 },
             },
         ]
+        for arm in arms:
+            arm["repetition_summary"].update(
+                {"executed": 2, "clean_exit_count": 2, "timed_out_count": 0}
+            )
 
         for missing_allocator in ("typed_plain", "typeiso"):
             with self.subTest(missing_allocator=missing_allocator):
@@ -2033,6 +2729,10 @@ fn main() {}
                 },
             },
         ]
+        for arm in arms:
+            arm["repetition_summary"].update(
+                {"executed": 2, "clean_exit_count": 2, "timed_out_count": 0}
+            )
         for allocator in ("system", "typed_plain", "typeiso"):
             arm = {
                 "archive_variant": "patched",
@@ -2055,6 +2755,67 @@ fn main() {}
         self.assertFalse(result["validated"])
         self.assertFalse(result["patched_system_control_reproduced"])
         self.assertEqual(result["status"], "reuse_edge_criteria_not_satisfied")
+
+    def test_reuse_edge_matrix_rejects_addresses_printed_before_crash_or_timeout(
+        self,
+    ) -> None:
+        scenario = {"type_isolation_edge_annotation": {"kind": "manual"}}
+        arms = []
+        for archive in ("vulnerable", "patched"):
+            for allocator in ("system", "typed_plain", "typeiso"):
+                arm = {
+                    "archive_variant": archive,
+                    "allocator_variant": allocator,
+                    "repetition_summary": {
+                        "address_reuse_observation_count": (
+                            0
+                            if archive == "vulnerable" and allocator == "typeiso"
+                            else 2
+                        ),
+                        "executed": 2,
+                        "clean_exit_count": 2,
+                        "timed_out_count": 0,
+                    },
+                }
+                if allocator == "system":
+                    arm["oracle_validation"] = {"expected_oracle_observed": True}
+                elif archive == "vulnerable" and allocator == "typed_plain":
+                    arm["reuse_denial_evidence"] = {"reuse_denial_event_count": 0}
+                elif archive == "vulnerable":
+                    arm["reuse_denial_evidence"] = {
+                        "direct_reuse_edge_coverage_observed": True,
+                        "bound_replacement_site_count": 2,
+                    }
+                else:
+                    arm["reuse_denial_evidence"] = {
+                        "matching_reuse_denial_event_count": 0,
+                        "bound_replacement_site_count": 0,
+                    }
+                arms.append(arm)
+
+        cases = (
+            ("patched", "system", "clean_exit_count", 1),
+            ("patched", "typed_plain", "clean_exit_count", 1),
+            ("patched", "typeiso", "timed_out_count", 1),
+            ("vulnerable", "system", "timed_out_count", 1),
+            ("vulnerable", "typed_plain", "clean_exit_count", 1),
+            ("vulnerable", "typeiso", "timed_out_count", 1),
+        )
+        for archive, allocator, field, value in cases:
+            with self.subTest(archive=archive, allocator=allocator, field=field):
+                candidate = json.loads(json.dumps(arms))
+                selected = next(
+                    arm
+                    for arm in candidate
+                    if arm["archive_variant"] == archive
+                    and arm["allocator_variant"] == allocator
+                )
+                selected["repetition_summary"][field] = value
+                result = experiment.evaluate_annotated_reuse_edge_matrix(
+                    scenario, candidate, repetitions=2
+                )
+                self.assertFalse(result["validated"])
+                self.assertEqual(result["status"], "reuse_edge_criteria_not_satisfied")
 
     def test_abnormal_allocator_run_records_stats_unavailable(self) -> None:
         result = experiment.validate_runtime_stats(

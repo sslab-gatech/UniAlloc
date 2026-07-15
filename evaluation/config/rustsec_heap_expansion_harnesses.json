@@ -61,9 +61,9 @@
             "rsh-041-harness"
           ],
           "compiler_target_exclusion": {
-            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "claim_boundary": "The default manual experiment preserves its original target set. The explicit automatic-edge-identity probe compiles the subject and harness and validates both critical sites against the coverage contract.",
             "compiler_automatic_victim_coverage": false,
-            "reason": "The derived adapter supplies the vulnerable DroppableRef allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "reason": "Manual-mode provenance remains reproducible; automatic mode disables the manual scope and requires exact compiler audit and runtime bindings.",
             "subject_crate": "oneringbuf"
           },
           "oracle": {
@@ -87,6 +87,24 @@
               "DroppableRef::from boxed LocalHeapRB victim allocation",
               "second cloned DroppableRef victim reclaim"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "derived_vulnerability_edge",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:77:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<B/",
+                "source_file_fragment": "/droppable.rs:15:17:"
+              }
+            },
             "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
             "expected_layout": {
               "align": 8,
@@ -191,7 +209,7 @@
           "origin_url": "https://github.com/yegor256/emap/issues/168",
           "patched_source": {
             "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse_patched.rs",
-            "source_sha256": "0ae34eda462c0222f84d1d81b7db5ac6c63fd8f8cd4f35b7c3ef284005b6a527"
+            "source_sha256": "ec094f0e15be1ee3ed9cf5c004b977b58880828818c8437fd89083c45b815d66"
           },
           "provenance": "derived_adapter",
           "required_environment": {},
@@ -200,12 +218,30 @@
           ],
           "scenario_id": "RSH-042-derived-reuse",
           "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse.rs",
-          "source_sha256": "bd0f7561624771957e32e328bf11de0ccc7677a5daebb5ac4c248e815c6afa4f",
+          "source_sha256": "0c63c2f5978f6cf172e3cc9425d6d6296104c561c5ff7ad7beba78844d1ac752",
           "type_isolation_edge_annotation": {
             "annotation_scope": [
-              "generic materialize_victim Vec<T> victim-buffer allocation",
-              "generic reclaim_next emap::Keys<V>::next victim-buffer reclaim"
+              "concrete materialize_victim Vec<u8> backing allocation",
+              "emap::Keys<V>::next reclaim after the stale iterator key is retained"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "source_shaped_derived",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:78:23:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_enter_exit_rewrite_applied"
+                ],
+                "semantic_type_fragment": "std::vec::Vec<u8",
+                "source_file_fragment": "src/witness.rs:44:17:"
+              }
+            },
             "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
             "expected_layout": {
               "align": 1,

@@ -71,11 +71,15 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
             mechanism_result: dict[str, object] = {
                 "mechanism": "reclaim_checks",
                 "scenario_id": selected,
-                "outcome": "detected",
+                "outcome": "inconclusive",
+                "true_positive": False,
+                "positive_scope": None,
+                "result_semantics": "evidence_gap",
             }
-            if index in (13, 20):
+            if index in (1, 13, 20):
                 mechanism_result.update(
                     {
+                        "outcome": "detected",
                         "reason": "feature_matched_exact_allocator_diagnostic",
                         "true_positive": True,
                         "positive_scope": "duplicate_reclaim_event_in_integrated_witness",
@@ -185,6 +189,9 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
         replay_cases: list[dict[str, object]] = []
         for index in range(1, 50):
             case_id = self.case_id(index)
+            frozen_outcome = (
+                "detected" if index in (1, 13, 20) else "inconclusive"
+            )
             signals = {
                 "address_reuse_observed": False,
                 "asan": False,
@@ -198,7 +205,7 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
                     "case_id": case_id,
                     "scenario_id": f"{case_id}-selected",
                     "mechanism": "reclaim_checks",
-                    "frozen_outcome": "detected",
+                    "frozen_outcome": frozen_outcome,
                     "archive_variant": "vulnerable",
                     "allocator_variant": "reclaim_checks",
                     "attempt_status": "completed",
@@ -236,8 +243,12 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
                     ),
                     "scenario_id": f"{case_id}-selected",
                     "mechanism": "reclaim_checks",
-                    "frozen_outcome": "detected",
-                    "frozen_reason": "synthetic exact diagnostic",
+                    "frozen_outcome": frozen_outcome,
+                    "frozen_reason": (
+                        "synthetic exact diagnostic"
+                        if frozen_outcome == "detected"
+                        else "synthetic evidence gap"
+                    ),
                     "live_attempt_status": "completed",
                     "live_arms": live_arms,
                 }
@@ -318,6 +329,7 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
         *,
         case_id: str,
         scenario_id: str,
+        automatic: bool = False,
     ) -> dict[str, object]:
         experiment_path = self.root / f"{case_id}-typeiso-experiment.json"
         self.write_json(
@@ -358,29 +370,54 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
                 ],
             },
         )
+        checks = {name: True for name in runner.STRICT_TYPEISO_CHECKS}
+        if automatic:
+            checks.update(
+                {
+                    "automatic_edge_identity_probe_mode_valid": True,
+                    "edge_identity_contract_valid": True,
+                    "vulnerability_specific_detection_boundary_valid": True,
+                }
+            )
         return {
             "case_id": case_id,
             "advisory_id": f"RUSTSEC-TEST-{int(case_id[-3:]):04d}",
             "mechanism": "type_isolation",
             "scenario_id": scenario_id,
             "outcome": "mitigated",
-            "true_positive": True,
+            "validated_mitigation": True,
             "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
             "negative_boundary": None,
             "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
-            "result_semantics": "causal_mitigation_true_positive",
+            "result_semantics": (
+                "causal_compiler_bound_reuse_edge_mitigation"
+            ),
             "claim_scope": "derived cross-identity reuse edge only",
             "repetitions": 3,
+            "automatic_edge_identity_probe": automatic,
+            "manual_victim_identity_annotation": not automatic,
             "source_vulnerability_detection_validated": False,
-            "compiler_automatic_victim_coverage": False,
+            "vulnerability_specific_detection_signal": False,
+            "full_source_vulnerability_detection": False,
+            "compiler_automatic_victim_coverage": automatic,
+            "automatic_source_coverage": False,
+            "synthetic_reduction": case_id in runner.SYNTHETIC_TYPEISO_REDUCTION_CASES,
+            "reduction_fidelity": (
+                "compiler_automatic_synthetic_reduction"
+                if automatic
+                and case_id in runner.SYNTHETIC_TYPEISO_REDUCTION_CASES
+                else "compiler_automatic_derived_reduction"
+                if automatic
+                else "synthetic_manual_reduction"
+                if case_id in runner.SYNTHETIC_TYPEISO_REDUCTION_CASES
+                else "manual_derived_reduction"
+            ),
             "evidence": {
                 "path": str(summary_path),
                 "bytes": summary_path.stat().st_size,
                 "sha256": runner.sweep.sha256_file(summary_path),
             },
-            "checks": {
-                name: True for name in runner.STRICT_TYPEISO_CHECKS
-            },
+            "checks": checks,
             "failed_checks": [],
             "missing_arms": [],
             "evidence_gaps": [],
@@ -594,7 +631,7 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
             "mechanism": "type_isolation",
             "scenario_id": "RSH-008-published",
             "outcome": "inconclusive",
-            "true_positive": False,
+            "validated_mitigation": False,
             "positive_scope": None,
             "negative_boundary": None,
             "result_semantics": "evidence_gap",
@@ -612,6 +649,46 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
             "RSH-008-derived-reuse",
         )
         self.assertEqual(selected["_representative_mechanism_result"], positive)
+
+    def test_scope_rejects_missing_or_cross_mechanism_semantic_fields(self) -> None:
+        original = json.loads(self.scope.read_text(encoding="utf-8"))
+        mutations = [
+            (
+                "typeiso-missing",
+                lambda row: row.pop("validated_mitigation"),
+                "validated_mitigation",
+            ),
+            (
+                "typeiso-detector-field",
+                lambda row: row.__setitem__("true_positive", True),
+                "exclusively",
+            ),
+        ]
+        for label, mutate, pattern in mutations:
+            with self.subTest(label=label):
+                payload = json.loads(json.dumps(original))
+                case = next(
+                    row for row in payload["cases"] if row["case_id"] == "RSH-008"
+                )
+                case["integration"]["scenario_ids"] = ["RSH-008-derived-reuse"]
+                result = self.strict_typeiso_result(
+                    case_id="RSH-008",
+                    scenario_id="RSH-008-derived-reuse",
+                )
+                mutate(result)
+                case["mechanism_results"] = [result]
+                self.write_json(self.scope, payload)
+                with self.assertRaisesRegex(runner.CompleteScopeError, pattern):
+                    runner.load_scope(self.scope)
+
+        payload = json.loads(json.dumps(original))
+        case = next(
+            row for row in payload["cases"] if row["case_id"] == "RSH-013"
+        )
+        case["mechanism_results"][0]["validated_mitigation"] = True
+        self.write_json(self.scope, payload)
+        with self.assertRaisesRegex(runner.CompleteScopeError, "exclusively"):
+            runner.load_scope(self.scope)
 
     def test_scope_rejects_multiple_positive_results_for_one_mechanism(self) -> None:
         payload = json.loads(self.scope.read_text(encoding="utf-8"))
@@ -738,12 +815,13 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
             [row["mechanism"] for row in record["strict_positive_mechanism_results"]],
             ["reclaim_checks", "recovery_layout_validation", "type_isolation"],
         )
-        self.assertTrue(
-            all(
-                row["true_positive"]
-                for row in record["strict_positive_mechanism_results"]
-            )
-        )
+        for row in record["strict_positive_mechanism_results"]:
+            if row["mechanism"] == "type_isolation":
+                self.assertTrue(row["validated_mitigation"])
+                self.assertNotIn("true_positive", row)
+            else:
+                self.assertTrue(row["true_positive"])
+                self.assertNotIn("validated_mitigation", row)
 
     def test_typeiso_result_overlay_preserves_historical_arms(self) -> None:
         payload = json.loads(self.scope.read_text(encoding="utf-8"))
@@ -759,7 +837,7 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
                 "mechanism": "type_isolation",
                 "scenario_id": "RSH-008-published",
                 "outcome": "inconclusive",
-                "true_positive": False,
+                "validated_mitigation": False,
                 "positive_scope": None,
                 "result_semantics": "evidence_gap",
             },
@@ -810,21 +888,104 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
         self.assertTrue(record["raw_exact_allocator_signal"])
         self.assertEqual(
             record["strict_result_override"]["result_semantics"],
-            "causal_mitigation_true_positive",
+            "causal_compiler_bound_reuse_edge_mitigation",
         )
         bound = record["strict_positive_mechanism_results"]
         self.assertEqual(len(bound), 1)
         self.assertEqual(bound[0]["claim_scope"], "derived cross-identity reuse edge only")
         self.assertFalse(bound[0]["compiler_automatic_victim_coverage"])
         self.assertFalse(bound[0]["source_vulnerability_detection_validated"])
+        self.assertFalse(bound[0]["vulnerability_specific_detection_signal"])
+        self.assertFalse(bound[0]["full_source_vulnerability_detection"])
         self.assertFalse(bound[0]["automatic_source_coverage"])
-        self.assertFalse(bound[0]["source_level_true_positive"])
+        self.assertTrue(bound[0]["validated_mitigation"])
+        self.assertNotIn("true_positive", bound[0])
         self.assertFalse(bound[0]["claim_grade"])
         self.assertEqual(
             bound[0]["implementation_sha256"], self.implementation_sha256
         )
         self.assertEqual(bound[0]["reduction_fidelity"], "manual_derived_reduction")
         self.assertFalse(bound[0]["synthetic_reduction"])
+
+    def test_typeiso_binding_preserves_automatic_compiler_provenance(self) -> None:
+        payload = json.loads(self.scope.read_text(encoding="utf-8"))
+        case = next(row for row in payload["cases"] if row["case_id"] == "RSH-008")
+        case["integration"]["scenario_ids"] = ["RSH-008-derived-reuse"]
+        case["mechanism_results"] = [
+            self.strict_typeiso_result(
+                case_id="RSH-008",
+                scenario_id="RSH-008-derived-reuse",
+                automatic=True,
+            )
+        ]
+        self.write_json(self.scope, payload)
+        _scope, cases, _excluded = runner.load_scope(self.scope)
+        current = cases["RSH-008"]
+        record = {
+            "typeiso_reuse_denial_observed": False,
+            "raw_exact_allocator_signal": False,
+        }
+
+        runner.validate_and_bind_positive_mechanism_results(
+            case=current, record=record
+        )
+
+        bound = record["strict_positive_mechanism_results"][0]
+        self.assertTrue(bound["automatic_edge_identity_probe"])
+        self.assertFalse(bound["manual_victim_identity_annotation"])
+        self.assertTrue(bound["compiler_automatic_victim_coverage"])
+        self.assertFalse(bound["source_vulnerability_detection_validated"])
+        self.assertFalse(bound["vulnerability_specific_detection_signal"])
+        self.assertFalse(bound["full_source_vulnerability_detection"])
+        self.assertFalse(bound["automatic_source_coverage"])
+        self.assertTrue(bound["validated_mitigation"])
+        self.assertNotIn("true_positive", bound)
+        self.assertEqual(
+            bound["reduction_fidelity"],
+            "compiler_automatic_derived_reduction",
+        )
+
+    def test_typeiso_binding_rejects_spoofed_automatic_provenance(self) -> None:
+        payload = json.loads(self.scope.read_text(encoding="utf-8"))
+        case = next(row for row in payload["cases"] if row["case_id"] == "RSH-008")
+        case["integration"]["scenario_ids"] = ["RSH-008-derived-reuse"]
+        result = self.strict_typeiso_result(
+            case_id="RSH-008",
+            scenario_id="RSH-008-derived-reuse",
+            automatic=True,
+        )
+        result["manual_victim_identity_annotation"] = True
+        case["mechanism_results"] = [result]
+        self.write_json(self.scope, payload)
+        _scope, cases, _excluded = runner.load_scope(self.scope)
+
+        with self.assertRaisesRegex(
+            runner.CompleteScopeError, "automatic provenance"
+        ):
+            runner.validate_and_bind_positive_mechanism_results(
+                case=cases["RSH-008"], record={}
+            )
+
+    def test_typeiso_binding_rejects_vulnerability_detection_credit(self) -> None:
+        payload = json.loads(self.scope.read_text(encoding="utf-8"))
+        case = next(row for row in payload["cases"] if row["case_id"] == "RSH-008")
+        case["integration"]["scenario_ids"] = ["RSH-008-derived-reuse"]
+        result = self.strict_typeiso_result(
+            case_id="RSH-008",
+            scenario_id="RSH-008-derived-reuse",
+            automatic=True,
+        )
+        result["vulnerability_specific_detection_signal"] = True
+        case["mechanism_results"] = [result]
+        self.write_json(self.scope, payload)
+        _scope, cases, _excluded = runner.load_scope(self.scope)
+
+        with self.assertRaisesRegex(
+            runner.CompleteScopeError, "vulnerability-specific detection"
+        ):
+            runner.validate_and_bind_positive_mechanism_results(
+                case=cases["RSH-008"], record={}
+            )
 
     def test_recovery_layout_overlay_exposes_exact_case_signal(self) -> None:
         payload = json.loads(self.scope.read_text(encoding="utf-8"))
@@ -896,6 +1057,20 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
         )
         base_case["mechanism_results"][0]["outcome"] = "inconclusive"
         self.write_json(base_scope, base)
+
+        current = json.loads(self.scope.read_text(encoding="utf-8"))
+        current_case = next(
+            case for case in current["cases"] if case["case_id"] == "RSH-014"
+        )
+        current_case["mechanism_results"][0].update(
+            {
+                "outcome": "detected",
+                "true_positive": True,
+                "positive_scope": "unsubstantiated detector claim",
+                "result_semantics": "exact_diagnostic_true_positive",
+            }
+        )
+        self.write_json(self.scope, current)
 
         replay = json.loads(self.replay.read_text(encoding="utf-8"))
         replay["scope_sha256"] = runner.sweep.sha256_file(base_scope)
@@ -1030,6 +1205,9 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
     def test_legacy_base_scope_uses_its_recorded_counts(self) -> None:
         current = json.loads(self.scope.read_text(encoding="utf-8"))
         legacy_cases = [*current["cases"], *current["excluded_cases"]]
+        for case in legacy_cases:
+            for result in case["mechanism_results"]:
+                result.pop("true_positive", None)
         legacy_scope = self.root / "legacy-base-scope.json"
         legacy_payload = {
             "schema_version": 1,
@@ -1047,11 +1225,36 @@ class RustSecCompleteScopeRunnerTests(unittest.TestCase):
         self.assertEqual(payload["source"], "legacy-test-scope")
         self.assertEqual(len(cases), 53)
         self.assertEqual(cases["RSH-054"]["_scope_outcome"], "blocked")
+        self.assertIs(
+            cases["RSH-001"]["mechanism_results"][0]["true_positive"], True
+        )
+        self.assertEqual(
+            cases["RSH-001"]["mechanism_results"][0][
+                "historical_schema_normalization"
+            ],
+            "mechanism_specific_boolean_derived_from_archived_outcome",
+        )
 
         legacy_payload["counts"]["strong_candidate_count"] = 54
         self.write_json(legacy_scope, legacy_payload)
         with self.assertRaisesRegex(runner.CompleteScopeError, "54 cases"):
             runner.load_base_scope(legacy_scope)
+
+    def test_historical_typeiso_result_normalizes_to_mitigation_semantics(self) -> None:
+        result = {"mechanism": "type_isolation", "outcome": "mitigated"}
+
+        runner.normalize_historical_base_result(result, case_id="RSH-002")
+
+        self.assertIs(result["validated_mitigation"], True)
+        self.assertNotIn("true_positive", result)
+
+    def test_historical_result_rejects_unsupported_mechanism(self) -> None:
+        result = {"mechanism": "unknown", "outcome": "detected"}
+
+        with self.assertRaisesRegex(
+            runner.CompleteScopeError, "unsupported historical mechanism result"
+        ):
+            runner.normalize_historical_base_result(result, case_id="RSH-999")
 
     def test_replay_rejects_missing_duplicate_and_wrong_scenario(self) -> None:
         scope_sha256 = runner.sweep.sha256_file(self.scope)

@@ -341,6 +341,31 @@ PROFILES = {
     ),
 }
 
+AUTOMATIC12_CASE_PROFILES = {
+    "RSH-002": "rsh002",
+    "RSH-008": "rsh008",
+    "RSH-041": "expansion",
+    "RSH-042": "expansion",
+    "RSH-052": "rsh052",
+    "RSH-055": "rsh055",
+    "RSH-064": "rsh064",
+    "RSH-065": "rsh065",
+    "RSH-066": "rsh066",
+    "RSH-067": "rsh067",
+    "RSH-068": "rsh068",
+    "RSH-069": "rsh069",
+}
+AUTOMATIC12_CASE_IDS = tuple(AUTOMATIC12_CASE_PROFILES)
+AUTOMATIC12_DEFAULT_EXPERIMENTS = {
+    case_id: ROOT
+    / (
+        "docs/evidence/rustsec-typeiso-automatic-20260715/raw/"
+        f"{case_id}-experiment.json"
+    )
+    for case_id in AUTOMATIC12_CASE_IDS
+}
+AUTOMATIC12_SOURCE = "unialloc-rustsec-typeiso-automatic-derived-reuse-summary"
+
 # Preserve the original expansion API for callers that import these constants.
 DEFAULT_PROFILE = PROFILES["expansion"]
 DEFAULT_CATALOG = DEFAULT_PROFILE.catalog_path
@@ -436,6 +461,24 @@ def positive_int(value: object, label: str) -> int:
 def require_false(value: object, label: str) -> None:
     if value is not False:
         raise SummaryError(f"{label} must be false")
+
+
+def automatic_probe_mode(raw: Mapping[str, Any], case_id: str) -> bool:
+    """Return the explicit compiler-identity probe mode for one matrix.
+
+    Legacy matrices predate the field and therefore retain their manual-edge
+    semantics.  Once the field is present it must be a JSON boolean so a
+    malformed value cannot silently select either claim contract.
+    """
+
+    if "automatic_edge_identity_probe" not in raw:
+        return False
+    value = raw["automatic_edge_identity_probe"]
+    if not isinstance(value, bool):
+        raise SummaryError(
+            f"automatic edge-identity probe mode must be boolean for {case_id}"
+        )
+    return value
 
 
 def verify_inline_artifact(record: dict[str, Any], label: str) -> None:
@@ -556,6 +599,11 @@ def arm_summary(arm: dict[str, Any], repetitions: int) -> dict[str, Any]:
         raise SummaryError("arm exit-code count mismatch")
     if nonnegative_int(repetition.get("timed_out_count"), "timed-out count") != 0:
         raise SummaryError("arm contains timed-out repetitions")
+    clean_exit_count = nonnegative_int(
+        repetition.get("clean_exit_count"), "clean-exit count"
+    )
+    if clean_exit_count > repetitions:
+        raise SummaryError("arm clean-exit count exceeds requested repetitions")
     require_false(repetition.get("mitigation_inferred"), "arm mitigation inference")
     expected = oracle.get("expected_oracle_observed")
     if not isinstance(expected, bool):
@@ -572,6 +620,7 @@ def arm_summary(arm: dict[str, Any], repetitions: int) -> dict[str, Any]:
             "bound replacement-site count",
         ),
         "claim_grade": False,
+        "clean_exit_count": clean_exit_count,
         "execution_status": arm["execution_status"],
         "exit_codes": list(exit_codes),
         "expected_oracle_observed": expected,
@@ -581,6 +630,58 @@ def arm_summary(arm: dict[str, Any], repetitions: int) -> dict[str, Any]:
         ),
         "mitigation_inferred": False,
     }
+
+
+def validate_automatic_denial_repetitions(
+    *, case_id: str, evidence: dict[str, Any], repetitions: int
+) -> None:
+    """Bind every automatic denial to one retained pointer and both compiler sites."""
+
+    records = evidence.get("repetitions")
+    if not isinstance(records, list) or len(records) != repetitions:
+        raise SummaryError(
+            f"automatic denial repetition count mismatch for {case_id}"
+        )
+    for expected_index, record in enumerate(records, 1):
+        if not isinstance(record, dict):
+            raise SummaryError(
+                f"invalid automatic denial repetition for {case_id}: "
+                f"{expected_index}"
+            )
+        report = record.get("report")
+        requested_binding = record.get("requested_site_binding")
+        victim_binding = record.get("victim_site_binding")
+        original_address = record.get("original_or_stale_address")
+        retained_address = (
+            report.get("last_wrong_identity_retained_ptr")
+            if isinstance(report, dict)
+            else None
+        )
+        valid_pointer = (
+            isinstance(original_address, int)
+            and not isinstance(original_address, bool)
+            and original_address > 0
+            and isinstance(retained_address, int)
+            and not isinstance(retained_address, bool)
+            and retained_address > 0
+            and retained_address == original_address
+        )
+        if (
+            record.get("repetition") != expected_index
+            or record.get("valid") is not True
+            or record.get("errors") != []
+            or record.get("direct_reuse_edge_coverage_observed") is not True
+            or record.get("retained_pointer_matches_original") is not True
+            or not valid_pointer
+            or not isinstance(requested_binding, dict)
+            or requested_binding.get("valid") is not True
+            or not isinstance(victim_binding, dict)
+            or victim_binding.get("valid") is not True
+        ):
+            raise SummaryError(
+                f"automatic denial pointer/site binding is invalid for "
+                f"{case_id}: repetition {expected_index}"
+            )
 
 
 def validate_experiment(
@@ -683,6 +784,9 @@ def validate_experiment(
     for key, summary in summaries.items():
         archive, variant = key
         denial_edge = archive == "vulnerable" and variant == "typeiso"
+        clean_exit_required = not (
+            archive == "vulnerable" and variant in {"system", "typeiso"}
+        )
         expected_reuse = 0 if denial_edge else repetitions
         expected_denials = repetitions if denial_edge else 0
         expected_oracle = (
@@ -691,6 +795,10 @@ def validate_experiment(
         )
         if (
             summary["address_reuse_observation_count"] != expected_reuse
+            or (
+                clean_exit_required
+                and summary["clean_exit_count"] != repetitions
+            )
             or summary["matching_reuse_denial_event_count"] != expected_denials
             or summary["bound_replacement_site_count"] != expected_denials
             or summary["expected_oracle_observed"] is not expected_oracle
@@ -699,6 +807,7 @@ def validate_experiment(
                 f"arm causal contract does not validate {case_id}: {key}"
             )
 
+    automatic_probe = automatic_probe_mode(raw, case_id)
     evaluation = raw.get("type_isolation_reuse_edge_evaluation")
     required_true = (
         "validated",
@@ -706,18 +815,81 @@ def validate_experiment(
         "typed_plain_address_reuse_ablation_reproduced",
         "typeiso_reuse_edge_blocked_and_reported",
         "patched_system_control_reproduced",
-        "manual_victim_identity_annotation",
-        "vulnerability_specific_detection_signal",
     )
     required_false = (
         "claim_grade",
-        "compiler_automatic_victim_coverage",
         "source_vulnerability_detection_validated",
     )
     if not isinstance(evaluation, dict) or any(
         evaluation.get(key) is not True for key in required_true
     ) or any(evaluation.get(key) is not False for key in required_false):
         raise SummaryError(f"invalid edge evaluation for {case_id}")
+    assert isinstance(evaluation, dict)
+    if evaluation.get("vulnerability_specific_detection_signal") not in (
+        None,
+        False,
+    ):
+        raise SummaryError(
+            f"vulnerability-specific detection is unsupported for {case_id}"
+        )
+    if "causal_mitigation_true_positive" in evaluation:
+        raise SummaryError(
+            f"legacy TypeIso true-positive semantics are unsupported for {case_id}"
+        )
+    if automatic_probe:
+        coverage_contract = annotation.get("automatic_compiler_coverage_contract")
+        if (
+            not isinstance(coverage_contract, dict)
+            or coverage_contract.get("schema_version") != 1
+            or not isinstance(coverage_contract.get("coverage_scope"), str)
+            or not coverage_contract["coverage_scope"].strip()
+            or evaluation.get("manual_victim_identity_annotation") is not False
+            or evaluation.get("compiler_automatic_victim_coverage") is not True
+            or evaluation.get(
+                "causal_compiler_bound_reuse_edge_mitigation"
+            )
+            is not True
+            or evaluation.get("result_semantics")
+            != "causal_compiler_bound_reuse_edge_mitigation"
+        ):
+            raise SummaryError(
+                f"invalid automatic compiler edge evaluation for {case_id}"
+            )
+        for key, arm in arm_index.items():
+            payload = arm["fingerprint_payload"]
+            if (
+                arm.get("edge_identity_mode") != "compiler_automatic_probe"
+                or payload.get("automatic_edge_identity_probe") is not True
+            ):
+                raise SummaryError(
+                    f"automatic edge identity provenance mismatch for {case_id}: {key}"
+                )
+        typeiso_evidence = arm_index[("vulnerable", "typeiso")].get(
+            "reuse_denial_evidence"
+        )
+        if (
+            not isinstance(typeiso_evidence, dict)
+            or typeiso_evidence.get("compiler_automatic_victim_coverage") is not True
+            or typeiso_evidence.get("manual_victim_identity_annotation") is not False
+            or typeiso_evidence.get("direct_reuse_edge_coverage_observed") is not True
+            or arm_index[("vulnerable", "typeiso")].get("efficacy_eligible")
+            is not True
+            or arm_index[("vulnerable", "typeiso")].get("efficacy_blockers") != []
+        ):
+            raise SummaryError(
+                f"automatic compiler denial binding is invalid for {case_id}"
+            )
+        validate_automatic_denial_repetitions(
+            case_id=case_id,
+            evidence=typeiso_evidence,
+            repetitions=repetitions,
+        )
+    elif (
+        evaluation.get("manual_victim_identity_annotation") is not True
+        or evaluation.get("compiler_automatic_victim_coverage") is not False
+        or evaluation.get("causal_compiler_bound_reuse_edge_mitigation") is True
+    ):
+        raise SummaryError(f"invalid manual edge evaluation for {case_id}")
     if (
         evaluation.get("status") != "cross_identity_reuse_edge_blocked_and_reported"
         or evaluation.get("missing_required_arms") != []
@@ -733,6 +905,119 @@ def validate_experiment(
             key=lambda value: (ARCHIVES.index(value[0]), ALLOCATOR_ORDER[value[1]]),
         )
     ]
+
+
+def summary_boundary(profile: SummaryProfile, automatic_count: int) -> str:
+    if automatic_count == 0:
+        return profile.boundary
+    if automatic_count == len(profile.case_ids):
+        return (
+            "These results validate causal mitigation of compiler-bound measured "
+            "cross-identity reuse edges in the derived scenarios. Allocator-level "
+            "vulnerability-specific detection and full-source automatic vulnerability "
+            "detection remain unvalidated and have zero credited cases."
+        )
+    return (
+        f"These results validate {automatic_count} compiler-automatically attributed "
+        f"and {len(profile.case_ids) - automatic_count} manually attributed bounded "
+        "cross-identity reuse edges in the derived scenarios. Allocator-level "
+        "vulnerability-specific detection and full-source automatic vulnerability "
+        "detection remain unvalidated and have zero credited cases."
+    )
+
+
+def summarized_scenario(
+    *,
+    case_id: str,
+    case: dict[str, Any],
+    scenario: dict[str, Any],
+    raw: dict[str, Any],
+    raw_artifact: dict[str, Any],
+    profile: SummaryProfile,
+    expected_variants: tuple[str, ...] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    verify_json_artifact(raw, raw_artifact, f"{case_id} experiment")
+    arms = validate_experiment(
+        case_id,
+        raw,
+        case,
+        scenario,
+        expected_variants=(
+            expected_variants or profile.expected_variants[case_id]
+        ),
+        typed_allocator_expected_oracle=(
+            profile.typed_allocator_expected_oracle[case_id]
+        ),
+    )
+    raw_record = {**raw_artifact, "case_id": case_id}
+    return (
+        {
+            "advisory_id": case.get(
+                "advisory_id", profile.advisory_ids[case_id]
+            ),
+            "annotation": scenario["type_isolation_edge_annotation"],
+            "automatic_edge_identity_probe": automatic_probe_mode(raw, case_id),
+            "arms": arms,
+            "case_id": case_id,
+            "crate": case["crate"],
+            "edge_evaluation": {
+                **raw["type_isolation_reuse_edge_evaluation"],
+                "vulnerability_specific_detection_signal": False,
+            },
+            "orchestration_success": True,
+            "patched_scenario_source": scenario["patched_source"],
+            "raw_experiment": raw_record,
+            "repetitions_requested": raw["repetitions_requested"],
+            "scenario_id": scenario["scenario_id"],
+            "scenario_source": {
+                "path": scenario["source_path"],
+                "sha256": scenario["source_sha256"],
+            },
+            "typed_allocator_expected_oracle": (
+                profile.typed_allocator_expected_oracle[case_id]
+            ),
+            "unexpected_arm_count": 0,
+        },
+        raw_record,
+    )
+
+
+def completed_summary(
+    *,
+    boundary: str,
+    catalogs: dict[str, Any] | list[dict[str, Any]],
+    scenarios: list[dict[str, Any]],
+    raw_inputs: list[dict[str, Any]],
+    source: str,
+) -> dict[str, Any]:
+    automatic_count = sum(
+        scenario["edge_evaluation"]["compiler_automatic_victim_coverage"] is True
+        for scenario in scenarios
+    )
+    source_validated_count = sum(
+        scenario["edge_evaluation"]["source_vulnerability_detection_validated"]
+        is True
+        for scenario in scenarios
+    )
+    return {
+        "boundary": boundary,
+        "catalog" if isinstance(catalogs, dict) else "catalogs": catalogs,
+        "claim_grade": False,
+        "counts": {
+            "compiler_automatic_victim_coverage_count": automatic_count,
+            "derived_reuse_scenario_count": len(scenarios),
+            "full_source_vulnerability_detection_count": 0,
+            "source_vulnerability_detection_validated_count": source_validated_count,
+            "source_vulnerability_mitigation_inferred_count": 0,
+            "validated_cross_identity_reuse_edge_count": len(scenarios),
+            "vulnerability_specific_detection_signal_count": 0,
+        },
+        "mitigation_inferred": False,
+        "raw_experiment_inputs": raw_inputs,
+        "scenarios": scenarios,
+        "schema_version": 1,
+        "source": source,
+    }
 
 
 def build_summary(
@@ -756,61 +1041,83 @@ def build_summary(
     for case_id in profile.case_ids:
         case, scenario = selected[case_id]
         raw, raw_artifact = experiments[case_id]
-        verify_json_artifact(raw, raw_artifact, f"{case_id} experiment")
-        arms = validate_experiment(
-            case_id,
-            raw,
-            case,
-            scenario,
-            expected_variants=profile.expected_variants[case_id],
-            typed_allocator_expected_oracle=(
-                profile.typed_allocator_expected_oracle[case_id]
-            ),
+        summarized, raw_record = summarized_scenario(
+            case_id=case_id,
+            case=case,
+            scenario=scenario,
+            raw=raw,
+            raw_artifact=raw_artifact,
+            profile=profile,
         )
-        raw_record = {**raw_artifact, "case_id": case_id}
         raw_inputs.append(raw_record)
-        scenarios.append(
-            {
-                "advisory_id": case.get(
-                    "advisory_id", profile.advisory_ids[case_id]
-                ),
-                "annotation": scenario["type_isolation_edge_annotation"],
-                "arms": arms,
-                "case_id": case_id,
-                "crate": case["crate"],
-                "edge_evaluation": raw["type_isolation_reuse_edge_evaluation"],
-                "orchestration_success": True,
-                "patched_scenario_source": scenario["patched_source"],
-                "raw_experiment": raw_record,
-                "repetitions_requested": raw["repetitions_requested"],
-                "scenario_id": scenario["scenario_id"],
-                "scenario_source": {
-                    "path": scenario["source_path"],
-                    "sha256": scenario["source_sha256"],
-                },
-                "typed_allocator_expected_oracle": (
-                    profile.typed_allocator_expected_oracle[case_id]
-                ),
-                "unexpected_arm_count": 0,
-            }
+        scenarios.append(summarized)
+    automatic_count = sum(
+        scenario["edge_evaluation"]["compiler_automatic_victim_coverage"] is True
+        for scenario in scenarios
+    )
+    return completed_summary(
+        boundary=summary_boundary(profile, automatic_count),
+        catalogs=catalog_artifact,
+        scenarios=scenarios,
+        raw_inputs=raw_inputs,
+        source=profile.source,
+    )
+
+
+def build_automatic12_summary(
+    catalogs: Mapping[
+        str, tuple[dict[str, Any], dict[str, Any]]
+    ],
+    experiments: dict[str, tuple[dict[str, Any], dict[str, Any]]],
+) -> dict[str, Any]:
+    required_profiles = tuple(dict.fromkeys(AUTOMATIC12_CASE_PROFILES.values()))
+    if set(catalogs) != set(required_profiles):
+        raise SummaryError("automatic12 catalogs do not match the profile set")
+    if set(experiments) != set(AUTOMATIC12_CASE_IDS):
+        raise SummaryError("automatic12 experiments must contain exactly 12 cases")
+    selected_by_profile: dict[
+        str, dict[str, tuple[dict[str, Any], dict[str, Any]]]
+    ] = {}
+    catalog_records = []
+    for profile_name in required_profiles:
+        profile = PROFILES[profile_name]
+        catalog, catalog_artifact = catalogs[profile_name]
+        verify_json_artifact(catalog, catalog_artifact, f"{profile_name} catalog")
+        selected_by_profile[profile_name] = catalog_inputs(catalog, profile)
+        catalog_records.append({**catalog_artifact, "profile": profile_name})
+
+    scenarios = []
+    raw_inputs = []
+    for case_id in AUTOMATIC12_CASE_IDS:
+        profile_name = AUTOMATIC12_CASE_PROFILES[case_id]
+        profile = PROFILES[profile_name]
+        case, scenario = selected_by_profile[profile_name][case_id]
+        raw, raw_artifact = experiments[case_id]
+        summarized, raw_record = summarized_scenario(
+            case_id=case_id,
+            case=case,
+            scenario=scenario,
+            raw=raw,
+            raw_artifact=raw_artifact,
+            profile=profile,
+            expected_variants=("system", "typed_plain", "typeiso"),
         )
-    return {
-        "boundary": profile.boundary,
-        "catalog": catalog_artifact,
-        "claim_grade": False,
-        "counts": {
-            "compiler_automatic_victim_coverage_count": 0,
-            "derived_reuse_scenario_count": len(scenarios),
-            "source_vulnerability_detection_validated_count": 0,
-            "source_vulnerability_mitigation_inferred_count": 0,
-            "validated_cross_identity_reuse_edge_count": len(scenarios),
-        },
-        "mitigation_inferred": False,
-        "raw_experiment_inputs": raw_inputs,
-        "scenarios": scenarios,
-        "schema_version": 1,
-        "source": profile.source,
-    }
+        if summarized["automatic_edge_identity_probe"] is not True:
+            raise SummaryError(f"automatic12 requires automatic evidence for {case_id}")
+        scenarios.append(summarized)
+        raw_inputs.append(raw_record)
+    return completed_summary(
+        boundary=(
+            "These 12 results validate causal mitigation of compiler-bound measured "
+            "cross-identity reuse edges in the derived scenarios. Allocator-level "
+            "vulnerability-specific detection and full-source automatic vulnerability "
+            "detection remain unvalidated and have zero credited cases."
+        ),
+        catalogs=catalog_records,
+        scenarios=scenarios,
+        raw_inputs=raw_inputs,
+        source=AUTOMATIC12_SOURCE,
+    )
 
 
 def experiment_selections(
@@ -838,12 +1145,62 @@ def experiment_selections(
     return result
 
 
+def automatic12_experiment_selections(
+    values: Sequence[str] | None,
+) -> dict[str, pathlib.Path]:
+    if not values:
+        return dict(AUTOMATIC12_DEFAULT_EXPERIMENTS)
+    result: dict[str, pathlib.Path] = {}
+    for value in values:
+        if "=" not in value:
+            raise SummaryError("automatic12 experiments must use CASE=PATH")
+        case_id, raw_path = value.split("=", 1)
+        if case_id not in AUTOMATIC12_CASE_IDS or not raw_path:
+            raise SummaryError(f"invalid experiment selection: {value}")
+        if case_id in result:
+            raise SummaryError(f"duplicate experiment case selection: {case_id}")
+        result[case_id] = pathlib.Path(raw_path).expanduser().resolve()
+    if set(result) != set(AUTOMATIC12_CASE_IDS):
+        raise SummaryError("automatic12 requires one experiment for every case")
+    return result
+
+
+def automatic12_catalog_selections(
+    values: Sequence[str] | None,
+) -> dict[str, pathlib.Path]:
+    required_profiles = tuple(dict.fromkeys(AUTOMATIC12_CASE_PROFILES.values()))
+    if not values:
+        return {
+            profile_name: PROFILES[profile_name].catalog_path
+            for profile_name in required_profiles
+        }
+    result: dict[str, pathlib.Path] = {}
+    for value in values:
+        if "=" not in value:
+            raise SummaryError("catalog fragments must use PROFILE=PATH")
+        profile_name, raw_path = value.split("=", 1)
+        if profile_name not in required_profiles or not raw_path:
+            raise SummaryError(f"invalid catalog fragment: {value}")
+        if profile_name in result:
+            raise SummaryError(f"duplicate catalog profile: {profile_name}")
+        result[profile_name] = pathlib.Path(raw_path).expanduser().resolve()
+    if set(result) != set(required_profiles):
+        raise SummaryError("automatic12 requires every catalog profile")
+    return result
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--profile", choices=tuple(PROFILES), default="expansion"
+        "--profile", choices=(*PROFILES, "automatic12"), default="expansion"
     )
     parser.add_argument("--catalog", type=pathlib.Path)
+    parser.add_argument(
+        "--catalog-fragment",
+        action="append",
+        metavar="PROFILE=PATH",
+        help="override one automatic12 catalog fragment",
+    )
     parser.add_argument(
         "--experiment",
         action="append",
@@ -860,20 +1217,47 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        profile = PROFILES[args.profile]
-        selections = experiment_selections(profile, args.experiment)
-        catalog_path = (args.catalog or profile.catalog_path).expanduser().resolve()
-        experiments = {
-            case_id: load_json_artifact(path, case_id)
-            for case_id, path in selections.items()
-        }
-        catalog, catalog_artifact = load_json_artifact(catalog_path, "catalog")
-        summary = build_summary(
-            catalog,
-            catalog_artifact,
-            experiments,
-            profile_name=args.profile,
-        )
+        if args.profile == "automatic12":
+            if args.catalog is not None:
+                raise SummaryError(
+                    "automatic12 uses --catalog-fragment for its catalog set"
+                )
+            selections = automatic12_experiment_selections(args.experiment)
+            experiments = {
+                case_id: load_json_artifact(path, case_id)
+                for case_id, path in selections.items()
+            }
+            catalog_paths = automatic12_catalog_selections(
+                args.catalog_fragment
+            )
+            catalogs = {
+                profile_name: load_json_artifact(path, f"{profile_name} catalog")
+                for profile_name, path in catalog_paths.items()
+            }
+            summary = build_automatic12_summary(catalogs, experiments)
+        else:
+            if args.catalog_fragment:
+                raise SummaryError(
+                    "--catalog-fragment is reserved for automatic12"
+                )
+            profile = PROFILES[args.profile]
+            selections = experiment_selections(profile, args.experiment)
+            catalog_path = (
+                args.catalog or profile.catalog_path
+            ).expanduser().resolve()
+            experiments = {
+                case_id: load_json_artifact(path, case_id)
+                for case_id, path in selections.items()
+            }
+            catalog, catalog_artifact = load_json_artifact(
+                catalog_path, "catalog"
+            )
+            summary = build_summary(
+                catalog,
+                catalog_artifact,
+                experiments,
+                profile_name=args.profile,
+            )
         rendered = json.dumps(summary, indent=2, sort_keys=True) + "\n"
         if args.output is None:
             sys.stdout.write(rendered)

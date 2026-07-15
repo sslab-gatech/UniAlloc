@@ -1117,7 +1117,7 @@ impl SemanticStats {
     fn record_type_cache_wrong_identity_denial(
         &self,
         requested: AllocationMetadata,
-        retained: TypeCacheIdentity,
+        retained: TypeCacheWrongIdentityCandidate,
         layout: Layout,
     ) {
         self.typed_cache_wrong_identity_denials
@@ -1125,17 +1125,18 @@ impl SemanticStats {
         self.last_wrong_identity_requested_type_id
             .store(requested.type_id, Ordering::Relaxed);
         self.last_wrong_identity_retained_type_id
-            .store(retained.type_id, Ordering::Relaxed);
+            .store(retained.identity.type_id, Ordering::Relaxed);
         self.last_wrong_identity_requested_module_id
             .store(requested.module_id, Ordering::Relaxed);
         self.last_wrong_identity_retained_module_id
-            .store(retained.module_id, Ordering::Relaxed);
+            .store(retained.identity.module_id, Ordering::Relaxed);
         self.last_wrong_identity_requested_callsite
             .store(requested.callsite, Ordering::Relaxed);
         self.last_wrong_identity_size
             .store(layout.size(), Ordering::Relaxed);
         self.last_wrong_identity_align
             .store(layout.align(), Ordering::Relaxed);
+        store_last_wrong_identity_retained_ptr(retained.ptr as usize);
     }
 
     #[inline]
@@ -1221,6 +1222,7 @@ impl SemanticStats {
             .store(0, Ordering::Relaxed);
         self.last_wrong_identity_size.store(0, Ordering::Relaxed);
         self.last_wrong_identity_align.store(0, Ordering::Relaxed);
+        store_last_wrong_identity_retained_ptr(0);
         self.delayed_free_enqueues.store(0, Ordering::Relaxed);
         self.delayed_free_flushes.store(0, Ordering::Relaxed);
         self.metadata_pac_auth_signs.store(0, Ordering::Relaxed);
@@ -1692,6 +1694,20 @@ pub struct SemanticScopeDepthSnapshot {
 }
 
 pub static SEMANTIC_STATS: SemanticStats = SemanticStats::new();
+/// ABI-neutral companion for the last stats-only wrong-identity denial.
+///
+/// The public `SemanticStatsSnapshot` remains unchanged. Evaluation reporters
+/// read this value through `semantic_stats_last_wrong_identity_retained_ptr`.
+#[cfg(feature = "stats")]
+static LAST_WRONG_IDENTITY_RETAINED_PTR: AtomicUsize = AtomicUsize::new(0);
+
+#[inline]
+fn store_last_wrong_identity_retained_ptr(ptr: usize) {
+    #[cfg(feature = "stats")]
+    LAST_WRONG_IDENTITY_RETAINED_PTR.store(ptr, Ordering::Relaxed);
+    #[cfg(not(feature = "stats"))]
+    let _ = ptr;
+}
 pub static SEMANTIC_FALLBACK_ATTRIBUTION: SemanticFallbackAttribution =
     SemanticFallbackAttribution::new();
 pub static SEMANTIC_METADATA_VALIDATION: SemanticMetadataValidation =
@@ -2003,6 +2019,25 @@ struct TypeCacheIdentity {
     flags: u32,
     lifetime_hint: u16,
     placement_hint: u16,
+}
+
+/// One authenticated same-layout owner selected by stats-only diagnostics.
+///
+/// This companion keeps the pointer out of `TypeCacheIdentity` and all cache
+/// entries, so enabling the proof signal does not change cache layout or the
+/// production lookup policy.
+#[derive(Clone, Copy)]
+struct TypeCacheWrongIdentityCandidate {
+    identity: TypeCacheIdentity,
+    ptr: *mut u8,
+}
+
+impl TypeCacheWrongIdentityCandidate {
+    #[inline]
+    fn new(identity: TypeCacheIdentity, ptr: *mut u8) -> Self {
+        debug_assert!(!ptr.is_null());
+        Self { identity, ptr }
+    }
 }
 
 impl TypeCacheIdentity {
@@ -2640,7 +2675,11 @@ impl TypeCacheDepotShard {
         cache_key: u64,
         policy_key: u32,
         key_start: usize,
-    ) -> (Option<SegregatedTypeCacheEntry>, Option<TypeCacheIdentity>) {
+        record_foreign: bool,
+    ) -> (
+        Option<SegregatedTypeCacheEntry>,
+        Option<TypeCacheWrongIdentityCandidate>,
+    ) {
         let mut foreign = None;
         let mut offset = 0usize;
         while offset < TYPE_CACHE_DEPOT_KEY_PROBE_LIMIT {
@@ -2667,14 +2706,26 @@ impl TypeCacheDepotShard {
                 self.retained_bytes = self.retained_bytes.saturating_sub(entry.retained_bytes());
                 return (Some(entry), foreign);
             }
-            if foreign.is_none()
+            if record_foreign
+                && foreign.is_none()
                 && key.active
                 && key.size == layout.size()
                 && key.align == layout.align()
                 && key.policy_key == policy_key
                 && key.identity != identity
             {
-                foreign = Some(key.identity);
+                let entry_idx = key.head;
+                if key.count == 0 || entry_idx >= TYPE_CACHE_DEPOT_SHARD_SLOTS {
+                    panic!("type-cache depot directory corrupt");
+                }
+                let entry = self.entries[entry_idx];
+                if !entry.matches_cached_key(layout, key.identity, key.cache_key, key.policy_key) {
+                    panic!("type-cache depot directory corrupt");
+                }
+                foreign = Some(TypeCacheWrongIdentityCandidate::new(
+                    key.identity,
+                    entry.ptr,
+                ));
             }
             offset += 1;
         }
@@ -9557,7 +9608,11 @@ unsafe fn record_small_exact_type_cache_wrong_identity_denial_if_present(
             && entry.align == layout.align()
             && entry.identity != requested
         {
-            record_stats_type_cache_wrong_identity_denial(metadata, entry.identity, layout);
+            record_stats_type_cache_wrong_identity_denial(
+                metadata,
+                TypeCacheWrongIdentityCandidate::new(entry.identity, entry.ptr),
+                layout,
+            );
             return;
         }
         idx += 1;
@@ -9591,7 +9646,7 @@ unsafe fn push_inline_type_cache_eligible_with_key(
 unsafe fn plain_type_cache_wrong_identity_candidate(
     layout: Layout,
     metadata: AllocationMetadata,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let requested = TypeCacheIdentity::from_metadata(metadata);
     let inline = INLINE_TYPE_CACHE_ENTRY;
     if !inline.is_empty()
@@ -9599,7 +9654,10 @@ unsafe fn plain_type_cache_wrong_identity_candidate(
         && inline.align == layout.align()
         && inline.identity != requested
     {
-        return Some(inline.identity);
+        return Some(TypeCacheWrongIdentityCandidate::new(
+            inline.identity,
+            inline.ptr,
+        ));
     }
 
     let mut slot_idx = 0usize;
@@ -9610,7 +9668,10 @@ unsafe fn plain_type_cache_wrong_identity_candidate(
             && !slot.is_corrupt()
             && (slot.head as usize) & (layout.align() - 1) == 0
         {
-            return Some(slot.identity);
+            return Some(TypeCacheWrongIdentityCandidate::new(
+                slot.identity,
+                slot.head,
+            ));
         }
         slot_idx += 1;
     }
@@ -9882,7 +9943,7 @@ fn segregated_type_cache_entry_wrong_identity_candidate(
     layout: Layout,
     requested: TypeCacheIdentity,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     if entry.is_empty() {
         return None;
     }
@@ -9896,7 +9957,7 @@ fn segregated_type_cache_entry_wrong_identity_candidate(
         && entry.policy_key == policy_key
         && retained != requested
     {
-        Some(retained)
+        Some(TypeCacheWrongIdentityCandidate::new(retained, entry.ptr))
     } else {
         None
     }
@@ -9908,7 +9969,7 @@ unsafe fn segregated_type_cache_wrong_identity_candidate_in_inline_domain(
     requested: TypeCacheIdentity,
     policy_key: u32,
     cache_domain: u8,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let mut index = 0usize;
     while index < inline_segregated_type_cache_capacity(cache_domain) {
         let entry = *inline_segregated_type_cache_entry_at(cache_domain, index);
@@ -9928,7 +9989,7 @@ fn segregated_type_cache_wrong_identity_candidate_in_buckets(
     layout: Layout,
     requested: TypeCacheIdentity,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let mut bucket_index = 0usize;
     while bucket_index < TYPE_CACHE_SLOTS {
         let bucket = cache[bucket_index];
@@ -9953,7 +10014,7 @@ unsafe fn segregated_type_cache_wrong_identity_candidate(
     layout: Layout,
     metadata: AllocationMetadata,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let requested = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     let candidate = {
@@ -10234,10 +10295,18 @@ unsafe fn pop_type_cache_depot_with_key(
     if TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].load(Ordering::Acquire) == 0 {
         return None;
     }
+    let record_foreign = semantic_stats_recording_flags() & SLOW_PATH_STATS != 0;
     let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
     let old_entries = shard.count;
     let old_bytes = shard.retained_bytes;
-    let (entry, foreign) = shard.pop(layout, identity, cache_key, policy_key, slot);
+    let (entry, foreign) = shard.pop(
+        layout,
+        identity,
+        cache_key,
+        policy_key,
+        slot,
+        record_foreign,
+    );
     if entry.is_some() {
         note_type_cache_depot_occupancy_change(
             old_entries,
@@ -16526,6 +16595,23 @@ pub fn semantic_stats_snapshot() -> SemanticStatsSnapshot {
     SEMANTIC_STATS.snapshot()
 }
 
+/// Return the exact retained address selected by the latest wrong-identity
+/// denial recorded while aggregate semantic stats were enabled.
+///
+/// Zero means that no such event has been recorded since the latest stats
+/// reset. Keeping this proof value in a companion atomic preserves the
+/// size-negotiated `SemanticStatsSnapshot` ABI.
+pub fn semantic_stats_last_wrong_identity_retained_ptr() -> usize {
+    #[cfg(feature = "stats")]
+    {
+        LAST_WRONG_IDENTITY_RETAINED_PTR.load(Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "stats"))]
+    {
+        0
+    }
+}
+
 pub fn semantic_fallback_attribution_snapshot() -> SemanticFallbackAttributionSnapshot {
     SEMANTIC_FALLBACK_ATTRIBUTION.snapshot()
 }
@@ -16982,7 +17068,7 @@ fn record_stats_type_cache_bypass(metadata: AllocationMetadata) {
 #[inline]
 fn record_stats_type_cache_wrong_identity_denial(
     requested: AllocationMetadata,
-    retained: TypeCacheIdentity,
+    retained: TypeCacheWrongIdentityCandidate,
     layout: Layout,
 ) {
     let flags = semantic_stats_recording_flags();
@@ -26959,11 +27045,17 @@ mod tests {
             "module identity must authorize small reuse"
         );
         #[cfg(feature = "stats")]
-        assert_eq!(
-            semantic_stats_snapshot().typed_cache_wrong_identity_denials,
-            1,
-            "a same-layout foreign request should retain denial evidence"
-        );
+        {
+            assert_eq!(
+                semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+                1,
+                "a same-layout foreign request should retain denial evidence"
+            );
+            assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+        }
         let policy_mismatch = exact.with_flags(FLAG_TYPE_ISOLATED | FLAG_FORCE_INITIALIZE);
         let policy_ptr = unsafe { alloc.alloc_with_metadata(layout, policy_mismatch) };
         assert!(!policy_ptr.is_null());
@@ -27638,6 +27730,54 @@ mod tests {
             alloc.dealloc_raw(exact_ptr, layout);
             clear_type_cache_for_test();
         }
+    }
+
+    #[cfg(all(feature = "stats", not(feature = "fixed_heap")))]
+    #[test]
+    fn hosted_type_cache_depot_wrong_identity_candidate_carries_authenticated_head() {
+        let _guard = test_guard();
+        semantic_stats_reset();
+
+        let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+        let layout = Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+        let retained = AllocationMetadata::for_type(0xC003_D311)
+            .with_module(0xC0DE_D311)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let requested = AllocationMetadata::for_type(0xC003_D312)
+            .with_module(0xC0DE_D312)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = storage.as_mut_ptr() as *mut u8;
+        let entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(retained),
+            segregated_type_cache_policy_key(retained),
+            ptr,
+            layout,
+            retained,
+        );
+        let key_start = type_cache_depot_slot_for_entry(entry);
+        let mut shard = TypeCacheDepotShard::empty();
+        assert!(shard.push(entry, key_start).unwrap().is_none());
+
+        let (hit, candidate) = shard.pop(
+            layout,
+            TypeCacheIdentity::from_metadata(requested),
+            type_cache_identity_key(requested),
+            segregated_type_cache_policy_key(requested),
+            key_start,
+            true,
+        );
+        assert!(hit.is_none());
+        let candidate = candidate.expect("same-layout foreign depot head");
+        assert_eq!(
+            candidate.identity,
+            TypeCacheIdentity::from_metadata(retained)
+        );
+        assert_eq!(candidate.ptr, ptr);
+        record_stats_type_cache_wrong_identity_denial(requested, candidate, layout);
+        assert_eq!(
+            semantic_stats_last_wrong_identity_retained_ptr(),
+            ptr as usize
+        );
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -38226,6 +38366,10 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_size, layout.size());
             assert_eq!(snap.last_wrong_identity_align, layout.align());
             assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(
                 pop_semantic_type_cache(layout, retained),
                 Some(ptr),
                 "a denied wrong-identity reuse must preserve the retained object for its exact owner"
@@ -38278,10 +38422,48 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_size, layout.size());
             assert_eq!(snap.last_wrong_identity_align, layout.align());
             assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(
                 pop_semantic_type_cache(layout, retained),
                 Some(ptr),
                 "a segregated denial must preserve the retained object for its exact owner"
             );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn linked_plain_type_cache_reports_exact_retained_head_pointer() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D071)
+                .with_module(0xC0DE_D071)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let requested = AllocationMetadata::for_type(0xC002_D072)
+                .with_module(0xC0DE_D072)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(ptr, layout, retained));
+            assert_eq!(pop_semantic_type_cache(layout, requested), None);
+            assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(pop_semantic_type_cache(layout, retained), Some(ptr));
         }
     }
 
@@ -38405,6 +38587,7 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_requested_callsite, 0);
             assert_eq!(snap.last_wrong_identity_size, 0);
             assert_eq!(snap.last_wrong_identity_align, 0);
+            assert_eq!(semantic_stats_last_wrong_identity_retained_ptr(), 0);
 
             assert_eq!(pop_semantic_type_cache(layout, retained), Some(ptr));
         }

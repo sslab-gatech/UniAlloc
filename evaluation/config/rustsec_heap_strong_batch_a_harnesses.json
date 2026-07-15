@@ -492,12 +492,38 @@
           ],
           "scenario_id": "RSH-052-derived-reuse",
           "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-052/derived_reuse.rs",
-          "source_sha256": "cdd44d6c44abe607e279ccad026f1883a134536fbfc51548201995b35df43b71",
+          "source_sha256": "3c77d1f9e573578d60751a8a5bc2a6d6322924220a7d0c43929dc1f0aca75880",
           "type_isolation_edge_annotation": {
             "annotation_scope": [
               "string-interner get_or_intern 64-byte Box<str> victim allocation",
               "old StringInterner drop 64-byte Box<str> victim reclaim"
             ],
+            "automatic_compiler_coverage_contract": {
+              "coverage_scope": "source_shaped_derived",
+              "replacement": {
+                "rewrite_statuses": [
+                  "actual_semantic_scope_generic_type_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<witness::Replacement",
+                "source_file_fragment": "src/witness.rs:73:"
+              },
+              "schema_version": 1,
+              "victim": {
+                "allow_preserved_origin_module": true,
+                "origin": {
+                  "rewrite_statuses": [
+                    "actual_semantic_scope_enter_exit_rewrite_applied"
+                  ],
+                  "semantic_type_fragment": "std::string::String",
+                  "source_file_fragment": "src/witness.rs:40:27:"
+                },
+                "rewrite_statuses": [
+                  "actual_semantic_ownership_transfer_rewrite_applied"
+                ],
+                "semantic_type_fragment": "Box<str",
+                "source_file_fragment": "/src/lib.rs:334:38:"
+              }
+            },
             "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
             "expected_layout": {
               "align": 1,

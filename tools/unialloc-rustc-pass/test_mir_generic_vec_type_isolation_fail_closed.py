@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove generic Vec<T> scopes fail closed while concrete same-layout Vec scopes isolate."""
+"""Prove generic Vec<T> capacity scopes use monomorphized runtime identities."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ PROBE_NAME = "generic_vec_type_isolation_probe"
 GENERIC_FUNCTION = "generic_roundtrip"
 PRODUCER_FUNCTION = "make_producer"
 CONSUMER_FUNCTION = "make_consumer"
-APPLIED_SCOPE_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
+APPLIED_SCOPE_STATUS = "actual_semantic_scope_generic_type_rewrite_applied"
 TYPE_ISOLATED = 0x1
 OBJECTS = 4
 CAPACITY = 8
@@ -65,6 +65,9 @@ def write_probe(workspace: Path, toolchain: str) -> Path:
         # UniAlloc already depends on lock_api through spin. Pin that existing
         # transitive dependency so the transient fixture remains Rust-1.64 compatible.
         legacy_lock_pin = 'lock_api = "=0.4.3"\n'
+    spin_candidates = sorted((Path.home() / ".cargo/registry/src").glob("*/spin-0.9.0"))
+    assert spin_candidates, "spin 0.9.0 must be present in the Cargo source cache"
+    spin = json.dumps(str(spin_candidates[-1]))
     (app / "Cargo.toml").write_text(
         f'''[package]
 name = "{PROBE_NAME.replace('_', '-')}"
@@ -73,6 +76,9 @@ edition = "2021"
 
 {app_features}[dependencies]
 {legacy_lock_pin}unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = [{feature_text}] }}
+
+[patch.crates-io]
+spin = {{ path = {spin} }}
 ''',
         encoding="utf-8",
     )
@@ -86,7 +92,7 @@ use unialloc::{{
     semantic_auto_metadata_disable, semantic_fallback_attribution_snapshot,
     semantic_metadata_validation_snapshot, semantic_stats_recording_disable,
     semantic_stats_reset, semantic_stats_snapshot, semantic_type_stats_recording_disable,
-    semantic_type_stats_snapshot, type_isolation_side_cache_snapshot,
+    semantic_type_id, semantic_type_stats_snapshot, type_isolation_side_cache_snapshot,
     SemanticTypeStatsSnapshot, UniAlloc,
 }};
 
@@ -267,10 +273,9 @@ fn main() {{
     assert_eq!(align_of::<Producer>(), align_of::<Consumer>());
     assert_eq!(size_of::<Producer>(), {PAYLOAD_BYTES});
 
-    // Ordinary Rust application: there are no manual metadata ABI calls.
-    // Generic MIR must stay audit-only until a concrete type identity is
-    // available. The concrete controls below prove actual MIR scopes still
-    // isolate two same-layout payload types.
+    // Ordinary Rust application: there are no manual metadata ABI calls. The
+    // rewritten generic helper computes Vec<Concrete>'s TypeId after
+    // monomorphization; the controls below prove exact same-layout isolation.
     semantic_auto_metadata_disable();
     semantic_stats_reset();
 
@@ -373,6 +378,8 @@ fn main() {{
             "\\\"capacity\\\":{{}},",
             "\\\"payload_bytes\\\":{{}},",
             "\\\"allocation_bytes\\\":{{}},",
+            "\\\"producer_vec_type_id\\\":{{}},",
+            "\\\"consumer_vec_type_id\\\":{{}},",
             "\\\"generic_typed_allocations\\\":{{}},",
             "\\\"generic_typed_deallocations\\\":{{}},",
             "\\\"generic_typed_cache_hits\\\":{{}},",
@@ -410,6 +417,8 @@ fn main() {{
         CAPACITY,
         size_of::<Producer>(),
         CAPACITY * size_of::<Producer>(),
+        semantic_type_id::<Vec<Producer>>(),
+        semantic_type_id::<Vec<Consumer>>(),
         generic_stats.typed_allocations,
         generic_stats.typed_deallocations,
         generic_stats.typed_cache_hits,
@@ -523,7 +532,7 @@ def _or_flags(rows: list[dict[str, object]]) -> int:
     return flags
 
 
-def validate_generic_fail_closed(audit: dict[str, object]) -> dict[str, object]:
+def validate_generic_runtime_identity(audit: dict[str, object]) -> dict[str, object]:
     rows = audit.get("rewrite_candidates")
     assert isinstance(rows, list), rows
     generic_rows = [
@@ -539,11 +548,7 @@ def validate_generic_fail_closed(audit: dict[str, object]) -> dict[str, object]:
         if "applied" in str(row.get("rewrite_status") or "")
         or "planned" in str(row.get("rewrite_status") or "")
     ]
-    assert not lowered, (
-        "generic MIR must not receive a callsite-shared typed scope before "
-        "monomorphized type evidence exists",
-        lowered,
-    )
+    assert len(lowered) == 1, lowered
 
     capacity_rows = [
         row
@@ -553,26 +558,19 @@ def validate_generic_fail_closed(audit: dict[str, object]) -> dict[str, object]:
     ]
     assert len(capacity_rows) == 1, capacity_rows
     capacity = capacity_rows[0]
-    assert (
-        capacity.get("lowering_kind")
-        == "semantic_scope_unsolved_heap_object_candidate"
+    assert capacity.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", capacity
+    assert capacity.get("rewrite_status") == APPLIED_SCOPE_STATUS, capacity
+    assert capacity.get("replacement_resolution_status") == (
+        "resolved_unialloc_semantic_scope_push_for_rust_type_pop"
     ), capacity
-    assert (
-        capacity.get("rewrite_status")
-        == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+    assert capacity.get("metadata_pairing_contract") == (
+        "semantic_scope_monomorphized_runtime_type_metadata"
     ), capacity
-    assert (
-        capacity.get("replacement_resolution_status")
-        == "rustc_middle_heap_object_type_not_solved"
-    ), capacity
-    assert (
-        capacity.get("metadata_pairing_contract")
-        == "audit_only_unresolved_heap_object_type"
-    ), capacity
-    assert capacity.get("semantic_object_type") == "<unknown-heap-object-type>", capacity
-    assert (
-        capacity.get("type_id_basis")
-        == "rustc_middle_type_solver_failed_callsite_fallback"
+    assert "Vec<T" in str(capacity.get("semantic_object_type") or ""), capacity
+    assert capacity.get("type_id_basis") == "monomorphized_compiler_type_id_runtime", capacity
+    assert int(capacity.get("type_id") or 0) == 0, capacity
+    assert capacity.get("replacement_symbol") == (
+        "__unialloc_semantic_scope_push_for_rust_type"
     ), capacity
     assert int(capacity.get("callsite") or 0) != 0, capacity
 
@@ -590,7 +588,7 @@ def validate_generic_fail_closed(audit: dict[str, object]) -> dict[str, object]:
         assert row.get("metadata_pairing_contract") == "audit_only_generic_drop_type", row
 
     return {
-        "generic_scope_mode": "audit_only_unresolved",
+        "generic_scope_mode": "monomorphized_compiler_type_id_runtime",
         "generic_row_count": len(generic_rows),
         "generic_drop_skip_count": len(generic_drop_skips),
         "with_capacity_row": capacity,
@@ -605,7 +603,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert summary.get("actual_semantic_scope_rewrite_requested") is True, summary
     assert summary.get("actual_semantic_scope_rewrite") is True, summary
     assert int(summary.get("semantic_scope_rewrite_applied_count") or 0) >= 2, summary
-    generic_audit = validate_generic_fail_closed(audit)
+    generic_audit = validate_generic_runtime_identity(audit)
 
     producer_rows = applied_capacity_rows(audit, PRODUCER_FUNCTION, "Producer")
     consumer_rows = applied_capacity_rows(audit, CONSUMER_FUNCTION, "Consumer")
@@ -613,11 +611,8 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert len(consumer_rows) == 1, consumer_rows
     producer_row = producer_rows[0]
     consumer_row = consumer_rows[0]
-    producer_type_id = int(producer_row.get("type_id") or 0)
-    consumer_type_id = int(consumer_row.get("type_id") or 0)
-    assert producer_type_id != 0, producer_row
-    assert consumer_type_id != 0, consumer_row
-    assert producer_type_id != consumer_type_id, (producer_row, consumer_row)
+    assert int(producer_row.get("type_id") or 0) == 0, producer_row
+    assert int(consumer_row.get("type_id") or 0) == 0, consumer_row
     assert int(producer_row.get("module_id") or 0) != 0, producer_row
     assert int(producer_row.get("module_id") or 0) == int(consumer_row.get("module_id") or 0), (
         producer_row,
@@ -627,22 +622,29 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         assert int(row.get("callsite") or 0) != 0, row
         assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
         assert isinstance(row.get("semantic_scope_unwind_pop_inserted"), bool), row
+        assert row.get("type_id_basis") == "monomorphized_compiler_type_id_runtime", row
+        assert row.get("replacement_symbol") == "__unialloc_semantic_scope_push_for_rust_type", row
 
     runtime = load_runtime(stdout)
+    producer_type_id = int(runtime["producer_vec_type_id"])
+    consumer_type_id = int(runtime["consumer_vec_type_id"])
+    assert producer_type_id != 0, runtime
+    assert consumer_type_id != 0, runtime
+    assert producer_type_id != consumer_type_id, runtime
     assert int(runtime["objects"]) == OBJECTS, runtime
     assert int(runtime["capacity"]) == CAPACITY, runtime
     assert int(runtime["payload_bytes"]) == PAYLOAD_BYTES, runtime
     assert int(runtime["allocation_bytes"]) == ALLOCATION_BYTES, runtime
     for field, expected in (
-        ("generic_typed_allocations", 0),
-        ("generic_typed_deallocations", 0),
-        ("generic_typed_cache_hits", 0),
-        ("generic_typed_cache_inserts", 0),
-        ("generic_fallback_allocations", OBJECTS * 2),
-        ("generic_fallback_deallocations", OBJECTS * 2),
-        ("generic_raw_alloc_no_metadata", OBJECTS * 2),
-        ("generic_raw_alloc_no_metadata_bytes", ALLOCATION_BYTES * OBJECTS * 2),
-        ("generic_raw_dealloc_no_metadata", OBJECTS * 2),
+        ("generic_typed_allocations", OBJECTS * 2),
+        ("generic_typed_deallocations", OBJECTS * 2),
+        ("generic_typed_cache_hits", (OBJECTS - 1) * 2),
+        ("generic_typed_cache_inserts", OBJECTS * 2),
+        ("generic_fallback_allocations", 0),
+        ("generic_fallback_deallocations", 0),
+        ("generic_raw_alloc_no_metadata", 0),
+        ("generic_raw_alloc_no_metadata_bytes", 0),
+        ("generic_raw_dealloc_no_metadata", 0),
         ("generic_raw_realloc_no_metadata", 0),
         ("generic_recovery_identity_mismatches", 0),
         ("generic_side_cache_corrupt_slots", 0),
@@ -665,7 +667,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     for field, expected in (
         ("typed_allocations", OBJECTS * 3),
         ("typed_deallocations", OBJECTS * 3),
-        ("typed_cache_hits", OBJECTS),
+        ("typed_cache_hits", OBJECTS + 2),
         ("typed_cache_inserts", OBJECTS * 3),
         ("fallback_allocations", 0),
         ("fallback_deallocations", 0),
@@ -686,9 +688,9 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "allocations": OBJECTS * 2,
         "allocated_bytes": ALLOCATION_BYTES * OBJECTS * 2,
         "deallocations": OBJECTS * 2,
-        "cache_hits": OBJECTS,
+        "cache_hits": OBJECTS + 1,
         "cache_inserts": OBJECTS * 2,
-        "cache_bypasses": OBJECTS,
+        "cache_bypasses": OBJECTS - 1,
         "observed_alloc_sizes": [ALLOCATION_BYTES],
         "observed_dealloc_sizes": [ALLOCATION_BYTES],
     }
@@ -696,9 +698,9 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "allocations": OBJECTS,
         "allocated_bytes": ALLOCATION_BYTES * OBJECTS,
         "deallocations": OBJECTS,
-        "cache_hits": 0,
+        "cache_hits": 1,
         "cache_inserts": OBJECTS,
-        "cache_bypasses": OBJECTS,
+        "cache_bypasses": OBJECTS - 1,
         "observed_alloc_sizes": [ALLOCATION_BYTES],
         "observed_dealloc_sizes": [ALLOCATION_BYTES],
     }
@@ -812,8 +814,8 @@ def main() -> int:
                 "benchmark": False,
                 "boundaries": [
                     "Functional compiler-pass and allocator type-isolation regression only; no benchmark or performance claim.",
-                    "Generic Vec<T> allocation and Drop remain audit-only/raw fallback; this is a safety proof, not positive generic type-isolation coverage.",
-                    "Concrete same-layout Vec<Producer>/Vec<Consumer> controls prove distinct compiler type identities and exact typed-cache isolation on one host invocation, not universal Vec coverage.",
+                    "Exact Global Vec<T>::with_capacity uses a monomorphized compiler-TypeId helper; generic Drop remains unwrapped and reclaims through authenticated allocation records.",
+                    "Same-layout Vec<Producer>/Vec<Consumer> executions prove distinct runtime type identities and exact typed-cache isolation for the authenticated capacity constructor on one host invocation.",
                 ],
                 "evidence": evidence,
             },

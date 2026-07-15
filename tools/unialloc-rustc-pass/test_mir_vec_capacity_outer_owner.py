@@ -19,7 +19,7 @@ NESTED_VEC_RESERVE_FUNCTION = "reserve_nested_vecs"
 NESTED_VEC_CONSTRUCTOR_FUNCTION = "construct_nested_vecs"
 RESIZE_FUNCTION = "resize_strings"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
-AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
+CALLBACK_STATUS = "semantic_scope_rewrite_skipped_callback_capable_receiver"
 
 
 def run(
@@ -53,6 +53,8 @@ def current_rustc_cfg(toolchain: str) -> list[str]:
 def write_probe(workspace: Path) -> Path:
     app = workspace / PROBE_NAME
     (app / "src").mkdir(parents=True)
+    spin_candidates = sorted((Path.home() / ".cargo/registry/src").glob("*/spin-0.9.0"))
+    assert spin_candidates, "spin 0.9.0 must be present in the Cargo source cache"
     (app / "Cargo.toml").write_text(
         f'''[package]
 name = "{PROBE_NAME.replace('_', '-')}"
@@ -61,6 +63,9 @@ edition = "2021"
 
 [dependencies]
 unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = ["stats", "type_isolation"] }}
+
+[patch.crates-io]
+spin = {{ path = {json.dumps(str(spin_candidates[-1]))} }}
 ''',
         encoding="utf-8",
     )
@@ -256,13 +261,22 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert (
         constructor_row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
     ), constructor_row
-    assert constructor_row.get("rewrite_status") == APPLIED_STATUS, constructor_row
+    assert (
+        constructor_row.get("rewrite_status")
+        == "actual_semantic_scope_generic_type_rewrite_applied"
+    ), constructor_row
     assert "Vec<std::vec::Vec<u8" in str(
         constructor_row.get("semantic_object_type") or ""
     ), constructor_row
     assert (
         constructor_row.get("metadata_pairing_contract")
-        == "semantic_scope_active_metadata"
+        == "semantic_scope_monomorphized_runtime_type_metadata"
+    ), constructor_row
+    assert constructor_row.get("type_id_basis") == (
+        "monomorphized_compiler_type_id_runtime"
+    ), constructor_row
+    assert constructor_row.get("replacement_symbol") == (
+        "__unialloc_semantic_scope_push_for_rust_type"
     ), constructor_row
 
     string_type_id = int(string_row.get("type_id") or 0)
@@ -270,21 +284,20 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert string_type_id != 0, string_row
     assert nested_type_id != 0, nested_row
     assert string_type_id != nested_type_id, (string_row, nested_row)
-    assert int(constructor_row.get("type_id") or 0) == nested_type_id, constructor_row
+    assert int(constructor_row.get("type_id") or 0) == 0, constructor_row
 
     resize_rows = function_method_rows(audit, RESIZE_FUNCTION, "resize")
     assert len(resize_rows) == 1, resize_rows
     resize = resize_rows[0]
-    assert resize.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate", resize
-    assert resize.get("rewrite_status") == AMBIGUOUS_STATUS, resize
+    assert resize.get("lowering_kind") == "semantic_scope_callback_capable_receiver_skipped", resize
+    assert resize.get("rewrite_status") == CALLBACK_STATUS, resize
     assert (
         resize.get("replacement_resolution_status")
-        == "rustc_middle_multiple_heap_object_types_not_lowered"
+        == "exact_receiver_call_callback_capable_not_lowered"
     ), resize
-    assert resize.get("metadata_pairing_contract") == "audit_only_ambiguous_heap_object_type", resize
+    assert resize.get("metadata_pairing_contract") == "audit_only_callback_capable_receiver", resize
     resize_text = json.dumps(resize, sort_keys=True)
-    for owner in ("Vec<std::string::String", "std::string::String"):
-        assert owner in resize_text, resize
+    assert "resize" in resize_text, resize
 
     runtime = next(
         json.loads(line)

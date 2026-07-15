@@ -1,0 +1,628 @@
+{
+  "allocator_provenance": {
+    "cargo_metadata_attestation": null,
+    "compiler_wrapper_sha256": null,
+    "direct_cargo_configuration": null,
+    "direct_cargo_unialloc": false,
+    "force_loaded_unialloc": false,
+    "force_rlib_sha256": null,
+    "force_wrapper_sha256": null,
+    "single_unialloc_identity_enforced": true,
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "oneringbuf",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "unialloc_implementation_sha256": "7aab5d36646605915b9f6b29dc0b1d8c5611d835d6c9856a526d8a04bf4490e2"
+  },
+  "allocator_topology": {
+    "allocator_variant": "system",
+    "allocator_wrapper_policy": "explicit_experiment_wrapper",
+    "claim_grade": false,
+    "default_system_allocator_preserved": false,
+    "detection": "absent",
+    "direct_global_allocator_attribute_count": 0,
+    "effective_allocator_owner": "experiment_wrapper",
+    "fail_closed": false,
+    "global_allocator_token_count": 0,
+    "subject_allocator_preserved": false,
+    "subject_global_allocator_detected": false,
+    "substitution_supported": true,
+    "unsupported_reason": null,
+    "wrapper_defines_global_allocator": true
+  },
+  "allocator_variant": "system",
+  "archive_variant": "vulnerable",
+  "binary_artifact": {
+    "bytes": 4528880,
+    "path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug/rsh-041-harness",
+    "sha256": "31e46e86e6be06a0059c3b799f26a899f498b1b319e6c31b8e360e5ccf332056"
+  },
+  "build": {
+    "command": [
+      "cargo",
+      "+nightly-2026-06-11",
+      "build",
+      "--offline",
+      "--locked",
+      "--manifest-path",
+      "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work/project/Cargo.toml",
+      "--jobs",
+      "4"
+    ],
+    "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work/project",
+    "environment": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target",
+      "HOME": "/home/hanqing",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LOGNAME": "hanqing",
+      "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+      "SHELL": "/usr/bin/zsh",
+      "TERM": "dumb",
+      "USER": "hanqing"
+    },
+    "environment_allowlist": [
+      "CARGO_INCREMENTAL",
+      "CARGO_TARGET_DIR",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LOGNAME",
+      "PATH",
+      "RUSTFLAGS",
+      "SHELL",
+      "TERM",
+      "USER"
+    ],
+    "exit_code": 0,
+    "stderr": "   Compiling crossbeam-utils v0.8.22\n   Compiling oneringbuf v0.7.1 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work/subject/oneringbuf-0.7.1)\n   Compiling rsh-041-harness v0.0.0 (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work/project)\nwarning: function `with_vulnerability_edge_identity` is never used\n  --> src/witness.rs:21:15\n   |\n21 | pub(crate) fn with_vulnerability_edge_identity<R>(\n   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `report_vulnerability_edge_reuse_denial` is never used\n  --> src/witness.rs:30:15\n   |\n30 | pub(crate) fn report_vulnerability_edge_reuse_denial() {}\n   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: `rsh-041-harness` (bin \"rsh-041-harness\") generated 2 warnings\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.48s\n",
+    "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/build.stderr",
+    "stderr_sha256": "42736c80b45b45aa9903a5448fcb0796669fece73c99f8296f8f403447843f2d",
+    "stdout": "",
+    "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/build.stdout",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "wall_seconds": 0.5003603
+  },
+  "case_id": "RSH-041",
+  "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+  "claim_grade": false,
+  "crate": "oneringbuf",
+  "edge_identity_mode": "compiler_automatic_probe",
+  "effective_oracle_toolchain": "nightly-2026-06-11",
+  "effective_required_environment": {},
+  "efficacy_blockers": [
+    "critical_site_coverage_not_validated",
+    "no_compiler_rewrite_observed"
+  ],
+  "efficacy_eligible": false,
+  "execution_mode": "native_address_trace",
+  "execution_status": "completed",
+  "fingerprint": "02e10b46197254ede09d7d386895ab9b669b8e33261bbdd43cc2f853850aa445",
+  "fingerprint_payload": {
+    "allocator_variant": "system",
+    "archive_sha256": "c7e226c6fe0d458725a815f9b26971de3c1e78f4a0292bd174ca1a9936e41724",
+    "archive_variant": "vulnerable",
+    "automatic_edge_identity_probe": true,
+    "base_lock_sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84",
+    "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+    "catalog_sha256": "af8c5cedbaf0414208646343c20d533830375f577b68dfd52a707c802667f7b3",
+    "effective_lock_sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84",
+    "effective_manifest_sha256": "adae0d82447fb427b9b57f4cd4e84177d79adce0dc65a97db0f7b6e369a27565",
+    "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+    "orchestrator_sha256": "e380805e432e834aff9ebeb6c0bc2212ed663bd1efb08be337a40d1cc2cdcd57",
+    "realworld_driver_sha256": "b2063258fb5e30194a4241f1b7fee05c149b0d21d40db82ab85fc781322c7476",
+    "rustflags": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs"
+    ],
+    "scenario_id": "RSH-041-derived-reuse",
+    "schema_version": 1,
+    "source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "oneringbuf",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "target_crates": [
+      "oneringbuf",
+      "rsh_041_harness"
+    ],
+    "toolchain": {
+      "cargo": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "-V"
+        ],
+        "exit_code": 0,
+        "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+        "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+      },
+      "name": "nightly-2026-06-11",
+      "rustc": {
+        "command": [
+          "rustc",
+          "+nightly-2026-06-11",
+          "-vV"
+        ],
+        "exit_code": 0,
+        "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+        "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+      },
+      "target": "x86_64-unknown-linux-gnu"
+    },
+    "transformed_sources": {
+      "original_source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+      "witness_module_sha256": "53759f23369ba327639de82cbb78f2b67219721041d99c65088a4da1e32e5d37",
+      "wrapper_source_sha256": "f5c619a5fffc9c2ab79fbe161178dcc6430e88cfd247c74a3c7dbd3650fd26f5"
+    },
+    "unialloc_implementation_sha256": "7aab5d36646605915b9f6b29dc0b1d8c5611d835d6c9856a526d8a04bf4490e2"
+  },
+  "full_rebuild_required": true,
+  "ground_truth_arm": false,
+  "legacy_allocator_abi_bridge": false,
+  "lock_resolution": null,
+  "materialization": {
+    "archive_bytes": 53849,
+    "archive_path": "/tmp/unialloc-rustsec-cache/archives/oneringbuf-0.7.1.crate",
+    "archive_sha256": "c7e226c6fe0d458725a815f9b26971de3c1e78f4a0292bd174ca1a9936e41724",
+    "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/Cargo.lock.vulnerable",
+    "cargo_lock_sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84",
+    "case_id": "RSH-041",
+    "claim_grade": false,
+    "dependency_package": "oneringbuf",
+    "dependency_version": "0.7.1",
+    "oracle": {
+      "patched_control": "same address grooming exits 0",
+      "tool": "native_address_trace",
+      "vulnerable": "original address equals Replacement address after the boxed LocalHeapRB victim is reclaimed"
+    },
+    "required_environment": {},
+    "rustflags": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs"
+    ],
+    "scenario_id": "RSH-041-derived-reuse",
+    "schema_version": 1,
+    "source": "unialloc-rustsec-heap-materialization",
+    "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/derived_reuse.rs",
+    "source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "oneringbuf",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "subject_directory": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work/subject/oneringbuf-0.7.1",
+    "variant": "vulnerable",
+    "work_directory": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/work"
+  },
+  "oracle_validation": {
+    "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+    "claim_grade": false,
+    "diagnostic_only": false,
+    "expected_contract": {
+      "compile_error_codes": [],
+      "expected_finding_signature": "address_reuse_observed",
+      "kind": "native_address_reuse",
+      "parse_status": "parsed",
+      "required_evidence": [
+        "address_reuse"
+      ]
+    },
+    "expected_description": "original address equals Replacement address after the boxed LocalHeapRB victim is reclaimed",
+    "expected_oracle_observed": true,
+    "matched_compile_error_codes": [],
+    "mitigation_inferred": false,
+    "native_diagnostic_signatures": [],
+    "oracle_role": "catalog_oracle",
+    "repetition_observations": [
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": true,
+        "exit_code": 0,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 1,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": false,
+        "timed_out": false,
+        "tool_finding_signature": "address_reuse_observed"
+      },
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": true,
+        "exit_code": 0,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 2,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": false,
+        "timed_out": false,
+        "tool_finding_signature": "address_reuse_observed"
+      },
+      {
+        "address_reuse_observed": true,
+        "claim_grade": false,
+        "clean_exit": true,
+        "exit_code": 0,
+        "mitigation_inferred": false,
+        "native_diagnostic_signature": null,
+        "repetition": 3,
+        "rust_panic_or_assertion_observed": false,
+        "sanitizer_finding_observed": false,
+        "timed_out": false,
+        "tool_finding_signature": "address_reuse_observed"
+      }
+    ],
+    "status": "tool_finding_observed",
+    "tool_finding_signatures": [
+      "address_reuse_observed",
+      "address_reuse_observed",
+      "address_reuse_observed"
+    ]
+  },
+  "pass_audit_summary": {
+    "audit_file_count": 0,
+    "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "claim_grade_file_count": 0,
+    "crate_names": [],
+    "direct_allocator_rewrites_applied": 0,
+    "direct_layout_allocator_rewrites_applied": 0,
+    "semantic_deallocation_like_rewrites_applied": 0,
+    "semantic_drop_rewrites_applied": 0,
+    "semantic_ownership_transfer_rewrites_applied": 0,
+    "semantic_rewrites_applied": 0,
+    "semantic_scope_rewrites_applied": 0,
+    "total_compiler_rewrites_applied": 0,
+    "unresolved_file_count": 0
+  },
+  "pass_audit_validation": {
+    "claim_grade": false,
+    "compiler_rewrite_counts": {
+      "direct_allocator_rewrites_applied": 0,
+      "direct_layout_allocator_rewrites_applied": 0,
+      "semantic_ownership_transfer_rewrites_applied": 0,
+      "semantic_rewrites_applied": 0,
+      "total_compiler_rewrites_applied": 0
+    },
+    "critical_site_coverage_validated": false,
+    "efficacy_blockers": [
+      "critical_site_coverage_not_validated",
+      "no_compiler_rewrite_observed"
+    ],
+    "efficacy_eligible": false,
+    "rewrite_route": "none",
+    "status": "not_applicable",
+    "valid": null,
+    "validation_scope": "target_crate_presence_and_force_load_topology_only"
+  },
+  "pass_audits": [],
+  "pass_logs": [],
+  "platform_constraints": {},
+  "repetition_summary": {
+    "address_reuse_observation_count": 3,
+    "claim_grade": false,
+    "clean_exit_count": 3,
+    "executed": 3,
+    "exit_codes": [
+      0,
+      0,
+      0
+    ],
+    "mitigation_inferred": false,
+    "native_diagnostic_signal_count": 0,
+    "requested": 3,
+    "timed_out_count": 0,
+    "tool_finding_count": 3
+  },
+  "repetitions_requested": 3,
+  "required_environment": {},
+  "reuse_denial_evidence": {
+    "annotation": {
+      "annotation_scope": [
+        "DroppableRef::from boxed LocalHeapRB victim allocation",
+        "second cloned DroppableRef victim reclaim"
+      ],
+      "automatic_compiler_coverage_contract": {
+        "coverage_scope": "derived_vulnerability_edge",
+        "replacement": {
+          "rewrite_statuses": [
+            "actual_semantic_scope_generic_type_rewrite_applied"
+          ],
+          "semantic_type_fragment": "Box<witness::Replacement",
+          "source_file_fragment": "src/witness.rs:77:"
+        },
+        "schema_version": 1,
+        "victim": {
+          "rewrite_statuses": [
+            "actual_semantic_scope_generic_type_rewrite_applied"
+          ],
+          "semantic_type_fragment": "Box<B/",
+          "source_file_fragment": "/droppable.rs:15:17:"
+        }
+      },
+      "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
+      "expected_layout": {
+        "align": 8,
+        "size": 40
+      },
+      "kind": "manual_exact_vulnerability_edge_identity",
+      "replacement_semantic_type_fragment": "Box<witness::Replacement",
+      "replacement_source_file_fragment": "src/witness.rs:",
+      "schema_version": 1,
+      "victim_module_id": 5932164578187149314,
+      "victim_type_id": 5932164578187149313
+    },
+    "claim_grade": false,
+    "repetitions": [],
+    "status": "system_baseline_uses_address_and_sanitizer_oracles",
+    "valid": null
+  },
+  "run": {
+    "command": [
+      "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug/rsh-041-harness"
+    ],
+    "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug",
+    "environment": {
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target",
+      "HOME": "/home/hanqing",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LOGNAME": "hanqing",
+      "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+      "SHELL": "/usr/bin/zsh",
+      "TERM": "dumb",
+      "USER": "hanqing"
+    },
+    "environment_allowlist": [
+      "CARGO_INCREMENTAL",
+      "CARGO_TARGET_DIR",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LOGNAME",
+      "PATH",
+      "RUSTFLAGS",
+      "SHELL",
+      "TERM",
+      "USER"
+    ],
+    "exit_code": 0,
+    "stderr": "original=0x558caaa6fae0 replacement=0x558caaa6fae0\n",
+    "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-001.stderr",
+    "stderr_sha256": "ee79e91c205c71c3cd771ed1cc5cc672af22b997de903228460310415b36f7dc",
+    "stdout": "",
+    "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-001.stdout",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "wall_seconds": 0.001514833
+  },
+  "runs": [
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug/rsh-041-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug",
+      "environment": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 0,
+      "stderr": "original=0x558caaa6fae0 replacement=0x558caaa6fae0\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-001.stderr",
+      "stderr_sha256": "ee79e91c205c71c3cd771ed1cc5cc672af22b997de903228460310415b36f7dc",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-001.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.001514833
+    },
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug/rsh-041-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug",
+      "environment": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 0,
+      "stderr": "original=0x55fb65640ae0 replacement=0x55fb65640ae0\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-002.stderr",
+      "stderr_sha256": "44fbec932546f9e3a067363b04d08dbc5ad391c7726ceb45c7ac93ea27d9d7b9",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-002.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.001598961
+    },
+    {
+      "command": [
+        "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug/rsh-041-harness"
+      ],
+      "cwd": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target/debug",
+      "environment": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_TARGET_DIR": "/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/target",
+        "HOME": "/home/hanqing",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LOGNAME": "hanqing",
+        "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+        "SHELL": "/usr/bin/zsh",
+        "TERM": "dumb",
+        "USER": "hanqing"
+      },
+      "environment_allowlist": [
+        "CARGO_INCREMENTAL",
+        "CARGO_TARGET_DIR",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "RUSTFLAGS",
+        "SHELL",
+        "TERM",
+        "USER"
+      ],
+      "exit_code": 0,
+      "stderr": "original=0x55e68c68fae0 replacement=0x55e68c68fae0\n",
+      "stderr_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-003.stderr",
+      "stderr_sha256": "ee65abcbdbc34926268c444e03fe2e454e8f1c541433f1666730b2f96127c222",
+      "stdout": "",
+      "stdout_path": "docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-041/arms/vulnerable/system/artifacts/run-003.stdout",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "wall_seconds": 0.001493861
+    }
+  ],
+  "runtime_stats": null,
+  "runtime_stats_by_repetition": [],
+  "runtime_stats_validation": {
+    "claim_grade": false,
+    "efficacy_blockers": [
+      "critical_site_coverage_not_validated"
+    ],
+    "efficacy_eligible": false,
+    "repetitions": [],
+    "status": "not_applicable",
+    "valid": null
+  },
+  "rustflag_policy": {
+    "effective": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs"
+    ],
+    "effective_oracle_toolchain": "nightly-2026-06-11",
+    "reason": null,
+    "removed": [],
+    "requested": [
+      "-Ainvalid_reference_casting",
+      "-Adangerous_implicit_autorefs"
+    ]
+  },
+  "scenario_id": "RSH-041-derived-reuse",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment",
+  "source_provenance": {
+    "archive_sha256": "c7e226c6fe0d458725a815f9b26971de3c1e78f4a0292bd174ca1a9936e41724",
+    "base_lock_sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84",
+    "effective_lock_sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84",
+    "original_source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+    "source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+    "subject_cargo_features": {
+      "allocator_variant": "system",
+      "catalog_features": [],
+      "crate": "oneringbuf",
+      "default_features_enabled": true,
+      "effective_features": [],
+      "override_allocator_variant": null,
+      "override_applied": false,
+      "override_source": null
+    },
+    "witness_module_sha256": "53759f23369ba327639de82cbb78f2b67219721041d99c65088a4da1e32e5d37",
+    "wrapper_source_sha256": "f5c619a5fffc9c2ab79fbe161178dcc6430e88cfd247c74a3c7dbd3650fd26f5"
+  },
+  "target_crates": [
+    "oneringbuf",
+    "rsh_041_harness"
+  ],
+  "target_reset": false,
+  "target_reset_reasons": [
+    "fingerprint_changed"
+  ],
+  "tool": "native_address_trace",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  }
+}

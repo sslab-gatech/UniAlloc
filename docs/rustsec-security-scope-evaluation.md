@@ -23,37 +23,39 @@ advisories:
 
 | Final case attribution | Advisories | Evidence contract |
 |---|---:|---|
-| Other allocator feature only | **31** | Thirty reclaim-check cases and the RSH-031 recovery-layout case have an exact policy-independent diagnostic and no Type Isolation TP |
-| Type Isolation only | **11** | A manually identified cross-identity reuse edge reproduced in system and `typed_plain`, then was denied and reported by Type Isolation in 3/3 repetitions |
-| Multiple allocator mechanisms | **1** | RSH-002 has distinct exact `reclaim_checks` and Type Isolation reuse-edge TPs |
+| Other allocator feature only | **31** | Thirty reclaim-check cases and the RSH-031 recovery-layout case have an exact policy-independent diagnostic and no qualified Type Isolation reuse-edge result |
+| TypeIso measured reuse edge only | **11** | A compiler-bound derived or source-shaped cross-identity reuse edge collided in system and `typed_plain`, then Type Isolation withheld that exact retained pointer in 3/3 repetitions |
+| Measured edge + other feature | **1** | RSH-002 has a distinct exact `reclaim_checks` detection and a bounded Type Isolation reuse-edge mitigation |
 | No exact allocator signal observed | **3** | RSH-049, RSH-050, and RSH-075 completed every registered matched mechanism experiment without a qualified allocator signal |
 | Inconclusive or unresolved attribution | **3** | RSH-003 and RSH-019 exercise concurrency/lifetime races outside the evaluated allocator contracts; RSH-006 lacks a source-bound fingerprint |
 
 These rows partition the final efficacy denominator:
-**31 + 11 + 1 + 3 + 3 = 49**. The strict case-level positive result is
-**43/49**. The generated case report records 32 `detected`, 11 `mitigated`, 3
-`no_signal`, and 3 `inconclusive` cases. The four
-audit-only exclusions remain visible in the reviewed-candidate funnel and never
-enter an efficacy numerator or denominator. The retained figure below records
-the current 49-case efficacy partition alongside the four reviewed exclusions.
+**31 + 11 + 1 + 3 + 3 = 49**. Allocator mechanisms provide qualified coverage
+for **43/49** executable candidates. This number combines 31 exact
+`reclaim_checks` detections, 1 exact recovery-layout validation, and 12 bounded
+Type Isolation reuse-edge mitigations, with RSH-002 counted once. It is an
+evaluated-case mechanism-coverage ratio. Its scope excludes source-vulnerability
+detection rates and ecosystem protection rates.
 
-The underlying mechanism ledger contains **62 result rows**: 32 `detected`, 12
-`mitigated`, 12 `no_signal`, and 6 `inconclusive`. It contains **44 positive
-mechanism rows across 43 unique cases**: 31 `reclaim_checks`, 1
-`recovery_layout_validation`, and 12 Type Isolation rows. RSH-002 is the sole
-cross-mechanism overlap. Thirteen cases retain two scenario/mechanism rows, so
-row counts and case counts answer different questions. A positive row requires a repeated
-vulnerable baseline, a feature-matched ablation, the mechanism-specific signal
-in every treatment repetition, clean patched controls, and evidence bound to
-the audited event. `true_positive=true` therefore means either an exact
-duplicate-reclaim diagnostic, an exact recovery-layout diagnostic, or a causal
-cross-identity reuse-edge mitigation;
-the `positive_scope` field records that boundary explicitly.
+The generated case report records 32 `detected`, 11 `mitigated`, 3
+`no_signal`, and 3 `inconclusive` cases. The underlying mechanism ledger has 62
+rows: 32 `detected`, 12 `mitigated`, 12 `no_signal`, and 6 `inconclusive`.
+Thirteen cases retain more than one scenario/mechanism row. The Type Isolation
+rows use `mitigated` for the measured reuse decision only; their automatic
+source-level vulnerability-detection count is **0/12**, every row records
+`vulnerability_specific_detection_signal=false`, and every artifact remains
+`claim_grade=false`. The four audit-only exclusions remain visible in the
+reviewed-candidate funnel and stay outside every efficacy numerator and
+denominator.
 
 ![RustSec reviewed-candidate efficacy scope](figures/rustsec-security-scope-20260714/rustsec-security-scope.svg)
 
+Figure label boundary: the TypeIso-only segment means **measured reuse edge
+only**; the overlap segment means **measured reuse edge plus other feature**.
+
 Machine-readable outputs:
 
+- `docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json`
 - `evaluation/config/rustsec_heap_complete_scope.json`
 - `evaluation/config/rustsec_heap_mechanism_results.json`
 - `docs/figures/rustsec-security-scope-20260714/summary.json`
@@ -103,68 +105,84 @@ label while retaining their scenario-level evidence.
 
 ## Type Isolation result
 
-Type Isolation enforces exact reuse identity: a retained object may satisfy a
-request only when the compiler/runtime identity contract matches. The strict
-positive evidence covers 12 exploit-enabling cross-identity reuse edges:
+Type Isolation enforces exact reuse identity: an eligible retained object may
+satisfy a request only when the compiler/runtime identity contract matches. The
+reviewed evidence covers **12 compiler-bound causal mitigations** of measured
+derived or source-shaped cross-identity reuse edges: RSH-002, RSH-008, RSH-041,
+RSH-042, RSH-052, RSH-055, and RSH-064 through RSH-069. Eleven receive their
+only qualified allocator-mechanism coverage from Type Isolation; RSH-002 also
+has a separate exact `reclaim_checks` detection.
 
-- RSH-002 / `RUSTSEC-2020-0007` (`bitvec`)
-- RSH-008 / `RUSTSEC-2021-0130` (`lru`)
-- RSH-041 / `RUSTSEC-2026-0152` (`oneringbuf`)
-- RSH-042 / `RUSTSEC-2026-0128` (`emap`)
-- RSH-052 / `RUSTSEC-2019-0023` (`string-interner`)
-- RSH-064 / `RUSTSEC-2022-0028` (`neon`)
-- RSH-055 / `RUSTSEC-2020-0145` (`heapless`)
-- RSH-065 / `RUSTSEC-2023-0054` (`mail-internals`)
-- RSH-066 / `RUSTSEC-2024-0007` (`rust-i18n-support`)
-- RSH-067 / `RUSTSEC-2025-0004` (`openssl`)
-- RSH-068 / `RUSTSEC-2025-0016` (`pared`)
-- RSH-069 / `RUSTSEC-2025-0022` (`openssl`)
+Each six-arm matrix requires the vulnerable system and `typed_plain` arms to
+reuse the witness's reclaimed address in all three repetitions. The vulnerable
+`typeiso` arm must withhold that address in all three repetitions. Its
+stats-enabled attribution record must identify the exact selected retained
+pointer, and `last_wrong_identity_retained_ptr` must equal the harness's parsed
+`original` or `stale_value` pointer. This retained-pointer equality prevents an
+unrelated wrong-identity cache entry from satisfying the causal gate.
 
-For every edge, system and `typed_plain` reused the vulnerable address in 3/3
-repetitions. Type Isolation denied the cross-identity reuse, bound the report
-to the audited replacement allocation, and avoided the address collision in
-3/3 repetitions. Patched controls preserved same-identity reuse and emitted
-zero denials.
+The compiler side is equally strict. The preregistered requested and victim
+sites must each resolve to one unique compiler-audit candidate with an applied,
+allowlisted rewrite status. Runtime requested/retained type IDs, module IDs,
+requested callsite, size, and alignment must bind back to those candidates.
+RSH-052 adds an explicit two-stage ownership chain: an exact compiler-bound
+`String` origin allocation is followed by an audited pointer-preserving
+`String -> Box<str>` transfer, and the retained `Box<str>` pointer must be the
+same witness pointer later withheld from `Replacement`. RSH-068 and RSH-069
+preserve identity from their allocation origins through the relevant `String`
+and `CString` ownership chains.
 
-All 12 claims cover manually attributed, layout-bounded reuse edges. The
-source defect remains represented by its published or upstream witness, while
-the derived experiment isolates the allocator decision. Automatic victim-site
-coverage and full source-vulnerability detection remain at **0 demonstrated
-cases**. The compiler pass now has a regression-tested monomorphized generic
-`Box<T>` identity path; the 12 security positives still rely on their
-explicit edge annotations.
+All patched system, `typed_plain`, and `typeiso` controls exercise safe
+same-identity functionality and complete without a matching attribution event.
+Separate allocator unit controls verify that safe same-identity reuse remains
+available and that an eligible cross-identity cache entry is withheld. These
+controls distinguish exact-identity routing from generic allocation failure or
+address nondeterminism.
 
-RSH-065 is a manually modeled four-byte reserve-relocation reduction. RSH-069
-is a synthetically groomed 4096-byte FFI-read reduction. These two rows preserve
-the advisory root cause while carrying a stronger synthetic-reduction caveat
-than the other derived edges.
+The automatic probe makes the historical manual metadata helper a no-op. The
+compiler is the sole source of semantic allocation identity. RSH-008 and RSH-041 have `derived_vulnerability_edge` scope; the other ten
+rows have `source_shaped_derived` scope. None has `published_source` scope.
+Coverage uses the existing generic `Box<T>` runtime identity, monomorphized
+runtime `TypeId` for exact `Global` `Vec::with_capacity<T>`, authenticated
+primitive `alloc::slice::to_vec`, and exact source-shaped `String`
+sites/transfers. The
+pass fails closed for custom allocators, unresolved or ambiguous generic
+owners, lookalike methods, and element types with user-defined `Clone` or drop
+behavior.
 
-All 12 strict Type Isolation matrices bind to the same frozen isolated WIP
-evidence snapshot, identified by UniAlloc implementation digest
+These 12 rows establish causal mitigation of one measured allocator reuse edge.
+Their scope excludes stale-pointer repair, access-time detection, and complete
+published-source prevention. The automatic source-level vulnerability-detection
+count is **0/12**; every row records
+`source_vulnerability_detection_validated=false`,
+`vulnerability_specific_detection_signal=false`, and `claim_grade=false`.
+RSH-065 and RSH-069 also retain explicit synthetic-reduction caveats.
+RSH-064's real Node/V8 source witness remains a full ownership-chain coverage
+gap while its separate derived `Vec<u8>` edge is compiler-bound.
+
+The attribution fields are evaluation telemetry. They are gated by the `stats`
+feature and add one companion atomic for the selected retained pointer; they do
+not change the cache identity layout or the public semantic-stats snapshot.
+Production enforcement remains the ordinary exact-identity hit/miss decision.
+The telemetry supports experimental causality. Its vulnerability-specific
+detector field remains false.
+
+RSH-002 demonstrates the outcome boundary. Type Isolation withholds the bound
+cross-identity replacement before the stale duplicate owner later reaches the
+independent `type-cache pointer already retained` abort. The Type Isolation row
+covers the earlier reuse decision; the separate `reclaim_checks` row covers the
+exact duplicate reclaim.
+
+The frozen manually annotated calibration matrices retain implementation digest
 `ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2`.
-The digest identifies that captured snapshot. The current shared-session
-working tree and current HEAD have separate live provenance. The complete report exposes
-`strict_typeiso_evidence_implementation_digest_counts` separately from
-`replay_arm_implementation_digest_counts`.
-The complete evidence bundle retains both the 12-matrix snapshot summary and a
-deterministic archive plus manifest for the 136 implementation inputs that
-reproduce this digest.
-
-RSH-008 and RSH-064 retain their source-witness `inconclusive` rows beside the
-derived positive rows. RSH-064's real Node/V8 witness reproduces the stale
-external ArrayBuffer under both `typed_plain` and `typeiso`, with zero applied
-critical rewrites. Its separate derived scenario establishes the bounded
-`Vec<u8>` backing-store-to-`Replacement` reuse-edge TP. Automatic canonical
-Box/Vec ownership transfer remains deferred. RSH-003 and RSH-019 exercise
-same-object concurrency/lifetime races before a required cross-identity reuse
-event. RSH-006 is evidence-inconclusive: its matched SIGSEGV lacks a normalized
-source-bound fault/checkpoint fingerprint. Source analysis indicates a
-stack-lifetime boundary, while empirical no-signal attribution remains
-withheld.
+The reviewed automatic provenance epoch is
+`docs/evidence/rustsec-typeiso-automatic-20260715/`; its per-case records and
+`derived-reuse-summary.json` keep automatic compiler-bound evidence separate from historical
+manual calibration and replay artifacts.
 
 ## Recovery-layout validation result
 
-RSH-031 adds one policy-independent allocator TP. The pinned upstream Miri arm
+RSH-031 adds one policy-independent allocator validation. The pinned upstream Miri arm
 reports an allocation/deallocation layout mismatch on the vulnerable Vec Drop
 edge and validates the patched source control. A derived four-arm native matrix
 then emits `unialloc_recovery_deallocation_layout_mismatch` in every vulnerable
@@ -217,11 +235,11 @@ exact diagnostic 3/3, and every patched arm exits cleanly 3/3. RSH-020 uses a
 fail-closed double-panic parser that accepts repeated identical source panic
 checkpoints followed by Rust's standard destructor-cleanup abort; distinct
 source checkpoints remain ambiguous. Its stable plain fingerprint now completes
-the ablation gate. RSH-001 adds an exact duplicate-ownership/double-reclaim TP.
-RSH-060 adds an advisory-derived partial-yield-then-panic TP.
+the ablation gate. RSH-001 adds an exact duplicate-ownership/double-reclaim detection.
+RSH-060 adds an advisory-derived partial-yield-then-panic detection.
 The 12 reclaim no-signal rows remain mechanism-specific negative controls.
-Several of those cases now have a separate Type Isolation or recovery-layout
-TP. The final case-level no-signal set is RSH-049, RSH-050, and RSH-075.
+Several of those cases now have a separate Type Isolation reuse-edge mitigation or recovery-layout
+validation. The final case-level no-signal set is RSH-049, RSH-050, and RSH-075.
 RSH-006 remains evidence-inconclusive because its matched
 SIGSEGV lacks a normalized source-bound fault/checkpoint fingerprint. RSH-052,
 RSH-055, and RSH-065 through RSH-069 receive positive case attribution from
@@ -234,7 +252,7 @@ The feature contract is deliberately narrow:
 - a new allocator publication starts a new address generation;
 - stale access, ordinary heap-buffer overflow, uninitialized reads, and general
   UAF without a duplicate reclaim remain outside this check;
-- `reclaim_checks` is opt-in; default and Type-Isolation-only builds retain
+- `reclaim_checks` is opt-in; default and TypeIso-measured-edge-only builds retain
   their existing feature paths.
 
 `detected` means the exact allocator diagnostic reproduced in every vulnerable
@@ -261,10 +279,28 @@ amplified ripgrep samples:
 | Oxipng | -1.24% | +280 KiB (+0.63%) |
 | ripgrep, amplified 1 GiB scan | +2.77% | 0 KiB (0.00%) |
 
-The observed cost is small on these two workloads. The evaluation retains the
-single-host boundary and avoids a workload-independent zero-overhead claim.
-Raw inputs and the derived summary are under
+The observed reclaim-check cost is small on these two workloads. The evaluation
+retains the single-host boundary and avoids a workload-independent zero-overhead
+claim. Raw inputs and the derived summary are under
 `docs/evidence/rustsec-reclaim-checks-20260714/`.
+
+The compiler-coverage and retained-pointer telemetry changes used by the 12-row
+Type Isolation rerun completed a paired `typeiso_perf / typed_plain`
+ratio-of-ratios screen and passed the prespecified merge gates:
+
+| Workload | Candidate-vs-baseline wall ratio | Candidate-vs-baseline RSS result |
+|---|---:|---:|
+| Oxipng | **-1.6649%** | **+0.583%** peak RSS |
+| Long Ripgrep | **+0.8107%**, 95% bootstrap CI **[-0.180%, +1.399%]** | maximum unchanged at **7168 KiB** |
+
+The gates require wall-time regression at or below 2%, Oxipng peak-RSS
+regression at or below 1%, and unchanged Ripgrep maximum RSS. The selected
+macro builds retained unchanged aggregate semantic-rewrite counts, so this
+screen measures compiler/runtime overhead without demonstrating activation of
+the newly admitted sites. The 12 RustSec matrices and compiler regression tests
+supply that active new-site evidence. Raw paired runs and the compact summary
+are under
+`docs/evidence/rustsec-typeiso-automatic-20260715/performance-screen/`.
 
 ## Audit-only scope exclusions
 
@@ -345,5 +381,7 @@ execution. Every strict reclaim result uses
 three repetitions. Four Type Isolation source rows preserve the earlier
 two-repetition sweep; RSH-064 uses a three-repetition Node/V8 matrix. The source
 rows retain the compiler critical-site coverage gate, and the 12 derived
-reuse-edge positives use three-repetition causal matrices. Every artifact
-remains exploratory with `claim_grade=false`.
+reuse-edge mitigations use three-repetition causal matrices. Their source-level
+vulnerability-detection count remains zero, their vulnerability-specific
+detector signal remains false, and every artifact remains exploratory with
+`claim_grade=false`.

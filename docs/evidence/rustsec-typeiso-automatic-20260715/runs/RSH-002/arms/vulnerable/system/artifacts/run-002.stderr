@@ -1,0 +1,36 @@
+original=0x7d2cda3e0080 replacement=0x7d2cda3e0080
+=================================================================
+==164709==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x7d2cda3e0080 in thread T0
+    #0 0x56221ba868a6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x56221babda58 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18
+    #2 0x56221bab7bd4 in __rustc::__rust_dealloc /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:4:19
+    #3 0x56221babe300 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14
+    #4 0x56221babe300 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22
+    #5 0x56221babe300 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9
+    #6 0x56221babe300 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23
+    #7 0x56221babdd98 in <alloc::boxed::Box<rsh_002_harness::witness::Replacement> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24
+    #8 0x56221bab65b0 in core::ptr::drop_glue::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1
+    #9 0x56221bab61ca in core::mem::drop::<alloc::boxed::Box<rsh_002_harness::witness::Replacement>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs:1041:1
+    #10 0x56221babcd81 in rsh_002_harness::witness::run /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/witness.rs:57:5
+    #11 0x56221bab7ca8 in rsh_002_harness::main /home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/work/project/src/main.rs:20:5
+    #12 0x56221babe70d in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+    #13 0x56221bab6710 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
+    #14 0x56221bab7a03 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18
+    #15 0x56221bae3e66 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21
+    #16 0x56221bae3e66 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43
+    #17 0x56221bae3e66 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19
+    #18 0x56221bae3e66 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14
+    #19 0x56221bae3e66 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24
+    #20 0x56221bae3e66 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43
+    #21 0x56221bae3e66 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19
+    #22 0x56221bae3e66 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14
+    #23 0x56221bae3e66 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5
+    #24 0x56221bab609f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5
+    #25 0x56221babea70 in main (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x10fa70) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)
+    #26 0x7f9cdb02a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #27 0x7f9cdb02a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #28 0x56221b9fa5e4 in _start (/home/hanqing/alloc/UniAlloc-rustsec-auto-coverage/docs/evidence/rustsec-typeiso-automatic-20260715/runs/RSH-002/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-002-harness+0x4b5e4) (BuildId: 9168e67e666c9f96291003aec9cbc2762ed5e2ec)
+
+Address 0x7d2cda3e0080 is a wild pointer inside of access range of size 0x000000000001.
+SUMMARY: AddressSanitizer: bad-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc
+==164709==ABORTING

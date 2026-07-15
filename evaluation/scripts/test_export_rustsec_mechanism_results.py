@@ -273,6 +273,7 @@ def matched_derived_scenario() -> dict[str, object]:
             "vulnerability_specific_detection_signal": False,
             "validated": False,
             "claim_scope": "one exact A-to-B edge",
+            "manual_victim_identity_annotation": True,
             "compiler_automatic_victim_coverage": False,
             "source_vulnerability_detection_validated": False,
         },
@@ -1171,20 +1172,104 @@ class MechanismResultTests(unittest.TestCase):
             result["evidence_scope"], "exploit_enabling_cross_identity_reuse_edge"
         )
         self.assertFalse(result["source_vulnerability_detection_validated"])
+        self.assertFalse(result["vulnerability_specific_detection_signal"])
+        self.assertFalse(result["full_source_vulnerability_detection"])
         self.assertFalse(result["automatic_source_coverage"])
-        self.assertFalse(result["source_level_true_positive"])
         self.assertFalse(result["claim_grade"])
         self.assertFalse(result["synthetic_reduction"])
         self.assertEqual(result["reduction_fidelity"], "manual_derived_reduction")
-        self.assertTrue(result["true_positive"])
+        self.assertTrue(result["validated_mitigation"])
+        self.assertNotIn("true_positive", result)
         self.assertEqual(
             result["result_semantics"],
-            "causal_mitigation_true_positive",
+            "causal_compiler_bound_reuse_edge_mitigation",
         )
         self.assertEqual(
             result["positive_scope"],
             "exploit_enabling_cross_identity_reuse_edge",
         )
+
+    def test_exports_automatic_compiler_edge_identity_provenance(self) -> None:
+        scenario = matched_derived_scenario()
+        scenario["automatic_edge_identity_probe"] = True
+        scenario["annotation"] = {
+            "automatic_compiler_coverage_contract": {
+                "schema_version": 1,
+                "coverage_scope": "source_shaped_derived",
+            }
+        }
+        scenario["edge_evaluation"].update(
+            {
+                "validated": True,
+                "manual_victim_identity_annotation": False,
+                "compiler_automatic_victim_coverage": True,
+                "source_vulnerability_detection_validated": False,
+                "causal_compiler_bound_reuse_edge_mitigation": True,
+                "result_semantics": (
+                    "causal_compiler_bound_reuse_edge_mitigation"
+                ),
+            }
+        )
+
+        result = module.evaluate_type_isolation_edge(
+            scenario, minimum_repetitions=3
+        )
+
+        self.assertEqual(result["outcome"], "mitigated")
+        self.assertTrue(result["automatic_edge_identity_probe"])
+        self.assertFalse(result["manual_victim_identity_annotation"])
+        self.assertTrue(result["compiler_automatic_victim_coverage"])
+        self.assertFalse(result["source_vulnerability_detection_validated"])
+        self.assertFalse(result["vulnerability_specific_detection_signal"])
+        self.assertFalse(result["full_source_vulnerability_detection"])
+        self.assertEqual(
+            result["reduction_fidelity"],
+            "compiler_automatic_derived_reduction",
+        )
+        self.assertTrue(result["checks"]["edge_identity_contract_valid"])
+
+    def test_automatic_compiler_edge_identity_fails_closed(self) -> None:
+        mutations = (
+            {"manual_victim_identity_annotation": True},
+            {"compiler_automatic_victim_coverage": False},
+            {"source_vulnerability_detection_validated": True},
+            {"causal_compiler_bound_reuse_edge_mitigation": False},
+            {"vulnerability_specific_detection_signal": True},
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                scenario = matched_derived_scenario()
+                scenario["automatic_edge_identity_probe"] = True
+                scenario["annotation"] = {
+                    "automatic_compiler_coverage_contract": {
+                        "schema_version": 1,
+                        "coverage_scope": "source_shaped_derived",
+                    }
+                }
+                scenario["edge_evaluation"].update(
+                    {
+                        "manual_victim_identity_annotation": False,
+                        "compiler_automatic_victim_coverage": True,
+                        "source_vulnerability_detection_validated": False,
+                        "causal_compiler_bound_reuse_edge_mitigation": True,
+                        "result_semantics": (
+                            "causal_compiler_bound_reuse_edge_mitigation"
+                        ),
+                        **mutation,
+                    }
+                )
+
+                result = module.evaluate_type_isolation_edge(
+                    scenario, minimum_repetitions=3
+                )
+
+                self.assertEqual(result["outcome"], "inconclusive")
+                expected_check = (
+                    "vulnerability_specific_detection_boundary_valid"
+                    if "vulnerability_specific_detection_signal" in mutation
+                    else "edge_identity_contract_valid"
+                )
+                self.assertIn(expected_check, result["failed_checks"])
 
     def test_synthetic_typeiso_reduction_requires_explicit_claim_marker(self) -> None:
         scenario = matched_derived_scenario()
@@ -1218,7 +1303,8 @@ class MechanismResultTests(unittest.TestCase):
         )
 
         self.assertEqual(result["outcome"], "mitigated")
-        self.assertTrue(result["true_positive"])
+        self.assertTrue(result["validated_mitigation"])
+        self.assertNotIn("true_positive", result)
         self.assertTrue(result["checks"]["typed_allocator_oracle_policy_valid"])
         self.assertTrue(
             result["checks"][
@@ -1316,7 +1402,8 @@ class MechanismResultTests(unittest.TestCase):
         )
 
         self.assertEqual(result["outcome"], "inconclusive")
-        self.assertFalse(result["true_positive"])
+        self.assertFalse(result["validated_mitigation"])
+        self.assertNotIn("true_positive", result)
         self.assertEqual(
             {
                 "patched_system_control_valid",

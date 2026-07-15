@@ -174,10 +174,11 @@ ALLOCATOR_STATS_FIELDS = (
     "last_wrong_identity_requested_callsite",
     "last_wrong_identity_size",
     "last_wrong_identity_align",
+    "last_wrong_identity_retained_ptr",
     "side_cache_entries",
     "side_cache_corrupt_slots",
 )
-REUSE_DENIAL_FIELDS = (
+LEGACY_REUSE_DENIAL_FIELDS = (
     "typed_cache_wrong_identity_denials",
     "last_wrong_identity_requested_type_id",
     "last_wrong_identity_retained_type_id",
@@ -186,6 +187,16 @@ REUSE_DENIAL_FIELDS = (
     "last_wrong_identity_requested_callsite",
     "last_wrong_identity_size",
     "last_wrong_identity_align",
+)
+REUSE_DENIAL_FIELDS = LEGACY_REUSE_DENIAL_FIELDS + (
+    "last_wrong_identity_retained_ptr",
+)
+AUTOMATIC_COVERAGE_APPLIED_REWRITE_STATUSES = frozenset(
+    {
+        "actual_semantic_scope_enter_exit_rewrite_applied",
+        "actual_semantic_scope_generic_type_rewrite_applied",
+        "actual_semantic_ownership_transfer_rewrite_applied",
+    }
 )
 FORCE_BUILD_HOST_FLAGS = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
 FORCE_BUILD_ENVIRONMENT = {
@@ -208,11 +219,21 @@ def sha256_file(path: pathlib.Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+def durable_artifact_path(path: pathlib.Path) -> str:
+    """Prefer relocatable repo-relative paths for durable in-tree evidence."""
+
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(ROOT.resolve()))
+    except ValueError:
+        return str(resolved)
+
+
 def file_artifact_record(path: pathlib.Path) -> dict[str, Any]:
     if not path.is_file():
         raise ExperimentError(f"missing artifact: {path}")
     return {
-        "path": str(path.resolve()),
+        "path": durable_artifact_path(path),
         "bytes": path.stat().st_size,
         "sha256": sha256_file(path),
     }
@@ -253,13 +274,30 @@ def normalize_target_crates(*values: str) -> tuple[str, ...]:
 
 
 def compiler_target_crates(
-    case: dict[str, Any], scenario: dict[str, Any]
+    case: dict[str, Any],
+    scenario: dict[str, Any],
+    *,
+    automatic_edge_identity_probe: bool = False,
 ) -> tuple[str, ...]:
     """Resolve the rustc-pass target set, always retaining the harness crate."""
 
     harness_crate = normalize_crate_name(
         str(case["case_id"]).lower() + "-harness"
     )
+    subject_crate = normalize_crate_name(str(case["crate"]))
+    if automatic_edge_identity_probe:
+        annotation = scenario.get("type_isolation_edge_annotation")
+        if (
+            scenario.get("classification_role") != "derived_reuse_experiment"
+            or not isinstance(annotation, dict)
+            or annotation.get("kind")
+            != "manual_exact_vulnerability_edge_identity"
+        ):
+            raise ExperimentError(
+                "automatic edge identity probes require a manually attributed "
+                "derived reuse experiment"
+            )
+        return normalize_target_crates(subject_crate, harness_crate)
     override = scenario.get("compiler_target_crates")
     if override is None:
         return normalize_target_crates(str(case["crate"]), harness_crate)
@@ -277,7 +315,6 @@ def compiler_target_crates(
             "scenario compiler_target_crates must include harness crate "
             f"{harness_crate}"
         )
-    subject_crate = normalize_crate_name(str(case["crate"]))
     exclusion = scenario.get("compiler_target_exclusion")
     if subject_crate in result:
         if exclusion is not None:
@@ -458,6 +495,9 @@ def validate_catalog_compiler_target_crates(catalog: dict[str, Any]) -> None:
     _, scenarios = harness.index_catalog(catalog)
     for case, scenario in scenarios.values():
         compiler_target_crates(case, scenario)
+        annotation = scenario.get("type_isolation_edge_annotation")
+        if isinstance(annotation, dict):
+            automatic_compiler_coverage_contract(annotation)
 
 
 def subject_dependency_configuration(
@@ -714,6 +754,7 @@ def stats_wrapper(
     allocator: str,
     *,
     vulnerability_edge_hooks: bool = False,
+    automatic_edge_identity_probe: bool = False,
     legacy_allocator_abi_bridge: bool = False,
 ) -> str:
     stat_fields = (
@@ -733,6 +774,7 @@ def stats_wrapper(
         "last_wrong_identity_requested_callsite",
         "last_wrong_identity_size",
         "last_wrong_identity_align",
+        "last_wrong_identity_retained_ptr",
         "side_cache_entries",
         "side_cache_corrupt_slots",
     )
@@ -740,7 +782,11 @@ def stats_wrapper(
     format_template += "".join(f',"{field}":{{}}' for field in stat_fields)
     format_template += "}}"
     rust_format_literal = json.dumps(format_template)
-    if vulnerability_edge_hooks and allocator in TYPEISO_VARIANTS:
+    if (
+        vulnerability_edge_hooks
+        and allocator in TYPEISO_VARIANTS
+        and not automatic_edge_identity_probe
+    ):
         policy_flags = 0 if allocator == "typed_plain" else 1
         identity_helper = f'''pub(crate) fn with_vulnerability_edge_identity<R>(
     type_id: u64,
@@ -791,6 +837,7 @@ def stats_wrapper(
         stats.last_wrong_identity_requested_callsite,
         stats.last_wrong_identity_size,
         stats.last_wrong_identity_align,
+        semantic_stats_last_wrong_identity_retained_ptr(),
     );
 }}
 '''
@@ -802,7 +849,8 @@ def stats_wrapper(
         else ""
     )
     return f'''use unialloc::{{
-    semantic_stats_recording_enable, semantic_stats_reset, semantic_stats_snapshot,
+    semantic_stats_last_wrong_identity_retained_ptr, semantic_stats_recording_enable,
+    semantic_stats_reset, semantic_stats_snapshot,
     type_isolation_side_cache_snapshot, {identity_imports}UniAlloc,
 }};
 
@@ -838,6 +886,7 @@ fn main() {{
         stats.last_wrong_identity_requested_callsite,
         stats.last_wrong_identity_size,
         stats.last_wrong_identity_align,
+        semantic_stats_last_wrong_identity_retained_ptr(),
         cache.occupied_entries,
         cache.corrupt_slots,
     );
@@ -948,6 +997,7 @@ def wrapper_source(
     preserve_subject_allocator: bool = False,
     preserve_default_system_allocator: bool = False,
     vulnerability_edge_hooks: bool = False,
+    automatic_edge_identity_probe: bool = False,
     legacy_allocator_abi_bridge: bool = False,
 ) -> str:
     if legacy_allocator_abi_bridge and (
@@ -989,6 +1039,7 @@ fn main() {
         return stats_wrapper(
             variant,
             vulnerability_edge_hooks=vulnerability_edge_hooks,
+            automatic_edge_identity_probe=automatic_edge_identity_probe,
             legacy_allocator_abi_bridge=legacy_allocator_abi_bridge,
         )
     raise ExperimentError(f"unsupported allocator variant: {variant}")
@@ -999,6 +1050,7 @@ def transform_witness(
     variant: str,
     *,
     allocator_topology: dict[str, Any] | None = None,
+    automatic_edge_identity_probe: bool = False,
     legacy_allocator_abi_bridge: bool = False,
 ) -> dict[str, str]:
     main = project / "src" / "main.rs"
@@ -1021,6 +1073,7 @@ def transform_witness(
             VULNERABILITY_EDGE_IDENTITY_HOOK in original
             and VULNERABILITY_EDGE_REPORT_HOOK in original
         ),
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
         legacy_allocator_abi_bridge=legacy_allocator_abi_bridge,
     )
     main.write_text(generated, encoding="utf-8")
@@ -1217,8 +1270,8 @@ def serialize_execution(
         "wall_seconds": result["wall_seconds"],
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
-        "stdout_path": str(stdout_path.resolve()),
-        "stderr_path": str(stderr_path.resolve()),
+        "stdout_path": durable_artifact_path(stdout_path),
+        "stderr_path": durable_artifact_path(stderr_path),
         "stdout_sha256": sha256_bytes(stdout),
         "stderr_sha256": sha256_bytes(stderr),
     }
@@ -1292,6 +1345,15 @@ def finding_signature(tool: str, text: str) -> str | None:
 def address_reuse_observed(text: str) -> bool:
     match = ADDRESS_RE.search(text)
     return bool(match and int(match.group(1), 16) == int(match.group(2), 16))
+
+
+def original_or_stale_address(text: str) -> int | None:
+    """Parse the original/stale pointer from the bounded reuse-edge trace."""
+
+    match = ADDRESS_RE.search(text)
+    if match is None:
+        return None
+    return int(match.group(1), 16)
 
 
 def native_diagnostic_signature(record: dict[str, Any]) -> str | None:
@@ -1771,8 +1833,273 @@ def load_rewrite_candidates(audit_dir: pathlib.Path) -> list[dict[str, Any]]:
             continue
         for row in rows:
             if isinstance(row, dict):
-                candidates.append({**row, "audit_path": str(path.resolve())})
+                candidates.append({**row, "audit_path": durable_artifact_path(path)})
     return candidates
+
+
+def automatic_compiler_coverage_contract(
+    annotation: dict[str, Any],
+) -> dict[str, Any] | None:
+    value = annotation.get("automatic_compiler_coverage_contract")
+    if value is None:
+        return None
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise ExperimentError(
+            "automatic_compiler_coverage_contract must be a schema-version-1 object"
+        )
+    coverage_scope = value.get("coverage_scope")
+    if coverage_scope not in {
+        "derived_vulnerability_edge",
+        "source_shaped_derived",
+        "published_source",
+    }:
+        raise ExperimentError(
+            "automatic_compiler_coverage_contract.coverage_scope must be one of "
+            "derived_vulnerability_edge, source_shaped_derived, or published_source"
+        )
+
+    def validate_site_contract(
+        site: Any,
+        *,
+        label: str,
+        allow_preserved_module: bool,
+    ) -> None:
+        if not isinstance(site, dict):
+            raise ExperimentError(
+                f"automatic_compiler_coverage_contract.{label} must be an object"
+            )
+        for field in ("source_file_fragment", "semantic_type_fragment"):
+            if not isinstance(site.get(field), str) or not site[field]:
+                raise ExperimentError(
+                    "automatic_compiler_coverage_contract."
+                    f"{label}.{field} must be a nonempty string"
+                )
+        statuses = site.get("rewrite_statuses")
+        if (
+            not isinstance(statuses, list)
+            or not statuses
+            or any(not isinstance(status, str) or not status for status in statuses)
+        ):
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.rewrite_statuses must be a nonempty string list"
+            )
+        unsupported = set(statuses) - AUTOMATIC_COVERAGE_APPLIED_REWRITE_STATUSES
+        if unsupported:
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.rewrite_statuses contains unsupported status(es): "
+                + ", ".join(sorted(unsupported))
+            )
+        allow_preserved = site.get("allow_preserved_origin_module", False)
+        if not isinstance(allow_preserved, bool):
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.allow_preserved_origin_module must be a boolean"
+            )
+        if allow_preserved and not allow_preserved_module:
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.allow_preserved_origin_module is not permitted"
+            )
+        if (
+            allow_preserved
+            and "actual_semantic_ownership_transfer_rewrite_applied"
+            not in statuses
+        ):
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.rewrite_statuses must include the applied ownership "
+                "transfer status when origin-module preservation is enabled"
+            )
+        origin = site.get("origin")
+        if allow_preserved:
+            validate_site_contract(
+                origin,
+                label=f"{label}.origin",
+                allow_preserved_module=False,
+            )
+        elif origin is not None:
+            raise ExperimentError(
+                "automatic_compiler_coverage_contract."
+                f"{label}.origin requires allow_preserved_origin_module=true"
+            )
+
+    for role in ("victim", "replacement"):
+        validate_site_contract(
+            value.get(role),
+            label=role,
+            allow_preserved_module=role == "victim",
+        )
+    return value
+
+
+def bind_runtime_identity_to_audits(
+    *,
+    runtime_type_id: int,
+    runtime_module_id: int,
+    runtime_callsite: int | None,
+    audit_dir: pathlib.Path,
+    site_contract: dict[str, Any],
+    role: str,
+) -> dict[str, Any]:
+    """Bind one runtime identity to one preregistered compiler rewrite site."""
+
+    candidates = load_rewrite_candidates(audit_dir)
+    if site_contract.get("allow_preserved_origin_module") is True:
+        origin_contract = site_contract["origin"]
+        origin_statuses = set(origin_contract["rewrite_statuses"])
+        origin_matching = [
+            candidate
+            for candidate in candidates
+            if isinstance(candidate.get("type_id"), int)
+            and candidate.get("type_id", 0) > 0
+            and candidate.get("module_id") == runtime_module_id
+            and origin_contract["source_file_fragment"]
+            in str(candidate.get("source_span", ""))
+            and origin_contract["semantic_type_fragment"]
+            in str(candidate.get("semantic_object_type", ""))
+            and candidate.get("rewrite_status") in origin_statuses
+        ]
+        transfer_status = "actual_semantic_ownership_transfer_rewrite_applied"
+        transfer_matching = [
+            candidate
+            for candidate in candidates
+            if candidate.get("type_id") == runtime_type_id
+            and candidate.get("rewrite_status") == transfer_status
+            and candidate.get("rewrite_status")
+            in set(site_contract["rewrite_statuses"])
+            and site_contract["source_file_fragment"]
+            in str(candidate.get("source_span", ""))
+            and site_contract["semantic_type_fragment"]
+            in str(candidate.get("semantic_object_type", ""))
+            and (
+                runtime_callsite is None
+                or candidate.get("callsite") == runtime_callsite
+            )
+        ]
+        transfer_accepts_origin = False
+        if len(origin_matching) == 1 and len(transfer_matching) == 1:
+            origin_type = origin_matching[0].get("semantic_object_type")
+            argument_types = transfer_matching[0].get("argument_types")
+            transfer_accepts_origin = bool(
+                isinstance(origin_type, str)
+                and isinstance(argument_types, list)
+                and origin_type in argument_types
+            )
+        if (
+            len(origin_matching) != 1
+            or len(transfer_matching) != 1
+            or not transfer_accepts_origin
+        ):
+            return {
+                "valid": False,
+                "status": f"{role}_preserved_origin_chain_not_unique",
+                "matching_origin_candidate_count": len(origin_matching),
+                "matching_transfer_candidate_count": len(transfer_matching),
+                "transfer_accepts_origin_semantic_type": transfer_accepts_origin,
+                "claim_grade": False,
+            }
+        candidate = transfer_matching[0]
+        origin_candidate = origin_matching[0]
+        return {
+            "valid": True,
+            "status": f"runtime_identity_bound_to_compiler_{role}_site",
+            "allocation_site_id": candidate.get("allocation_site_id"),
+            "source_span": candidate.get("source_span"),
+            "semantic_object_type": candidate.get("semantic_object_type"),
+            "rewrite_status": candidate.get("rewrite_status"),
+            "audit_path": candidate.get("audit_path"),
+            "type_id": candidate.get("type_id"),
+            "runtime_type_id": runtime_type_id,
+            "type_id_binding": "exact_numeric_type_id",
+            "module_id": candidate.get("module_id"),
+            "runtime_module_id": runtime_module_id,
+            "module_binding": "preserved_origin_module_after_ownership_transfer",
+            "callsite": candidate.get("callsite"),
+            "origin_binding": {
+                "valid": True,
+                "status": "runtime_module_bound_to_compiler_origin_site",
+                "allocation_site_id": origin_candidate.get("allocation_site_id"),
+                "source_span": origin_candidate.get("source_span"),
+                "semantic_object_type": origin_candidate.get("semantic_object_type"),
+                "rewrite_status": origin_candidate.get("rewrite_status"),
+                "audit_path": origin_candidate.get("audit_path"),
+                "type_id": origin_candidate.get("type_id"),
+                "module_id": origin_candidate.get("module_id"),
+                "runtime_module_id": runtime_module_id,
+                "callsite": origin_candidate.get("callsite"),
+                "claim_grade": False,
+            },
+            "transfer_accepts_origin_semantic_type": True,
+            "claim_grade": False,
+        }
+
+    def type_identity_matches(candidate: dict[str, Any]) -> bool:
+        if candidate.get("type_id") == runtime_type_id:
+            return True
+        return (
+            candidate.get("type_id") == 0
+            and candidate.get("type_id_basis")
+            == "monomorphized_compiler_type_id_runtime"
+            and "push_for_rust_type"
+            in str(candidate.get("replacement_symbol", ""))
+        )
+
+    exact = [
+        candidate
+        for candidate in candidates
+        if type_identity_matches(candidate)
+        and candidate.get("module_id") == runtime_module_id
+        and (
+            runtime_callsite is None
+            or candidate.get("callsite") == runtime_callsite
+        )
+    ]
+    statuses = set(site_contract["rewrite_statuses"])
+    matching = [
+        candidate
+        for candidate in exact
+        if site_contract["source_file_fragment"]
+        in str(candidate.get("source_span", ""))
+        and site_contract["semantic_type_fragment"]
+        in str(candidate.get("semantic_object_type", ""))
+        and candidate.get("rewrite_status") in statuses
+    ]
+    if len(matching) != 1:
+        return {
+            "valid": False,
+            "status": f"{role}_site_binding_not_unique",
+            "exact_metadata_candidate_count": len(exact),
+            "matching_site_candidate_count": len(matching),
+            "claim_grade": False,
+        }
+    candidate = matching[0]
+    return {
+        "valid": True,
+        "status": f"runtime_identity_bound_to_compiler_{role}_site",
+        "allocation_site_id": candidate.get("allocation_site_id"),
+        "source_span": candidate.get("source_span"),
+        "semantic_object_type": candidate.get("semantic_object_type"),
+        "rewrite_status": candidate.get("rewrite_status"),
+        "audit_path": candidate.get("audit_path"),
+        "type_id": candidate.get("type_id"),
+        "runtime_type_id": runtime_type_id,
+        "type_id_binding": (
+            "exact_numeric_type_id"
+            if candidate.get("type_id") == runtime_type_id
+            else "monomorphized_compiler_type_id_runtime"
+        ),
+        "module_id": candidate.get("module_id"),
+        "runtime_module_id": runtime_module_id,
+        "module_binding": (
+            "exact_runtime_module_id"
+            if candidate.get("module_id") == runtime_module_id
+            else "preserved_origin_module_after_ownership_transfer"
+        ),
+        "callsite": candidate.get("callsite"),
+        "claim_grade": False,
+    }
 
 
 def bind_reuse_denial_report_to_audits(
@@ -1857,6 +2184,7 @@ def validate_reuse_denial_record(
     repetition: int,
     annotation: dict[str, Any],
     audit_dir: pathlib.Path,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     decoded, line_count, malformed = prefixed_json_objects(
         record, REUSE_DENIAL_PREFIX
@@ -1873,8 +2201,13 @@ def validate_reuse_denial_record(
             f"{allocator_variant!r}; observed {len(matching)}"
         )
     report = matching[0] if len(matching) == 1 else None
+    required_fields = (
+        REUSE_DENIAL_FIELDS
+        if automatic_edge_identity_probe
+        else LEGACY_REUSE_DENIAL_FIELDS
+    )
     if report is not None:
-        missing = [field for field in REUSE_DENIAL_FIELDS if field not in report]
+        missing = [field for field in required_fields if field not in report]
         if missing:
             errors.append("missing reuse-denial fields: " + ", ".join(missing))
         for field in REUSE_DENIAL_FIELDS:
@@ -1884,40 +2217,126 @@ def validate_reuse_denial_record(
             ):
                 errors.append(f"{field} must be a non-negative integer")
 
+    observed_original_address = original_or_stale_address(execution_text(record))
+    retained_pointer_matches_original = False
+    if automatic_edge_identity_probe and report is not None:
+        retained_ptr = report.get("last_wrong_identity_retained_ptr")
+        denial_count = report.get("typed_cache_wrong_identity_denials")
+        if isinstance(retained_ptr, int) and not isinstance(retained_ptr, bool):
+            if isinstance(denial_count, int) and denial_count > 0:
+                if retained_ptr == 0:
+                    errors.append("last_wrong_identity_retained_ptr must be nonzero")
+                elif observed_original_address is None:
+                    errors.append("original/stale_value address is missing or malformed")
+                elif observed_original_address == 0:
+                    errors.append("original/stale_value address must be nonzero")
+                elif retained_ptr != observed_original_address:
+                    errors.append(
+                        "last_wrong_identity_retained_ptr does not equal the "
+                        "original/stale_value address"
+                    )
+                else:
+                    retained_pointer_matches_original = True
+            elif denial_count == 0 and retained_ptr != 0:
+                errors.append(
+                    "last_wrong_identity_retained_ptr must be zero without a denial"
+                )
+
     schema_valid = not errors
     event_observed = bool(
         schema_valid and report["typed_cache_wrong_identity_denials"] > 0
     )
     expected_layout = annotation["expected_layout"]
-    match_checks = (
+    common_match_checks = (
         schema_valid
         and report is not None
-        and report["last_wrong_identity_retained_type_id"]
-        == annotation["victim_type_id"]
-        and report["last_wrong_identity_retained_module_id"]
-        == annotation["victim_module_id"]
         and report["last_wrong_identity_requested_type_id"] != 0
+        and report["last_wrong_identity_retained_type_id"] != 0
         and report["last_wrong_identity_requested_type_id"]
         != report["last_wrong_identity_retained_type_id"]
         and report["last_wrong_identity_requested_module_id"] != 0
+        and report["last_wrong_identity_retained_module_id"] != 0
         and report["last_wrong_identity_requested_callsite"] != 0
         and report["last_wrong_identity_size"] == expected_layout["size"]
         and report["last_wrong_identity_align"] == expected_layout["align"]
     )
-    event_matches_annotation = bool(event_observed and match_checks)
-    site_binding = (
-        bind_reuse_denial_report_to_audits(
-            report, audit_dir=audit_dir, annotation=annotation
+    if automatic_edge_identity_probe:
+        match_checks = common_match_checks and retained_pointer_matches_original
+    else:
+        match_checks = (
+            common_match_checks
+            and report is not None
+            and report["last_wrong_identity_retained_type_id"]
+            == annotation["victim_type_id"]
+            and report["last_wrong_identity_retained_module_id"]
+            == annotation["victim_module_id"]
         )
-        if event_matches_annotation and report is not None
-        else {
+    preliminary_event_match = bool(event_observed and match_checks)
+    coverage_contract = automatic_compiler_coverage_contract(annotation)
+    if preliminary_event_match and report is not None:
+        if automatic_edge_identity_probe and coverage_contract is not None:
+            site_binding = bind_runtime_identity_to_audits(
+                runtime_type_id=report["last_wrong_identity_requested_type_id"],
+                runtime_module_id=report[
+                    "last_wrong_identity_requested_module_id"
+                ],
+                runtime_callsite=report[
+                    "last_wrong_identity_requested_callsite"
+                ],
+                audit_dir=audit_dir,
+                site_contract=coverage_contract["replacement"],
+                role="replacement",
+            )
+            victim_site_binding = bind_runtime_identity_to_audits(
+                runtime_type_id=report["last_wrong_identity_retained_type_id"],
+                runtime_module_id=report[
+                    "last_wrong_identity_retained_module_id"
+                ],
+                runtime_callsite=None,
+                audit_dir=audit_dir,
+                site_contract=coverage_contract["victim"],
+                role="victim",
+            )
+        elif automatic_edge_identity_probe:
+            site_binding = {
+                "valid": False,
+                "status": "automatic_compiler_coverage_contract_missing",
+                "claim_grade": False,
+            }
+            victim_site_binding = dict(site_binding)
+        else:
+            site_binding = bind_reuse_denial_report_to_audits(
+                report, audit_dir=audit_dir, annotation=annotation
+            )
+            victim_site_binding = {
+                "valid": None,
+                "status": "manual_victim_identity_annotation",
+                "claim_grade": False,
+            }
+    else:
+        site_binding = {
             "valid": None,
             "status": "no_matching_allocator_event_to_bind",
             "claim_grade": False,
         }
-    )
+        victim_site_binding = dict(site_binding)
     direct_edge_coverage = bool(
-        event_matches_annotation and site_binding.get("valid") is True
+        preliminary_event_match
+        and site_binding.get("valid") is True
+        and (
+            not automatic_edge_identity_probe
+            or victim_site_binding.get("valid") is True
+        )
+    )
+    # In automatic mode, layout plus a type mismatch is only a candidate
+    # signal. Safe code can legitimately trigger an unrelated cross-identity
+    # denial with the same layout. Count the event as vulnerability-specific
+    # only after both runtime identities bind to the preregistered compiler
+    # sites. Manual mode retains its frozen numeric victim-identity contract.
+    event_matches_annotation = (
+        direct_edge_coverage
+        if automatic_edge_identity_probe
+        else preliminary_event_match
     )
     if not schema_valid:
         status = "invalid_reuse_denial_report"
@@ -1938,7 +2357,10 @@ def validate_reuse_denial_record(
         "event_observed": event_observed,
         "event_matches_annotation": event_matches_annotation,
         "requested_site_binding": site_binding,
+        "victim_site_binding": victim_site_binding,
         "direct_reuse_edge_coverage_observed": direct_edge_coverage,
+        "original_or_stale_address": observed_original_address,
+        "retained_pointer_matches_original": retained_pointer_matches_original,
         "address_reuse_observed": address_reuse_observed(execution_text(record)),
         "exit_code": record.get("exit_code"),
         "timed_out": bool(record.get("timed_out")),
@@ -1952,6 +2374,7 @@ def validate_reuse_denial_evidence(
     *,
     annotation: dict[str, Any] | None,
     audit_dir: pathlib.Path,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     if annotation is None:
         return {
@@ -1975,6 +2398,7 @@ def validate_reuse_denial_evidence(
             repetition=index,
             annotation=annotation,
             audit_dir=audit_dir,
+            automatic_edge_identity_probe=automatic_edge_identity_probe,
         )
         for index, run in enumerate(runs, start=1)
     ]
@@ -1988,8 +2412,10 @@ def validate_reuse_denial_evidence(
         "status": "validated" if valid else "invalid_reuse_denial_reports",
         "valid": valid,
         "annotation": annotation,
-        "manual_victim_identity_annotation": True,
-        "compiler_automatic_victim_coverage": False,
+        "manual_victim_identity_annotation": not automatic_edge_identity_probe,
+        "compiler_automatic_victim_coverage": bool(repetitions)
+        and automatic_edge_identity_probe
+        and direct_count == len(repetitions),
         "repetitions": repetitions,
         "reuse_denial_event_count": sum(
             1 for row in repetitions if row["event_observed"]
@@ -2004,8 +2430,13 @@ def validate_reuse_denial_evidence(
         "signal_semantics": "allocator cross-identity reuse denial",
         "claim_grade": False,
         "boundary": (
-            "The signal identifies a denied A-to-B reuse edge. It does not identify "
-            "the source-level stale-pointer bug and can also occur in safe programs."
+            "The automatic probe binds both runtime identities to exact compiler "
+            "rewrite contracts; causal source attribution still requires the matched "
+            "vulnerable, patched, and typed-plain matrix."
+            if automatic_edge_identity_probe
+            else "The signal identifies a denied A-to-B reuse edge. It does not "
+            "identify the source-level stale-pointer bug and can also occur in safe "
+            "programs."
         ),
     }
 
@@ -2186,6 +2617,7 @@ def evaluate_annotated_reuse_edge_matrix(
     arms: Sequence[dict[str, Any]],
     *,
     repetitions: int,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     """Evaluate the bounded A -> free -> B reuse-edge experiment."""
 
@@ -2217,8 +2649,20 @@ def evaluate_annotated_reuse_edge_matrix(
     typed_plain_patched = arm("patched", "typed_plain")
     typeiso_patched = arm("patched", "typeiso")
 
+    def repetitions_complete(value: dict[str, Any], *, require_clean: bool) -> bool:
+        summary = value.get("repetition_summary", {})
+        return bool(
+            summary.get("executed") == repetitions
+            and summary.get("timed_out_count") == 0
+            and (
+                not require_clean
+                or summary.get("clean_exit_count") == repetitions
+            )
+        )
+
     baseline_reproduced = bool(
-        system_vulnerable.get("oracle_validation", {}).get(
+        repetitions_complete(system_vulnerable, require_clean=False)
+        and system_vulnerable.get("oracle_validation", {}).get(
             "expected_oracle_observed"
         )
         is True
@@ -2228,7 +2672,10 @@ def evaluate_annotated_reuse_edge_matrix(
         == repetitions
     )
     patched_control_reproduced = bool(
-        system_patched.get("oracle_validation", {}).get(
+        repetitions_complete(system_patched, require_clean=True)
+        and repetitions_complete(typed_plain_patched, require_clean=True)
+        and repetitions_complete(typeiso_patched, require_clean=True)
+        and system_patched.get("oracle_validation", {}).get(
             "expected_oracle_observed"
         )
         is True
@@ -2258,7 +2705,8 @@ def evaluate_annotated_reuse_edge_matrix(
         == 0
     )
     typed_plain_ablation_reproduced = bool(
-        typed_plain_vulnerable.get("repetition_summary", {}).get(
+        repetitions_complete(typed_plain_vulnerable, require_clean=True)
+        and typed_plain_vulnerable.get("repetition_summary", {}).get(
             "address_reuse_observation_count"
         )
         == repetitions
@@ -2268,8 +2716,13 @@ def evaluate_annotated_reuse_edge_matrix(
         == 0
     )
     typeiso_signal = typeiso_vulnerable.get("reuse_denial_evidence", {})
+    compiler_automatic_victim_coverage = bool(
+        automatic_edge_identity_probe
+        and typeiso_signal.get("compiler_automatic_victim_coverage") is True
+    )
     typeiso_edge_blocked_and_reported = bool(
-        typeiso_signal.get("direct_reuse_edge_coverage_observed") is True
+        repetitions_complete(typeiso_vulnerable, require_clean=False)
+        and typeiso_signal.get("direct_reuse_edge_coverage_observed") is True
         and typeiso_signal.get("bound_replacement_site_count") == repetitions
         and typeiso_vulnerable.get("repetition_summary", {}).get(
             "address_reuse_observation_count"
@@ -2288,7 +2741,7 @@ def evaluate_annotated_reuse_edge_matrix(
     patched_typeiso_denial_count = int(
         patched_typeiso_signal.get("matching_reuse_denial_event_count", 0) or 0
     )
-    vulnerability_specific_signal = bool(
+    causal_edge_blocking_signal = bool(
         typeiso_edge_blocked_and_reported and patched_typeiso_denial_count == 0
     )
     missing_required_arms = [
@@ -2303,6 +2756,24 @@ def evaluate_annotated_reuse_edge_matrix(
         )
         if (archive, allocator) not in by_key
     ]
+    coverage_contract = automatic_compiler_coverage_contract(annotation)
+    coverage_scope = (
+        coverage_contract.get("coverage_scope")
+        if coverage_contract is not None
+        else None
+    )
+    causal_compiler_bound_reuse_edge_mitigation = bool(
+        validated
+        and not missing_required_arms
+        and automatic_edge_identity_probe
+        and compiler_automatic_victim_coverage
+        and causal_edge_blocking_signal
+        and coverage_contract is not None
+    )
+    published_source_edge_mitigation_validated = bool(
+        causal_compiler_bound_reuse_edge_mitigation
+        and coverage_scope == "published_source"
+    )
     if missing_required_arms:
         status = "incomplete_required_arm_matrix"
     elif validated:
@@ -2313,8 +2784,8 @@ def evaluate_annotated_reuse_edge_matrix(
         "status": status,
         "validated": validated and not missing_required_arms,
         "annotation": annotation,
-        "manual_victim_identity_annotation": True,
-        "compiler_automatic_victim_coverage": False,
+        "manual_victim_identity_annotation": not automatic_edge_identity_probe,
+        "compiler_automatic_victim_coverage": compiler_automatic_victim_coverage,
         "baseline_vulnerability_and_address_reuse_reproduced": baseline_reproduced,
         "patched_system_control_reproduced": patched_control_reproduced,
         "typed_plain_address_reuse_ablation_reproduced": (
@@ -2324,17 +2795,137 @@ def evaluate_annotated_reuse_edge_matrix(
             typeiso_edge_blocked_and_reported
         ),
         "patched_typeiso_matching_denial_count": patched_typeiso_denial_count,
-        "vulnerability_specific_detection_signal": vulnerability_specific_signal,
+        "vulnerability_specific_detection_signal": False,
+        "causal_compiler_bound_reuse_edge_blocking": causal_edge_blocking_signal,
+        "causal_compiler_bound_reuse_edge_mitigation": (
+            causal_compiler_bound_reuse_edge_mitigation
+        ),
         "source_vulnerability_detection_validated": False,
+        "published_source_edge_mitigation_validated": (
+            published_source_edge_mitigation_validated
+        ),
+        "result_semantics": (
+            "causal_compiler_bound_reuse_edge_mitigation"
+            if causal_compiler_bound_reuse_edge_mitigation
+            else "manual_allocator_decision_edge"
+            if not automatic_edge_identity_probe and validated
+            else "inconclusive"
+        ),
         "missing_required_arms": missing_required_arms,
         "claim_scope": claim_scope,
         "claim_grade": False,
         "boundary": (
-            "A validated result shows that exact-identity cache routing denied and "
-            "reported the exploit-enabling cross-type reuse edge. The source-level "
-            "stale pointer remains, same-identity reuse remains allowed, and the "
-            "manual victim annotation is outside automatic compiler coverage."
+            "The causal result binds the retained pointer plus both compiler-generated "
+            "runtime identities to the preregistered measured cross-type reuse edge. "
+            "The patched same-identity controls validate functionality; they do not "
+            "establish vulnerability-specific detection. Safe cross-identity denials "
+            "remain policy behavior covered by allocator unit tests."
+            if automatic_edge_identity_probe
+            else "A validated result shows that exact-identity cache routing denied "
+            "and reported the exploit-enabling cross-type reuse edge. The source-level "
+            "stale pointer remains, same-identity reuse remains allowed, and the manual "
+            "victim annotation is outside automatic compiler coverage."
         ),
+    }
+
+
+def validate_automatic_critical_sites(
+    *,
+    audit_dir: pathlib.Path,
+    annotation: dict[str, Any],
+) -> dict[str, Any]:
+    contract = automatic_compiler_coverage_contract(annotation)
+    if contract is None:
+        return {
+            "status": "contract_missing",
+            "valid": None,
+            "sites": {},
+            "claim_grade": False,
+        }
+    candidates = load_rewrite_candidates(audit_dir)
+    sites: dict[str, Any] = {}
+    for role in ("victim", "replacement"):
+        site = contract[role]
+        statuses = set(site["rewrite_statuses"])
+        matching = [
+            candidate
+            for candidate in candidates
+            if site["source_file_fragment"]
+            in str(candidate.get("source_span", ""))
+            and site["semantic_type_fragment"]
+            in str(candidate.get("semantic_object_type", ""))
+            and candidate.get("rewrite_status") in statuses
+            and (
+                isinstance(candidate.get("type_id"), int)
+                and candidate.get("type_id", 0) > 0
+                or (
+                    candidate.get("type_id") == 0
+                    and candidate.get("type_id_basis")
+                    == "monomorphized_compiler_type_id_runtime"
+                    and "push_for_rust_type"
+                    in str(candidate.get("replacement_symbol", ""))
+                )
+            )
+        ]
+        if site.get("allow_preserved_origin_module") is True:
+            matching = [
+                candidate
+                for candidate in matching
+                if candidate.get("rewrite_status")
+                == "actual_semantic_ownership_transfer_rewrite_applied"
+                and isinstance(candidate.get("type_id"), int)
+                and candidate.get("type_id", 0) > 0
+            ]
+            origin = site["origin"]
+            origin_statuses = set(origin["rewrite_statuses"])
+            origin_matching = [
+                candidate
+                for candidate in candidates
+                if origin["source_file_fragment"]
+                in str(candidate.get("source_span", ""))
+                and origin["semantic_type_fragment"]
+                in str(candidate.get("semantic_object_type", ""))
+                and candidate.get("rewrite_status") in origin_statuses
+                and isinstance(candidate.get("type_id"), int)
+                and candidate.get("type_id", 0) > 0
+            ]
+            transfer_accepts_origin = False
+            if len(matching) == 1 and len(origin_matching) == 1:
+                origin_type = origin_matching[0].get("semantic_object_type")
+                argument_types = matching[0].get("argument_types")
+                transfer_accepts_origin = bool(
+                    isinstance(origin_type, str)
+                    and isinstance(argument_types, list)
+                    and origin_type in argument_types
+                )
+            sites[role] = {
+                "valid": len(matching) == 1
+                and len(origin_matching) == 1
+                and transfer_accepts_origin,
+                "matching_candidate_count": len(matching),
+                "candidate": matching[0] if len(matching) == 1 else None,
+                "origin": {
+                    "valid": len(origin_matching) == 1,
+                    "matching_candidate_count": len(origin_matching),
+                    "candidate": (
+                        origin_matching[0] if len(origin_matching) == 1 else None
+                    ),
+                },
+                "transfer_accepts_origin_semantic_type": transfer_accepts_origin,
+            }
+        else:
+            sites[role] = {
+                "valid": len(matching) == 1,
+                "matching_candidate_count": len(matching),
+                "candidate": matching[0] if len(matching) == 1 else None,
+            }
+    valid = all(site["valid"] for site in sites.values())
+    return {
+        "status": "validated" if valid else "critical_site_contract_not_satisfied",
+        "valid": valid,
+        "coverage_scope": contract.get("coverage_scope"),
+        "sites": sites,
+        "claim_grade": False,
     }
 
 
@@ -2344,6 +2935,9 @@ def validate_audit_coverage(
     summary: dict[str, Any],
     target_crates: Sequence[str],
     build: dict[str, Any] | None,
+    audit_dir: pathlib.Path | None = None,
+    annotation: dict[str, Any] | None = None,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     semantic = int(summary.get("semantic_rewrites_applied", 0) or 0)
     direct = int(summary.get("direct_allocator_rewrites_applied", 0) or 0)
@@ -2364,7 +2958,7 @@ def validate_audit_coverage(
     blockers = ["critical_site_coverage_not_validated"]
     if rewrite_route == "none":
         blockers.append("no_compiler_rewrite_observed")
-    boundary = {
+    boundary: dict[str, Any] = {
         "validation_scope": "target_crate_presence_and_force_load_topology_only",
         "critical_site_coverage_validated": False,
         "efficacy_eligible": False,
@@ -2398,13 +2992,54 @@ def validate_audit_coverage(
             "error": str(error),
             **boundary,
         }
-    return {
+    result = {
         "status": "target_crate_presence_validated",
         "valid": True,
         "expected_target_crates": list(target_crates),
         "observed_target_crates": summary.get("crate_names", []),
         **boundary,
     }
+    if not automatic_edge_identity_probe:
+        return result
+    if annotation is None or audit_dir is None:
+        result["automatic_critical_site_validation"] = {
+            "status": "annotation_or_audit_directory_missing",
+            "valid": None,
+            "claim_grade": False,
+        }
+        return result
+    critical = validate_automatic_critical_sites(
+        audit_dir=audit_dir,
+        annotation=annotation,
+    )
+    result["automatic_critical_site_validation"] = critical
+    if critical["valid"] is True:
+        result.update(
+            {
+                "status": "automatic_critical_sites_validated",
+                "validation_scope": (
+                    "target_crate_presence_and_preregistered_critical_sites"
+                ),
+                "critical_site_coverage_validated": True,
+                "efficacy_eligible": True,
+                "efficacy_blockers": [],
+            }
+        )
+    elif critical["valid"] is False:
+        result.update(
+            {
+                "status": "automatic_critical_site_validation_failed",
+                "valid": False,
+                "efficacy_blockers": [
+                    "automatic_critical_site_contract_not_satisfied"
+                ],
+            }
+        )
+    else:
+        result["efficacy_blockers"] = [
+            "automatic_compiler_coverage_contract_missing"
+        ]
+    return result
 
 
 def collect_file_records(directory: pathlib.Path, suffix: str) -> list[dict[str, Any]]:
@@ -2415,7 +3050,7 @@ def collect_file_records(directory: pathlib.Path, suffix: str) -> list[dict[str,
         if not path.is_file():
             continue
         record: dict[str, Any] = {
-            "path": str(path.resolve()),
+            "path": durable_artifact_path(path),
             "bytes": path.stat().st_size,
             "sha256": sha256_file(path),
         }
@@ -2647,6 +3282,7 @@ def materialize_arm(
     cache_root: pathlib.Path,
     allow_download: bool,
     mode: str,
+    automatic_edge_identity_probe: bool = False,
 ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
     case, scenario = harness.select_scenario(catalog, scenario_id)
     legacy_bridge = legacy_allocator_abi_bridge_requested(scenario)
@@ -2681,6 +3317,7 @@ def materialize_arm(
         project,
         allocator_variant,
         allocator_topology=topology,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
         legacy_allocator_abi_bridge=legacy_bridge,
     )
     configure_manifest(project, allocator_variant)
@@ -2857,6 +3494,7 @@ def arm_fingerprint_payload(
     rustflags: Sequence[str],
     subject_cargo_features: dict[str, Any],
     cargo_metadata_attestation: dict[str, Any] | None,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     value: dict[str, Any] = {
         "schema_version": FINGERPRINT_SCHEMA,
@@ -2875,6 +3513,7 @@ def arm_fingerprint_payload(
         "target_crates": list(target_crates),
         "rustflags": list(rustflags),
         "subject_cargo_features": subject_cargo_features,
+        "automatic_edge_identity_probe": automatic_edge_identity_probe,
         "orchestrator_sha256": sha256_file(pathlib.Path(__file__).resolve()),
         "materializer_sha256": sha256_file(pathlib.Path(harness.__file__).resolve()),
         "realworld_driver_sha256": sha256_file(pathlib.Path(realworld.__file__).resolve()),
@@ -2917,6 +3556,7 @@ def run_arm(
     run_timeout: int,
     toolchain: dict[str, Any],
     tools: dict[str, Any] | None,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     case, scenario = harness.select_scenario(catalog, scenario_id)
     legacy_bridge = legacy_allocator_abi_bridge_requested(scenario)
@@ -2960,6 +3600,11 @@ def run_arm(
         "efficacy_eligible": False,
         "efficacy_blockers": ["critical_site_coverage_not_validated"],
         "legacy_allocator_abi_bridge": legacy_bridge,
+        "edge_identity_mode": (
+            "compiler_automatic_probe"
+            if automatic_edge_identity_probe
+            else "catalog_default"
+        ),
     }
     if not supported:
         status = (
@@ -2999,6 +3644,7 @@ def run_arm(
         cache_root=cache_root,
         allow_download=allow_download,
         mode=mode,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
     )
     if not allocator_topology["substitution_supported"]:
         base_result.update(
@@ -3083,7 +3729,11 @@ def run_arm(
         force_rlib=force_rlib,
     )
     harness_crate = case["case_id"].lower() + "-harness"
-    target_crates = compiler_target_crates(case, scenario)
+    target_crates = compiler_target_crates(
+        case,
+        scenario,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
+    )
     rustflag_policy = effective_rustflag_policy(report, scenario, mode)
     rustflags = rustflag_policy["effective"]
     audit_dir = arm_dir / "audits"
@@ -3120,6 +3770,7 @@ def run_arm(
         rustflags=rustflags,
         subject_cargo_features=report["subject_cargo_features"],
         cargo_metadata_attestation=cargo_metadata_attestation,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
     )
     fingerprint = canonical_sha256(fingerprint_payload)
     target_reset = reset_target_for_fingerprint(
@@ -3213,6 +3864,11 @@ def run_arm(
         summary=audit_summary,
         target_crates=target_crates,
         build=build,
+        audit_dir=audit_dir,
+        annotation=edge_annotation,
+        automatic_edge_identity_probe=(
+            automatic_edge_identity_probe and archive_variant == "vulnerable"
+        ),
     )
     audits = collect_file_records(audit_dir, ".json")
     pass_logs = collect_file_records(pass_log_dir, ".log")
@@ -3231,6 +3887,7 @@ def run_arm(
         runs,
         annotation=edge_annotation,
         audit_dir=audit_dir,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
     )
     stats_by_repetition = [
         {
@@ -3299,6 +3956,12 @@ def run_arm(
         "reuse_denial_evidence": reuse_denial_evidence,
         "pass_audit_summary": audit_summary,
         "pass_audit_validation": audit_validation,
+        "efficacy_eligible": bool(audit_validation.get("efficacy_eligible")),
+        "efficacy_blockers": list(
+            audit_validation.get(
+                "efficacy_blockers", ["critical_site_coverage_not_validated"]
+            )
+        ),
         "pass_audits": audits,
         "pass_logs": pass_logs,
         "oracle_validation": oracle_validation,
@@ -3322,6 +3985,7 @@ def preflight(
     output_dir: pathlib.Path,
     cache_root: pathlib.Path,
     allow_download: bool,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     case, scenario = harness.select_scenario(catalog, scenario_id)
     cargo_feature_overrides = allocator_cargo_feature_overrides(scenario)
@@ -3382,6 +4046,7 @@ def preflight(
                         project,
                         allocator_variant,
                         allocator_topology=allocator_topology,
+                        automatic_edge_identity_probe=automatic_edge_identity_probe,
                         legacy_allocator_abi_bridge=legacy_bridge,
                     )
                     configure_manifest(project, allocator_variant)
@@ -3433,12 +4098,18 @@ def preflight(
         "schema_version": RESULT_SCHEMA,
         "source": "unialloc-rustsec-heap-experiment-preflight",
         "claim_grade": False,
-        "catalog_path": str(catalog_path.resolve()),
+        "catalog_path": durable_artifact_path(catalog_path),
         "catalog_sha256": sha256_file(catalog_path),
         "scenario_id": scenario_id,
         "case_id": case["case_id"],
         "crate": case["crate"],
-        "harness_target_crates": list(compiler_target_crates(case, scenario)),
+        "harness_target_crates": list(
+            compiler_target_crates(
+                case,
+                scenario,
+                automatic_edge_identity_probe=automatic_edge_identity_probe,
+            )
+        ),
         "tool": scenario["oracle"]["tool"],
         "toolchain": toolchain_identity(),
         "required_environment": required_env,
@@ -3447,6 +4118,7 @@ def preflight(
             "type_isolation_edge_annotation"
         ),
         "legacy_allocator_abi_bridge": legacy_bridge,
+        "automatic_edge_identity_probe": automatic_edge_identity_probe,
         "allocator_cargo_feature_overrides": cargo_feature_overrides,
         "planned_arms": planned,
         "repetitions_requested": repetitions,
@@ -3470,6 +4142,7 @@ def execute_experiment(
     jobs: int,
     build_timeout: int,
     run_timeout: int,
+    automatic_edge_identity_probe: bool = False,
 ) -> dict[str, Any]:
     preflight_record = preflight(
         catalog=catalog,
@@ -3481,6 +4154,7 @@ def execute_experiment(
         output_dir=output_dir,
         cache_root=cache_root,
         allow_download=allow_download,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
     )
     scenario = {
         "type_isolation_edge_annotation": preflight_record.get(
@@ -3516,6 +4190,7 @@ def execute_experiment(
                     run_timeout=run_timeout,
                     toolchain=toolchain,
                     tools=tools,
+                    automatic_edge_identity_probe=automatic_edge_identity_probe,
                 )
             )
     unexpected: list[dict[str, Any]] = []
@@ -3560,7 +4235,10 @@ def execute_experiment(
         ):
             unexpected.append(arm)
     reuse_edge_evaluation = evaluate_annotated_reuse_edge_matrix(
-        scenario, arms, repetitions=repetitions
+        scenario,
+        arms,
+        repetitions=repetitions,
+        automatic_edge_identity_probe=automatic_edge_identity_probe,
     )
     record = {
         "schema_version": RESULT_SCHEMA,
@@ -3572,8 +4250,9 @@ def execute_experiment(
         "variants": list(variants),
         "archive_variants": list(archive_variants),
         "repetitions_requested": repetitions,
+        "automatic_edge_identity_probe": automatic_edge_identity_probe,
         "toolchain": toolchain,
-        "preflight_path": str((output_dir / "preflight.json").resolve()),
+        "preflight_path": durable_artifact_path(output_dir / "preflight.json"),
         "typeiso_toolchain": (
             {
                 "driver_sha256": tools["driver_sha256"],
@@ -3631,6 +4310,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--build-timeout", type=int, default=900)
     parser.add_argument("--run-timeout", type=int, default=60)
+    parser.add_argument(
+        "--automatic-edge-identity-probe",
+        action="store_true",
+        help=(
+            "disable manual vulnerability-edge metadata and compile both the "
+            "subject and harness crates so compiler coverage can be measured"
+        ),
+    )
     return parser
 
 
@@ -3686,6 +4373,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_dir=output_dir,
                 cache_root=cache_root(args),
                 allow_download=args.allow_download,
+                automatic_edge_identity_probe=args.automatic_edge_identity_probe,
             )
             print(json.dumps(record, indent=2, sort_keys=True))
             return 0
@@ -3702,6 +4390,7 @@ def main(argv: list[str] | None = None) -> int:
             jobs=args.jobs,
             build_timeout=args.build_timeout,
             run_timeout=args.run_timeout,
+            automatic_edge_identity_probe=args.automatic_edge_identity_probe,
         )
         print(json.dumps(record, indent=2, sort_keys=True))
         return 0 if record["orchestration_success"] else 1

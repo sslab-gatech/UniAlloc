@@ -41,10 +41,10 @@
 <text x="45" y="467" class="label">Other allocator feature only</text>
 <rect x="435" y="453" width="354" height="20" rx="3" fill="#E28E2C"/>
 <text x="799" y="468" class="count">31</text>
-<text x="45" y="502" class="label">Type Isolation only</text>
+<text x="45" y="502" class="label">TypeIso measured edge only</text>
 <rect x="435" y="488" width="126" height="20" rx="3" fill="#2A6FDB"/>
 <text x="571" y="503" class="count">11</text>
-<text x="45" y="537" class="label">Type Isolation + other allocator feature</text>
+<text x="45" y="537" class="label">TypeIso measured edge + other feature</text>
 <rect x="435" y="523" width="11" height="20" rx="3" fill="#7A5195"/>
 <text x="456" y="538" class="count">1</text>
 <text x="45" y="572" class="label">No exact allocator signal observed</text>
@@ -53,7 +53,7 @@
 <text x="45" y="607" class="label">Unresolved mechanism attribution</text>
 <rect x="435" y="593" width="34" height="20" rx="3" fill="#E2B84B"/>
 <text x="479" y="608" class="count">3</text>
-<text x="45" y="687" class="label">Type Isolation edge covered</text>
+<text x="45" y="687" class="label">TypeIso-mitigated derived edge</text>
 <rect x="435" y="673" width="137" height="20" rx="3" fill="#2A6FDB"/>
 <text x="582" y="688" class="count">12</text>
 <text x="45" y="722" class="label">reclaim_checks exact detection</text>
@@ -64,6 +64,6 @@
 <text x="456" y="758" class="count">1</text>
 <text x="45" y="815" class="note">Case-attribution bars partition the 49-case efficacy denominator. Mechanism bars are nonexclusive; RSH-002 contributes to both Type Isolation and reclaim_checks.</text>
 <text x="45" y="835" class="note">No-signal requires a completed matched trial; unrun and inconclusive integrated cases remain in their own row.</text>
-<text x="650" y="835" class="note">All Type Isolation positives are manual derived reuse edges, including 2 synthetic reductions; automatic source-level true positives: 0.</text>
+<text x="650" y="835" class="note">TypeIso-mitigated derived edges include 12 compiler-bound and 0 manual; vulnerability-specific and full-source detections: 0.</text>
 <text x="650" y="855" class="note">Excluded candidates remain in the audit ledger and outside the efficacy denominator.</text>
 </svg>

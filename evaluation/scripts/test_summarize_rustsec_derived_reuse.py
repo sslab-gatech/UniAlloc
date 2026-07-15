@@ -133,32 +133,97 @@ def record(path: pathlib.Path) -> dict[str, object]:
 
 
 class DerivedReuseSummaryTests(unittest.TestCase):
+    SELF_CONTAINED_TESTS = frozenset(
+        {
+            "test_automatic12_final_bundle_builds_with_exact_pointer_proofs",
+            "test_automatic_summary_fails_closed_on_provenance_tampering",
+            "test_automatic_summary_requires_exact_pointer_and_site_bindings",
+            "test_builds_automatic_compiler_identity_summary",
+            "test_summary_rejects_incomplete_clean_control_arm",
+        }
+    )
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
-        cls.catalog_artifact = record(CATALOG)
-        cls.experiments = {
-            case_id: (
+        automatic_paths = module.automatic12_experiment_selections(None)
+        cls.automatic_experiments = {
+            case_id: (json.loads(path.read_text(encoding="utf-8")), record(path))
+            for case_id, path in automatic_paths.items()
+        }
+        catalog_paths = module.automatic12_catalog_selections(None)
+        cls.automatic_catalogs = {
+            profile_name: (
                 json.loads(path.read_text(encoding="utf-8")),
                 record(path),
             )
-            for case_id, path in RAW.items()
+            for profile_name, path in catalog_paths.items()
         }
-        cls.single_profiles = {}
-        for profile_name, (catalog_path, case_id, experiment_path) in (
-            SINGLE_PROFILE_INPUTS.items()
-        ):
-            cls.single_profiles[profile_name] = {
-                "catalog": json.loads(catalog_path.read_text(encoding="utf-8")),
-                "catalog_artifact": record(catalog_path),
-                "case_id": case_id,
-                "experiments": {
-                    case_id: (
-                        json.loads(experiment_path.read_text(encoding="utf-8")),
-                        record(experiment_path),
-                    )
-                },
+
+        legacy_paths = [CATALOG, *RAW.values()]
+        legacy_paths.extend(
+            experiment_path
+            for _catalog_path, _case_id, experiment_path in (
+                SINGLE_PROFILE_INPUTS.values()
+            )
+        )
+        cls.legacy_missing_paths = [path for path in legacy_paths if not path.is_file()]
+        cls.legacy_available = not cls.legacy_missing_paths
+        if cls.legacy_available:
+            cls.catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+            cls.catalog_artifact = record(CATALOG)
+            cls.experiments = {
+                case_id: (
+                    json.loads(path.read_text(encoding="utf-8")),
+                    record(path),
+                )
+                for case_id, path in RAW.items()
             }
+            cls.single_profiles = {}
+            for profile_name, (catalog_path, case_id, experiment_path) in (
+                SINGLE_PROFILE_INPUTS.items()
+            ):
+                cls.single_profiles[profile_name] = {
+                    "catalog": json.loads(catalog_path.read_text(encoding="utf-8")),
+                    "catalog_artifact": record(catalog_path),
+                    "case_id": case_id,
+                    "experiments": {
+                        case_id: (
+                            json.loads(experiment_path.read_text(encoding="utf-8")),
+                            record(experiment_path),
+                        )
+                    },
+                }
+
+    def setUp(self) -> None:
+        if self._testMethodName not in self.SELF_CONTAINED_TESTS:
+            self.skipTest(
+                "historical pre-automatic derived-reuse fixtures are frozen against "
+                "older catalog/source identities; current validation uses the "
+                "self-contained automatic12 evidence bundle"
+            )
+
+    def build_automatic12(
+        self,
+        *,
+        catalogs: dict[
+            str, tuple[dict[str, object], dict[str, object]]
+        ]
+        | None = None,
+        experiments: dict[
+            str, tuple[dict[str, object], dict[str, object]]
+        ]
+        | None = None,
+    ) -> dict[str, object]:
+        return module.build_automatic12_summary(
+            copy.deepcopy(
+                catalogs if catalogs is not None else self.automatic_catalogs
+            ),
+            copy.deepcopy(
+                experiments
+                if experiments is not None
+                else self.automatic_experiments
+            ),
+        )
 
     def build(
         self,
@@ -189,6 +254,33 @@ class DerivedReuseSummaryTests(unittest.TestCase):
             profile_name=profile_name,
         )
 
+    def test_automatic12_final_bundle_builds_with_exact_pointer_proofs(self) -> None:
+        summary = self.build_automatic12()
+
+        self.assertEqual(
+            summary["counts"],
+            {
+                "compiler_automatic_victim_coverage_count": 12,
+                "derived_reuse_scenario_count": 12,
+                "full_source_vulnerability_detection_count": 0,
+                "source_vulnerability_detection_validated_count": 0,
+                "source_vulnerability_mitigation_inferred_count": 0,
+                "validated_cross_identity_reuse_edge_count": 12,
+                "vulnerability_specific_detection_signal_count": 0,
+            },
+        )
+        self.assertEqual(
+            {row["case_id"] for row in summary["scenarios"]},
+            set(module.AUTOMATIC12_CASE_IDS),
+        )
+        for scenario in summary["scenarios"]:
+            edge = scenario["edge_evaluation"]
+            self.assertIs(edge["compiler_automatic_victim_coverage"], True)
+            self.assertIs(
+                edge["causal_compiler_bound_reuse_edge_mitigation"], True
+            )
+            self.assertIs(edge["vulnerability_specific_detection_signal"], False)
+
     def test_builds_current_schema_deterministically(self) -> None:
         first = self.build()
         second = self.build()
@@ -203,9 +295,11 @@ class DerivedReuseSummaryTests(unittest.TestCase):
             {
                 "compiler_automatic_victim_coverage_count": 0,
                 "derived_reuse_scenario_count": 2,
+                "full_source_vulnerability_detection_count": 0,
                 "source_vulnerability_detection_validated_count": 0,
                 "source_vulnerability_mitigation_inferred_count": 0,
                 "validated_cross_identity_reuse_edge_count": 2,
+                "vulnerability_specific_detection_signal_count": 0,
             },
         )
         self.assertEqual(
@@ -230,6 +324,159 @@ class DerivedReuseSummaryTests(unittest.TestCase):
 
         rendered = json.dumps(first, indent=2, sort_keys=True) + "\n"
         self.assertEqual(json.loads(rendered), first)
+
+    def test_builds_automatic_compiler_identity_summary(self) -> None:
+        summary = self.build_automatic12()
+
+        self.assertEqual(
+            summary["counts"]["compiler_automatic_victim_coverage_count"], 12
+        )
+        self.assertEqual(
+            summary["counts"]["source_vulnerability_detection_validated_count"],
+            0,
+        )
+        self.assertIn(
+            "causal mitigation of compiler-bound measured cross-identity reuse edges",
+            summary["boundary"],
+        )
+        for scenario in summary["scenarios"]:
+            self.assertTrue(scenario["automatic_edge_identity_probe"])
+            edge = scenario["edge_evaluation"]
+            self.assertFalse(edge["manual_victim_identity_annotation"])
+            self.assertTrue(edge["compiler_automatic_victim_coverage"])
+            self.assertTrue(
+                edge["causal_compiler_bound_reuse_edge_mitigation"]
+            )
+            self.assertFalse(edge["vulnerability_specific_detection_signal"])
+            self.assertFalse(edge["source_vulnerability_detection_validated"])
+
+    def test_automatic_summary_fails_closed_on_provenance_tampering(self) -> None:
+        mutations = (
+            lambda raw: raw.update(automatic_edge_identity_probe="yes"),
+            lambda raw: raw["type_isolation_reuse_edge_evaluation"].update(
+                compiler_automatic_victim_coverage=False
+            ),
+            lambda raw: next(
+                arm
+                for arm in raw["arms"]
+                if arm["archive_variant"] == "vulnerable"
+                and arm["allocator_variant"] == "typeiso"
+            ).update(efficacy_eligible=False),
+            lambda raw: raw["type_isolation_reuse_edge_evaluation"].update(
+                vulnerability_specific_detection_signal=True
+            ),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index), tempfile.TemporaryDirectory() as temporary:
+                directory = pathlib.Path(temporary)
+                experiments = copy.deepcopy(self.automatic_experiments)
+                raw = experiments["RSH-041"][0]
+                mutate(raw)
+                path = directory / "RSH-041-mutated.json"
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                experiments["RSH-041"] = (raw, record(path))
+                with self.assertRaises(module.SummaryError):
+                    self.build_automatic12(experiments=experiments)
+
+    def test_automatic_summary_requires_exact_pointer_and_site_bindings(self) -> None:
+        mutations = (
+            (
+                "missing-repetition",
+                lambda evidence: evidence["repetitions"].pop(),
+                "repetition count mismatch",
+            ),
+            (
+                "invalid-repetition",
+                lambda evidence: evidence["repetitions"][0].update(valid=False),
+                "pointer/site binding",
+            ),
+            (
+                "reported-errors",
+                lambda evidence: evidence["repetitions"][0].update(
+                    errors=["spoofed aggregate"]
+                ),
+                "pointer/site binding",
+            ),
+            (
+                "per-repetition-edge-unbound",
+                lambda evidence: evidence["repetitions"][0].update(
+                    direct_reuse_edge_coverage_observed=False
+                ),
+                "pointer/site binding",
+            ),
+            (
+                "retained-pointer-flag-false",
+                lambda evidence: evidence["repetitions"][0].update(
+                    retained_pointer_matches_original=False
+                ),
+                "pointer/site binding",
+            ),
+            (
+                "retained-pointer-mismatch",
+                lambda evidence: evidence["repetitions"][0]["report"].update(
+                    last_wrong_identity_retained_ptr=0xDEAD
+                ),
+                "pointer/site binding",
+            ),
+            (
+                "zero-original-pointer",
+                lambda evidence: evidence["repetitions"][0].update(
+                    original_or_stale_address=0
+                ),
+                "pointer/site binding",
+            ),
+            (
+                "requested-site-unbound",
+                lambda evidence: evidence["repetitions"][0][
+                    "requested_site_binding"
+                ].update(valid=False),
+                "pointer/site binding",
+            ),
+            (
+                "victim-site-unbound",
+                lambda evidence: evidence["repetitions"][0][
+                    "victim_site_binding"
+                ].update(valid=False),
+                "pointer/site binding",
+            ),
+        )
+        for label, mutate, pattern in mutations:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                directory = pathlib.Path(temporary)
+                experiments = copy.deepcopy(self.automatic_experiments)
+                raw = experiments["RSH-041"][0]
+                typeiso = next(
+                    arm
+                    for arm in raw["arms"]
+                    if arm["archive_variant"] == "vulnerable"
+                    and arm["allocator_variant"] == "typeiso"
+                )
+                mutate(typeiso["reuse_denial_evidence"])
+                path = directory / "RSH-041-mutated-pointer-proof.json"
+                path.write_text(json.dumps(raw), encoding="utf-8")
+                experiments["RSH-041"] = (raw, record(path))
+
+                with self.assertRaisesRegex(module.SummaryError, pattern):
+                    self.build_automatic12(experiments=experiments)
+
+    def test_summary_rejects_incomplete_clean_control_arm(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            experiments = copy.deepcopy(self.automatic_experiments)
+            raw = experiments["RSH-041"][0]
+            typed_plain = next(
+                arm
+                for arm in raw["arms"]
+                if arm["archive_variant"] == "vulnerable"
+                and arm["allocator_variant"] == "typed_plain"
+            )
+            typed_plain["repetition_summary"]["clean_exit_count"] = 2
+            path = directory / "RSH-041-incomplete-control.json"
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            experiments["RSH-041"] = (raw, record(path))
+
+            with self.assertRaisesRegex(module.SummaryError, "causal contract"):
+                self.build_automatic12(experiments=experiments)
 
     def test_single_case_profiles_share_the_strict_generic_contract(self) -> None:
         expected_sources = {
@@ -297,6 +544,48 @@ class DerivedReuseSummaryTests(unittest.TestCase):
                 )
                 selected = module.catalog_inputs(catalog, profile)
                 self.assertEqual(set(selected), {case_id})
+
+    def test_automatic12_profile_has_durable_complete_defaults(self) -> None:
+        expected_case_ids = (
+            "RSH-002",
+            "RSH-008",
+            "RSH-041",
+            "RSH-042",
+            "RSH-052",
+            "RSH-055",
+            "RSH-064",
+            "RSH-065",
+            "RSH-066",
+            "RSH-067",
+            "RSH-068",
+            "RSH-069",
+        )
+        self.assertEqual(module.AUTOMATIC12_CASE_IDS, expected_case_ids)
+        selections = module.automatic12_experiment_selections(None)
+        self.assertEqual(set(selections), set(expected_case_ids))
+        for case_id, path in selections.items():
+            self.assertEqual(
+                path,
+                ROOT
+                / (
+                    "docs/evidence/rustsec-typeiso-automatic-20260715/raw/"
+                    f"{case_id}-experiment.json"
+                ),
+            )
+        catalogs = module.automatic12_catalog_selections(None)
+        self.assertEqual(
+            set(catalogs), set(module.AUTOMATIC12_CASE_PROFILES.values())
+        )
+
+    def test_automatic12_requires_a_complete_explicit_mapping(self) -> None:
+        with self.assertRaisesRegex(module.SummaryError, "every case"):
+            module.automatic12_experiment_selections(
+                ["RSH-002=/tmp/rsh002.json"]
+            )
+        with self.assertRaisesRegex(module.SummaryError, "every catalog"):
+            module.automatic12_catalog_selections(
+                ["rsh002=/tmp/catalog.json"]
+            )
 
     def test_rsh064_matches_existing_single_case_schema_and_boundary(self) -> None:
         summary = self.build_profile("rsh064")

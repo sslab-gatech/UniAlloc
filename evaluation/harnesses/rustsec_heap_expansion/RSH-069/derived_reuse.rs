@@ -28,8 +28,10 @@ pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 #[repr(align(1))]
 struct Replacement([u8; PAYLOAD_SIZE]);
 
+// Keep the allocation helper noinline so the compiler audit sees a distinct
+// critical site with the concrete owner type used by this adapter.
 #[inline(never)]
-fn materialize_bytes<T: Clone, const N: usize>(seed: &[T; N]) -> Vec<T> {
+fn materialize_bytes(seed: &[u8; PAYLOAD_SIZE]) -> Vec<u8> {
     seed.to_vec()
 }
 

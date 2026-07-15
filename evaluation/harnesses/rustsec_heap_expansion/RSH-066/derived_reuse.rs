@@ -34,11 +34,16 @@ pub(crate) fn report_vulnerability_edge_reuse_denial() {}
 #[repr(transparent)]
 struct Replacement([u8; PAYLOAD_SIZE]);
 
-// Keep the subject-owned String allocation and Arc<String> reclaim inside the
-// surrounding manual identity. Indirect helpers prevent the harness compiler
-// pass from inserting a more specific owner scope around either operation.
+// Keep the allocation and subject handoff at distinct compiler-audited sites.
 #[inline(never)]
-fn materialize_atomic(value: &str) -> AtomicStr {
+fn materialize_string(byte: u8) -> String {
+    let mut value = String::with_capacity(PAYLOAD_SIZE);
+    value.extend(std::iter::repeat_n(char::from(byte), PAYLOAD_SIZE));
+    value
+}
+
+#[inline(never)]
+fn materialize_atomic(value: String) -> AtomicStr {
     AtomicStr::new(value)
 }
 
@@ -51,20 +56,18 @@ fn main() {
     assert_eq!(size_of::<Replacement>(), PAYLOAD_SIZE);
     assert_eq!(align_of::<Replacement>(), align_of::<u8>());
 
-    // Passing `&str` makes the vulnerable dependency allocate its owned
-    // String while the exact manual victim identity is active.
-    let victim_seed = "A".repeat(PAYLOAD_SIZE);
-    let materialize: fn(&str) -> AtomicStr = materialize_atomic;
+    let victim_seed = materialize_string(b'A');
+    let materialize: fn(String) -> AtomicStr = materialize_atomic;
     let current = crate::with_vulnerability_edge_identity(
         VICTIM_TYPE_ID,
         VICTIM_MODULE_ID,
         VICTIM_ALLOC_CALLSITE,
-        || black_box(materialize)(victim_seed.as_str()),
+        || black_box(materialize)(victim_seed),
     );
     let stale = current.as_str();
     let original_address = stale.as_ptr() as usize;
 
-    let replacement_seed = "B".repeat(PAYLOAD_SIZE);
+    let replacement_seed = materialize_string(b'B');
     let old_owner = current.replace(replacement_seed);
     let reclaim: fn(Arc<String>) = reclaim_value;
     crate::with_vulnerability_edge_identity(

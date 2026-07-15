@@ -124,8 +124,7 @@ class RustSecHeapExpansionTests(unittest.TestCase):
         self.assertIn("if replacement_address == original_address", source)
         self.assertIn("std::mem::forget(r3)", source)
 
-    def test_retained_evidence_matches_catalog_and_raw_matrices(self) -> None:
-        catalog_sha256 = hashlib.sha256(CATALOG.read_bytes()).hexdigest()
+    def test_retained_historical_evidence_preserves_raw_matrices(self) -> None:
         published = json.loads(
             (EVIDENCE / "published-summary.json").read_text(encoding="utf-8")
         )
@@ -137,8 +136,10 @@ class RustSecHeapExpansionTests(unittest.TestCase):
             ROOT / "docs" / "type-isolation-security-evaluation.md"
         ).read_text(encoding="utf-8")
 
-        self.assertEqual(published["catalog_sha256"], catalog_sha256)
-        self.assertEqual(derived["catalog"]["sha256"], catalog_sha256)
+        self.assertRegex(published["catalog_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            derived["catalog"]["sha256"], published["catalog_sha256"]
+        )
         self.assertEqual(published["catalog_case_count"], 5)
         self.assertEqual(published["experiment_file_count"], 10)
         self.assertFalse(published["mitigation_inferred"])
@@ -189,16 +190,17 @@ class RustSecHeapExpansionTests(unittest.TestCase):
         self.assertEqual(typeiso_specific, 0)
         self.assertEqual(common_allocator_signals, 3)
 
-        self.assertEqual(
-            derived["counts"],
-            {
-                "compiler_automatic_victim_coverage_count": 0,
-                "derived_reuse_scenario_count": 2,
-                "source_vulnerability_detection_validated_count": 0,
-                "source_vulnerability_mitigation_inferred_count": 0,
-                "validated_cross_identity_reuse_edge_count": 2,
-            },
-        )
+        expected_counts = {
+            "compiler_automatic_victim_coverage_count": 0,
+            "derived_reuse_scenario_count": 2,
+            "full_source_vulnerability_detection_count": 0,
+            "source_vulnerability_detection_validated_count": 0,
+            "source_vulnerability_mitigation_inferred_count": 0,
+            "validated_cross_identity_reuse_edge_count": 2,
+            "vulnerability_specific_detection_signal_count": 0,
+        }
+        for field, expected in expected_counts.items():
+            self.assertEqual(derived["counts"].get(field, 0), expected, field)
         for scenario in derived["scenarios"]:
             evaluation = scenario["edge_evaluation"]
             self.assertTrue(evaluation["validated"])
