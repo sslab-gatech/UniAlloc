@@ -23,13 +23,17 @@ import time
 from pathlib import Path
 from typing import Any, Sequence
 
+import google_tcmalloc_support as support
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "evaluation/probes/cross_allocator_large_page_workload.c"
 DEFAULT_BUILD_ROOT = ROOT / "evaluation/raw/google-tcmalloc-temeraire-build"
-GOOGLE_TCMALLOC_REPOSITORY = "https://github.com/google/tcmalloc.git"
+GOOGLE_TCMALLOC_REPOSITORY = support.UPSTREAM_URL
 # Published as Bazel Central Registry module 0.0.0-20250927-12f2552.
-GOOGLE_TCMALLOC_COMMIT = "12f255231938d30493186b0a037feedd70f5a1c1"
+GOOGLE_TCMALLOC_COMMIT = support.UPSTREAM_REVISION
+GOOGLE_TCMALLOC_COMMIT_DATE = support.UPSTREAM_DATE
+REQUIRED_BAZEL_VERSION = support.BAZEL_VERSION
 GOOGLE_TCMALLOC_MODULE_VERSION = "0.0.0-20250927-12f2552"
 RULES_CC_MODULE_VERSION = "0.1.5"
 BAZEL_TARGET = "//:cross_allocator_large_page_workload_google_tcmalloc"
@@ -76,6 +80,7 @@ def run(
     *,
     cwd: Path | None = None,
     check: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         list(command),
@@ -84,6 +89,7 @@ def run(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=check,
+        env=env,
     )
 
 
@@ -98,6 +104,10 @@ def base_provenance() -> dict[str, Any]:
         "hugepage_allocator_identity": "Temeraire / HugePageAwareAllocator (HPAA)",
         "repository": GOOGLE_TCMALLOC_REPOSITORY,
         "commit": GOOGLE_TCMALLOC_COMMIT,
+        "commit_date": GOOGLE_TCMALLOC_COMMIT_DATE,
+        "pin_policy": "tested 2025 compatibility pin; upstream-current tracking is separate",
+        "revision_role": "compatibility-pin-not-latest",
+        "required_bazel_version": REQUIRED_BAZEL_VERSION,
         "pinned_module_release": GOOGLE_TCMALLOC_MODULE_VERSION,
         "rules_cc_module_version": RULES_CC_MODULE_VERSION,
         "bazel_target": BAZEL_TARGET,
@@ -115,14 +125,16 @@ def base_provenance() -> dict[str, Any]:
     }
 
 
-def require_bazel(executable: str) -> tuple[str, str]:
+def require_bazel(executable: str) -> tuple[str, str, dict[str, str]]:
     resolved = shutil.which(executable)
     if resolved is None:
         raise BuildBlocked(f"Bazel executable unavailable: {executable}")
-    version = run([resolved, "--version"]).stdout.strip()
-    if not version.startswith("bazel "):
+    bazel_env = dict(os.environ)
+    bazel_env["USE_BAZEL_VERSION"] = REQUIRED_BAZEL_VERSION
+    version = run([resolved, "--version"], env=bazel_env).stdout.strip()
+    if version != f"bazel {REQUIRED_BAZEL_VERSION}":
         raise BuildBlocked(f"unexpected Bazel identity: {version!r}")
-    return resolved, version
+    return resolved, version, bazel_env
 
 
 def prepare_checkout(checkout: Path) -> dict[str, Any]:
@@ -346,9 +358,12 @@ def build(build_root: Path, bazel_executable: str) -> dict[str, Any]:
     provenance["build_root"] = str(build_root.resolve())
     try:
         provenance["source_sha256"] = sha256_file(SOURCE)
-        bazel, bazel_version = require_bazel(bazel_executable)
+        bazel, bazel_version, bazel_env = require_bazel(bazel_executable)
         provenance["bazel_executable"] = bazel
         provenance["bazel_version"] = bazel_version
+        provenance["bazel_environment"] = {
+            "USE_BAZEL_VERSION": REQUIRED_BAZEL_VERSION,
+        }
         checkout = build_root / "google-tcmalloc"
         workspace = build_root / "probe-workspace"
         provenance["checkout_path"] = str(checkout.resolve())
@@ -364,7 +379,7 @@ def build(build_root: Path, bazel_executable: str) -> dict[str, Any]:
         ]
         command = [bazel, "build", *BUILD_OPTIONS, *BAZEL_TARGETS]
         provenance["build_command"] = command
-        build_result = run(command, cwd=workspace, check=False)
+        build_result = run(command, cwd=workspace, check=False, env=bazel_env)
         provenance["build_output_tail"] = build_result.stdout.splitlines()[-100:]
         if build_result.returncode != 0:
             raise BuildBlocked(
@@ -381,7 +396,9 @@ def build(build_root: Path, bazel_executable: str) -> dict[str, Any]:
             "--output=textproto",
             aquery_expression,
         ]
-        aquery_result = run(aquery_command, cwd=workspace, check=False)
+        aquery_result = run(
+            aquery_command, cwd=workspace, check=False, env=bazel_env
+        )
         provenance["aquery_output_tail"] = aquery_result.stdout.splitlines()[-100:]
         if aquery_result.returncode != 0:
             raise BuildBlocked(

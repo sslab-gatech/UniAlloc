@@ -406,6 +406,12 @@ def google_tcmalloc_provenance(args: argparse.Namespace) -> dict[str, Any]:
         "allocator_identity": "Google TCMalloc",
         "repository": google_tcmalloc.GOOGLE_TCMALLOC_REPOSITORY,
         "commit": google_tcmalloc.GOOGLE_TCMALLOC_COMMIT,
+        "commit_date": google_tcmalloc.GOOGLE_TCMALLOC_COMMIT_DATE,
+        "pin_policy": (
+            "tested 2025 compatibility pin; upstream-current tracking is separate"
+        ),
+        "revision_role": "compatibility-pin-not-latest",
+        "required_bazel_version": google_tcmalloc.REQUIRED_BAZEL_VERSION,
         "pinned_module_release": google_tcmalloc.GOOGLE_TCMALLOC_MODULE_VERSION,
         "rules_cc_module_version": google_tcmalloc.RULES_CC_MODULE_VERSION,
         "bazel_target": google_tcmalloc.BAZEL_TARGET,
@@ -506,8 +512,12 @@ def google_tcmalloc_provenance(args: argparse.Namespace) -> dict[str, Any]:
     ):
         mismatches.append("build_command")
     bazel_version = provenance.get("bazel_version")
-    if not isinstance(bazel_version, str) or not bazel_version.startswith("bazel "):
+    if bazel_version != f"bazel {google_tcmalloc.REQUIRED_BAZEL_VERSION}":
         mismatches.append("bazel_version")
+    if provenance.get("bazel_environment") != {
+        "USE_BAZEL_VERSION": google_tcmalloc.REQUIRED_BAZEL_VERSION,
+    }:
+        mismatches.append("bazel_environment")
     if not isinstance(provenance.get("commit_time"), str) or not isinstance(
         provenance.get("commit_subject"), str
     ):

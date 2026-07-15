@@ -23,6 +23,9 @@ class GoogleTcmallocBazelProbeTests(unittest.TestCase):
             "0.0.0-20250927-12f2552",
         )
         self.assertEqual(provenance["rules_cc_module_version"], "0.1.5")
+        self.assertEqual(provenance["required_bazel_version"], "8.4.2")
+        self.assertEqual(provenance["revision_role"], "compatibility-pin-not-latest")
+        self.assertIn("compatibility pin", provenance["pin_policy"])
         self.assertEqual(provenance["repository"], "https://github.com/google/tcmalloc.git")
         self.assertEqual(provenance["malloc_target"], "@com_google_tcmalloc//tcmalloc")
         self.assertEqual(provenance["bazel_target"], helper.BAZEL_TARGET)
@@ -54,6 +57,30 @@ class GoogleTcmallocBazelProbeTests(unittest.TestCase):
             self.assertFalse(provenance["claim_eligible"])
             self.assertFalse(provenance["fallback_allowed"])
             self.assertIn("Bazel executable unavailable", provenance["blocked_reasons"][0])
+
+    def test_bazelisk_is_pinned_to_the_repository_compatibility_version(self) -> None:
+        completed = mock.Mock(stdout="bazel 8.4.2\n")
+        with (
+            mock.patch.object(helper.shutil, "which", return_value="/tmp/bazelisk"),
+            mock.patch.object(helper, "run", return_value=completed) as run,
+        ):
+            resolved, version, environment = helper.require_bazel("bazelisk")
+
+        self.assertEqual(resolved, "/tmp/bazelisk")
+        self.assertEqual(version, "bazel 8.4.2")
+        self.assertEqual(environment["USE_BAZEL_VERSION"], "8.4.2")
+        run.assert_called_once_with(
+            ["/tmp/bazelisk", "--version"], env=environment
+        )
+
+    def test_wrong_bazel_version_is_blocked(self) -> None:
+        completed = mock.Mock(stdout="bazel 9.2.0\n")
+        with (
+            mock.patch.object(helper.shutil, "which", return_value="/tmp/bazelisk"),
+            mock.patch.object(helper, "run", return_value=completed),
+            self.assertRaisesRegex(helper.BuildBlocked, "unexpected Bazel identity"),
+        ):
+            helper.require_bazel("bazelisk")
 
     def test_missing_probe_source_still_writes_blocked_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
