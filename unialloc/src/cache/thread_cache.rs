@@ -36,6 +36,8 @@ const THREAD_CACHE_FLUSH_BYTES: usize = 256 * 1024;
 const THREAD_CACHE_TARGET_BYTES: usize = 64 * 1024;
 const THREAD_CACHE_FLUSH_OBJECTS_MAX: usize = 4096;
 const THREAD_CACHE_TARGET_OBJECTS_MAX: usize = 1024;
+/// Largest generated class guaranteed to contain multiple objects per span.
+const THREAD_CACHE_MULTI_SLOT_FAST_MAX_BYTES: usize = 8 * 1024;
 /// Hot-prefix cap kept after a strict-alignment miss.
 ///
 /// A normal soft flush keeps up to 1024 tiny objects because they are known to
@@ -219,14 +221,11 @@ pub fn thread_cache_flush_stats_reset() {
 
 #[inline]
 fn thread_cache_should_flush(length: usize, rounded_size: usize) -> bool {
-    length > 1
-        && rounded_size != 0
-        && length
-            > thread_cache_object_limit(
-                rounded_size,
-                THREAD_CACHE_FLUSH_BYTES,
-                THREAD_CACHE_FLUSH_OBJECTS_MAX,
-            )
+    if length <= 1 || rounded_size == 0 {
+        return false;
+    }
+    length > THREAD_CACHE_FLUSH_OBJECTS_MAX
+        || length.saturating_mul(rounded_size) > THREAD_CACHE_FLUSH_BYTES
 }
 
 #[inline]
@@ -368,6 +367,13 @@ fn thread_cache_repeated_alignment_miss_keep_length(
 #[inline]
 fn thread_cache_should_bypass_local_cache(idx: usize, rounded_size: usize) -> bool {
     if idx == 0 || idx >= TOTAL_SIZE_CLASS || rounded_size == 0 {
+        return false;
+    }
+
+    // Every generated size class through 8 KiB spans at least two objects on
+    // all supported page-size tables.  Keep this common small-object free path
+    // division-free; the exhaustive geometry regression below locks the bound.
+    if rounded_size <= THREAD_CACHE_MULTI_SLOT_FAST_MAX_BYTES {
         return false;
     }
 
@@ -3898,6 +3904,56 @@ mod tests {
             THREAD_CACHE_FLUSH_OBJECTS_MAX + 1,
             rounded_size
         ));
+    }
+
+    #[test]
+    fn thread_cache_should_flush_matches_budget_division_boundaries() {
+        for idx in 1..TOTAL_SIZE_CLASS {
+            let rounded_size = get_rounded_size_by_idx(idx);
+            let boundary = thread_cache_object_limit(
+                rounded_size,
+                THREAD_CACHE_FLUSH_BYTES,
+                THREAD_CACHE_FLUSH_OBJECTS_MAX,
+            );
+            for length in [
+                0,
+                1,
+                boundary.saturating_sub(1),
+                boundary,
+                boundary.saturating_add(1),
+                usize::MAX,
+            ] {
+                let expected = length > 1 && rounded_size != 0 && length > boundary;
+                assert_eq!(
+                    thread_cache_should_flush(length, rounded_size),
+                    expected,
+                    "flush decision drifted for class {idx}, size {rounded_size}, length {length}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn thread_cache_small_class_bypass_fast_range_matches_full_geometry() {
+        for idx in 1..TOTAL_SIZE_CLASS {
+            let rounded_size = get_rounded_size_by_idx(idx);
+            let pages = get_num_pages_by_idx(idx);
+            let expected = matches!(
+                crate::sc::checked_size_class_geometry(rounded_size, pages),
+                Some((slot_count, _stride)) if slot_count <= 1
+            );
+            assert_eq!(
+                thread_cache_should_bypass_local_cache(idx, rounded_size),
+                expected,
+                "local-cache bypass drifted for class {idx}, size {rounded_size}, pages {pages}"
+            );
+            if rounded_size <= THREAD_CACHE_MULTI_SLOT_FAST_MAX_BYTES {
+                assert!(
+                    !expected,
+                    "the <=8KiB fast range must always contain at least two slab slots"
+                );
+            }
+        }
     }
 
     #[test]

@@ -90,6 +90,13 @@ path = "examples/hosted_page_run_memory_probe.rs"
 test = false
 bench = false
 
+[[example]]
+name = "runtime_lifetime_classifier_thp_probe"
+path = "examples/runtime_lifetime_classifier_thp_probe.rs"
+test = false
+bench = false
+required-features = ["lifetime_hugepage"]
+
 [features]
 default = ["pthread_dtor", "rseq"]
 fixed_heap = []

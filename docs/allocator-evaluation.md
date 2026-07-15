@@ -1,9 +1,9 @@
 # Allocator evaluation
 
-> **Evidence status:** current source-bound diagnostic; post-measurement
-> presentation-analysis amendment. The amendment changes taxonomy and
-> aggregation only. It leaves targets, harnesses, variants, observations,
-> correctness gates, source identities, and sampling budgets unchanged.
+> **Evidence status:** current source-bound diagnostic. The microbenchmark
+> matrix measures the bounded large-run and thread-cache optimization at
+> commit `1c8ff12d5b61`. The macrobenchmark observations and estimator
+> vocabulary remain unchanged.
 
 The committee-facing evaluation has two parts. **Microbenchmarks** use
 `std_bench` benchmark cases executed by Rust's libtest benchmark harness.
@@ -92,12 +92,12 @@ by an unweighted geometric mean across families remains a sensitivity result.
 
 | Variant vs. UniAlloc | Geometric mean across family medians | Geometric mean across within-family geometric means |
 |---|---:|---:|
-| ptmalloc | `0.9826x` | `0.9402x` |
-| jemalloc | `0.9864x` | `0.9313x` |
-| mimalloc | `0.9901x` | `0.8885x` |
-| TCMalloc | `0.9787x` | `0.9099x` |
-| snmalloc | `0.9748x` | `0.8725x` |
-| Scudo | `1.0207x` | `1.0645x` |
+| ptmalloc | `0.9894x` | `0.9715x` |
+| jemalloc | `0.9952x` | `0.9723x` |
+| mimalloc | `0.9906x` | `0.9222x` |
+| TCMalloc | `0.9864x` | `0.9417x` |
+| snmalloc | `0.9830x` | `0.9085x` |
+| Scudo | `1.0275x` | `1.1105x` |
 
 Many closures mainly measure library work and perform no allocation in the
 timed region. These whole-closure ratios therefore describe allocator-linked
@@ -134,20 +134,97 @@ The tracked full-result JSON does not contain per-cell RSS. The two-tier
 exporter authenticates the retained raw `records.jsonl` by SHA-256 and persists
 every uncapped derived RSS ratio in the presentation CSV and JSON bundle.
 
-### Extrema, censoring, and the large-allocation cliff
+### Optimization follow-up, memory tradeoff, and censoring
 
-The stable lowest robust ratio for ptmalloc, jemalloc, mimalloc, TCMalloc, and
-snmalloc is `vec::bench_flat_map_collect`: `0.1353x` to `0.1374x`. The closure
-creates a 2,000,000-byte `Vec<u8>` on every iteration. UniAlloc's bounded hosted
-warm-run slot accepts at most 512 KiB/128 pages, so this request follows the
-cold hosted path. A focused profile counted 305 2 MiB `mmap` calls and 302
-matching `munmap` calls across 302 reported iterations. Repeated mapping and
-page faults identify a concrete large-run retention policy cliff.
+The preceding matrix exposed repeated mapping of one 2,000,000-byte flat-map
+buffer and two approximately 1.25 MiB sort buffers. The optimized hosted
+intrusive backend retains up to two exact-size large runs, admits each run
+through 2 MiB, and caps their aggregate mapped size at 2.5 MiB. Small
+thread-cache classes through 8 KiB also use geometry-proven equivalent
+multiplication and bypass decisions. Fixed and bitmap page-run backends retain
+their own policies.
 
-The largest robust high ratios are `3.4030x` for ptmalloc on
-`slice::sort_large_ascending` and `18.2140x` for Scudo on
-`btree::map::clone_fat_val_100_and_clear`. These are descriptive three-sample
-extrema; the uncapped CSV preserves exact medians and raw observations.
+A CPU-8, NUMA-0 focused panel used one discarded warm-up and five measured
+fresh processes for each source. `After / before` uses the two five-process
+medians. Minor faults are the corresponding process medians.
+
+| `std_bench` benchmark case | Before median (ns/iter) | After median (ns/iter) | After / before | Speedup | Minor faults, before -> after |
+|---|---:|---:|---:|---:|---:|
+| `vec::bench_flat_map_collect` | 902,895.30 | 122,240.73 | `0.1354x` | `7.386x` | 148,059 -> 1,359 |
+| `slice::sort_large_big` | 1,636,497.42 | 618,260.05 | `0.3778x` | `2.647x` | 564,724 -> 1,323 |
+| `slice::sort_unstable_large_big` | 1,087,984.20 | 555,770.95 | `0.5108x` | `1.958x` | 94,912 -> 1,009 |
+| `linked_list::bench_collect_into` | 1,257.10 | 1,158.24 | `0.9214x` | `1.085x` | 378 -> 380 |
+| `slice::sort_by_cached_key_lexicographic` | 1,803,070.20 | 1,796,222.15 | `0.9962x` | `1.004x` | 544 -> 545 |
+| `slice::sort_by_key_lexicographic` | 8,092,815.40 | 7,605,091.10 | `0.9397x` | `1.064x` | 445 -> 444 |
+| `slice::sort_unstable_by_key_lexicographic` | 7,862,503.80 | 7,422,831.75 | `0.9441x` | `1.059x` | 420 -> 418 |
+
+The complete rerun confirms the three large-run results. UniAlloc's
+`vec::bench_flat_map_collect` median moved from 900,131.00 to 121,841.61
+ns/iter, `slice::sort_large_big` from 1,648,993.85 to 616,711.60 ns/iter, and
+`slice::sort_unstable_large_big` from 1,086,893.90 to 554,013.15 ns/iter. The
+flat-map case exits the robust-minimum position for all five mainstream
+comparison allocators. Across the 1,416 robust comparator cells, ratios below `0.5x`
+contract from 19 to 9 and ratios within 10% of parity expand from 1,039 to
+1,088.
+
+| Variant vs. UniAlloc | Current robust minimum | Ratio | Current robust maximum | Ratio |
+|---|---|---:|---|---:|
+| ptmalloc | `vec::bench_extend_from_slice_1000_1000` | `0.4192x` | `slice::sort_large_ascending` | `3.3831x` |
+| jemalloc | `slice::sort_by_cached_key_lexicographic` | `0.4784x` | `str::trim_ascii_char::long_lorem_ipsum` | `1.9882x` |
+| mimalloc | `linked_list::bench_collect_into` | `0.2117x` | `slice::sort_unstable_large_ascending` | `1.6450x` |
+| TCMalloc | `linked_list::bench_collect_into` | `0.3487x` | `vec::bench_dedup_none_100000` | `2.0005x` |
+| snmalloc | `linked_list::bench_collect_into` | `0.2230x` | `vec::bench_dedup_all_1000` | `1.8307x` |
+| Scudo | `slice::sort_by_cached_key_lexicographic` | `0.6304x` | `btree::map::clone_fat_val_100_and_clear` | `17.5554x` |
+
+A separate fixed-work probe allocated and touched the two sort runs and the
+flat-map run, then sampled `/proc/self/smaps_rollup` in five independent
+processes per source. The table reports median PSS and the optimized-minus-
+baseline `Private_Dirty` delta.
+
+| Checkpoint | Baseline PSS (KiB) | Optimized PSS (KiB) | PSS delta (KiB) | `Private_Dirty` delta (KiB) |
+|---|---:|---:|---:|---:|
+| Process start | 573 | 569 | -4 | 0 |
+| Two sort buffers live | 3,097 | 3,093 | -4 | 0 |
+| Two sort buffers freed | 593 | 3,093 | +2,500 | +2,504 |
+| Flat-map buffer live after sort | 2,553 | 5,053 | +2,500 | +2,504 |
+| Flat-map buffer freed | 601 | 2,553 | +1,952 | +1,956 |
+
+The speedup exchanges cold remapping for bounded idle retention. The largest
+observed PSS increase is 2,500 KiB, within the 2,560 KiB aggregate policy cap.
+The five observations support descriptive medians and ranges.
+
+#### Cross-campaign and link-layout sensitivity boundaries
+
+The earlier complete campaign measured source `071c4f06426e`; the optimized
+campaign measured `1c8ff12d5b61`. These source states also differ in benchmark
+string literals and allocator lifetime code. Their unpaired three-process
+deltas remain confounded cross-campaign sensitivity observations. Allocator
+attribution uses matched source comparisons.
+
+| Largest cross-campaign increases | Earlier median (ns/iter) | Current median (ns/iter) | Current / earlier |
+|---|---:|---:|---:|
+| `slice::sort_unstable_large_descending` | 5,395.60 | 8,034.92 | `1.4892x` |
+| `slice::sort_large_descending` | 5,618.96 | 8,160.80 | `1.4524x` |
+| `btree::map::iter_10k` | 9,255,606.05 | 13,370,841.00 | `1.4446x` |
+| `vec::bench_retain_100000` | 33,201.31 | 46,505.88 | `1.4007x` |
+| `vec::bench_dedup_random_1000` | 435.03 | 547.53 | `1.2586x` |
+
+The focused five-process baseline `db49c0fcc80b` is the direct parent of
+`1c8ff12d5b61`. Their source diff contains only
+`unialloc/src/cache/thread_cache.rs` and `unialloc/src/freelist/mod.rs`, so the
+seven-case focused panel isolates this allocator optimization within its stated
+descriptive boundary.
+
+The two descending-sort increases have a separate link-layout diagnosis. An
+alternating CPU-14 audit ran seven fresh processes from the recorded optimized
+binary and from the same `1c8ff12` source linked with `.text` shifted forward
+16 bytes. Stable descending moved from 8,151.74 to 5,609.36 ns/iter and
+unstable descending from 8,047.10 to 5,405.22 ns/iter; the ascending controls
+changed by 0.21% and 0.01%. The hot sort opcodes and timed syscall behavior
+were identical, while the descending scan/reverse loops returned to their old
+fetch-block alignment. Allocator-specific claims exclude these two
+layout-sensitive cases. The repository keeps the default linker layout;
+benchmark-specific padding remains an audit control.
 
 | Censored benchmark case | Variants | Phase | Timeout |
 |---|---|---|---:|
@@ -162,16 +239,21 @@ The campaign produced 13,080 terminal records and ended as
 
 ### Microbenchmark provenance
 
-- Source commit: `071c4f06426ea06a66419e4ffd208a3cb7c2bb7f`
+- Source commit: `1c8ff12d5b618c7b8f9ae0365d8791e1e558d815`
 - Measured `unialloc` Git tree object ID:
-  `a96b4143548598a65dfd9d85e3ed6e04f8922875`
+  `3c7f20a10210a1a6d06794c976ba979330d85b02`
 - Toolchain: `nightly-2026-06-11`, rustc 1.98.0-nightly, LLVM 22.1.6
 - Host: dual-socket AMD EPYC 9354, Linux 6.8.0-111-generic
-- Measurement interval: 2026-07-14 23:37:17 UTC to 2026-07-15 00:58:23 UTC
+- Measurement interval: 2026-07-15 02:02:25 UTC to 03:19:22 UTC
+- One-minute host load at process start: 4.10 to 23.00, median 8.94
 - Raw summary SHA-256:
-  `9b224be377e1719031bdd907ee26fbed71b916fef6cc6b00b3f0fcde0d96cca9`
+  `3a9061d970bea1b022ddb5b303124b060b2ab929fd2ec7d2381e97ba87f0a4e2`
 - Raw records SHA-256:
-  `e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f`
+  `4df329a33b469e5be3860a8f5275a8ac19a4564cbda2ad69ffaee61664cc06b4`
+- Focused five-process input SHA-256:
+  `4533cad14589c77775c81948c0a92a375333a2f0d3c79fbcecccf5480e21251c`
+- PSS five-process input SHA-256:
+  `1d50d0d46d6f71261bf750dbd21931409926b5d6b39903581329fbcd3151764c`
 - TCMalloc runtime SHA-256:
   `3e9994675a51a1a7f893e02236b36e3150a37b5e8ea740e0cc78f6650f7b1841`
 - Scudo runtime: LLVM 18 standalone allocator at
@@ -181,16 +263,18 @@ The campaign produced 13,080 terminal records and ended as
 
 The host was shared and cells contain three measurements, so this complete
 matrix remains diagnostic grade. Runtime identities for TCMalloc and Scudo,
-benchmark inventories, binaries, process outputs, timeout records, and focused
-syscall evidence remain under the ignored raw evidence root.
+benchmark inventories, binaries, process outputs, and timeout records remain
+under the ignored raw evidence root. The tracked optimization result preserves
+the focused timing, fault, PSS, and link-layout controls with input and binary
+hashes.
 
 The recorded runner and plot commands were:
 
 ```bash
-RAW_ROOT="$PWD/evaluation/raw/std-bench-allocator-full-20260714"
-git worktree add --detach /tmp/unialloc-full-std-bench-run \
-  071c4f06426ea06a66419e4ffd208a3cb7c2bb7f
-cd /tmp/unialloc-full-std-bench-run
+RAW_ROOT="$PWD/evaluation/raw/std-bench-allocator-full-optimized-20260714"
+git worktree add --detach /tmp/unialloc-full-std-bench-optimized \
+  1c8ff12d5b618c7b8f9ae0365d8791e1e558d815
+cd /tmp/unialloc-full-std-bench-optimized
 
 numactl --physcpubind=0-15 --membind=0 taskset -c 0-15 \
   uv run python evaluation/scripts/run_std_bench_allocator_full.py \
@@ -385,6 +469,8 @@ claims use the artifacts and explicit boundaries in this document.
 
 - Full microbenchmark result:
   [`std-bench-allocator-full-20260714.json`](../benchmark-results/std-bench-allocator-full-20260714.json)
+- Focused optimization timing, fault, PSS, and layout-sensitivity result:
+  [`std-bench-allocator-optimization-20260714.json`](../benchmark-results/std-bench-allocator-optimization-20260714.json)
 - Full microbenchmark detailed CSV and legacy audit figures:
   [`std-bench-allocator-full-20260714/`](figures/std-bench-allocator-full-20260714/)
 - Current Type Isolation result:

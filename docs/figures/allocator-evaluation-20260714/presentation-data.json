@@ -1322,42 +1322,42 @@
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0281437446556543,
-              "linked_list": 0.8200854337859753,
-              "slice": 1.0402903432806951,
+              "linked_list": 0.9349404919721496,
+              "slice": 1.0160356907009747,
               "str": 1.0,
               "string": 1.0170664710381807,
               "vec": 1.0,
               "vec_deque": 1.0
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9858301700131972
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9991645419462024
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.0004480844776449,
-              "btree": 1.0153797994942046,
-              "linked_list": 1.0033201722900216,
-              "slice": 0.9985419704228287,
-              "str": 1.0002170138888888,
-              "string": 0.9729999580536358,
-              "vec": 0.9971552224456829,
-              "vec_deque": 0.9072751506952872
+              "binary_heap": 0.9985117587040432,
+              "btree": 0.9989196124006573,
+              "linked_list": 0.9659581821323656,
+              "slice": 0.9997735630934979,
+              "str": 1.0001512240977646,
+              "string": 0.9882487433740956,
+              "vec": 1.0144203479522809,
+              "vec_deque": 0.9961910833100921
             },
-            "headline_ratio": 0.9863753793889839,
+            "headline_ratio": 0.995186624023058,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 0.9801731644324555,
-              "btree": 1.0286720865953956,
-              "linked_list": 0.7839693537747642,
-              "slice": 0.9437017063573369,
-              "str": 1.0044996549777463,
-              "string": 0.9519950318963784,
-              "vec": 0.9540669615178344,
-              "vec_deque": 0.8316172663006638
+              "binary_heap": 0.9649170068344569,
+              "btree": 1.007672470111412,
+              "linked_list": 0.7825710292494469,
+              "slice": 0.9667579068914969,
+              "str": 1.0189749610649341,
+              "string": 0.9889559292265322,
+              "vec": 1.0370266699887363,
+              "vec_deque": 1.0394231696889284
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9313224077305244
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9723479501071558
           }
         },
         "mimalloc": {
@@ -1381,42 +1381,42 @@
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0445521122209551,
-              "linked_list": 0.8463719476143534,
-              "slice": 1.0094204237068,
+              "linked_list": 0.9649084991558381,
+              "slice": 0.988177968111373,
               "str": 1.0,
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9858717734253976
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9994968420440665
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.001713263713866,
-              "btree": 0.9860239688256227,
-              "linked_list": 0.9936277149524322,
-              "slice": 0.9975322279281292,
-              "str": 1.0,
-              "string": 0.9764617875370523,
-              "vec": 0.9679665589600429,
-              "vec_deque": 0.998265960620525
+              "binary_heap": 0.9998395899104231,
+              "btree": 0.9714125413119898,
+              "linked_list": 1.0018144116122343,
+              "slice": 0.9987776330390313,
+              "str": 1.00001842910324,
+              "string": 0.9769838228284385,
+              "vec": 0.9761621583719933,
+              "vec_deque": 1.0004701382525198
             },
-            "headline_ratio": 0.9901316078880537,
+            "headline_ratio": 0.9906071290133992,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 1.0001594322189287,
-              "btree": 0.9793137217919854,
-              "linked_list": 0.586108456020938,
-              "slice": 0.9280150235515567,
-              "str": 0.9298384853610234,
-              "string": 0.9587809975273348,
-              "vec": 0.8791059594183747,
-              "vec_deque": 0.9305786153628177
+              "binary_heap": 0.9859387275368072,
+              "btree": 0.9627298713135385,
+              "linked_list": 0.5969724865320776,
+              "slice": 0.9497424900076683,
+              "str": 0.9450847384086778,
+              "string": 0.9801975177909937,
+              "vec": 0.9572712981877414,
+              "vec_deque": 1.096385977796931
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.8885475261746657
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9222256071060029
           }
         },
         "ptmalloc": {
@@ -1440,42 +1440,42 @@
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 0.997098338461539,
-              "linked_list": 1.0345583883471743,
-              "slice": 1.0026560798868638,
+              "linked_list": 0.9307843994292375,
+              "slice": 1.0222415269689535,
               "str": 1.0,
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.0042240634322872
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9934421352698581
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.0015423085174595,
-              "btree": 0.9812177020028725,
-              "linked_list": 1.001794687724336,
-              "slice": 1.0003497370010515,
-              "str": 1.0002313922097956,
-              "string": 0.9628564720539865,
-              "vec": 1.0006411838869684,
-              "vec_deque": 0.91547205874956
+              "binary_heap": 1.001495173454411,
+              "btree": 0.9824407605789377,
+              "linked_list": 0.9650077760497667,
+              "slice": 1.0020440141415463,
+              "str": 1.000272199927168,
+              "string": 0.9629504015163848,
+              "vec": 1.0022560107059195,
+              "vec_deque": 0.9995666188141606
             },
-            "headline_ratio": 0.9825820936708559,
+            "headline_ratio": 0.9893744070163165,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 1.016919864643632,
-              "btree": 0.9842848928102734,
-              "linked_list": 0.797708884647043,
-              "slice": 1.0218055542194047,
-              "str": 0.9935489435504333,
-              "string": 0.937585144665202,
-              "vec": 0.9490326812474665,
-              "vec_deque": 0.846525606512475
+              "binary_heap": 1.003729101892102,
+              "btree": 0.9605852510896132,
+              "linked_list": 0.8065882292336692,
+              "slice": 1.0470330749952292,
+              "str": 1.0092677816468665,
+              "string": 0.9352202689518762,
+              "vec": 1.0288067303074784,
+              "vec_deque": 1.0034907685679344
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9401944565793812
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9714971396057253
           }
         },
         "scudo": {
@@ -1499,42 +1499,42 @@
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0523250219736062,
-              "linked_list": 0.7893507749029514,
-              "slice": 1.0094552258692309,
+              "linked_list": 1.0036329455016855,
+              "slice": 0.9872203162066662,
               "str": 1.0,
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9782241373292986
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.0052344444248231
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.002056721958152,
-              "btree": 1.1926918021224069,
-              "linked_list": 1.0047567761622689,
-              "slice": 0.9997107596756747,
-              "str": 1.000325509060002,
-              "string": 1.0056524128036977,
-              "vec": 1.0006163623770319,
-              "vec_deque": 0.9750532158274812
+              "binary_heap": 1.0008420819923634,
+              "btree": 1.1821103761692051,
+              "linked_list": 1.005656311725624,
+              "slice": 1.000331180740692,
+              "str": 1.0004238068914684,
+              "string": 1.0359945077909634,
+              "vec": 1.006718181752825,
+              "vec_deque": 1.0006733335989482
             },
-            "headline_ratio": 1.0207164797421722,
+            "headline_ratio": 1.0275307698097982,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 1.0004211730258035,
-              "btree": 1.4704967315053095,
-              "linked_list": 1.220387883977377,
-              "slice": 1.0212764383580206,
-              "str": 1.0094636247606952,
-              "string": 1.022538239452277,
-              "vec": 1.0096704026965542,
-              "vec_deque": 0.8628662887780444
+              "binary_heap": 0.9898030595090216,
+              "btree": 1.4382158866606378,
+              "linked_list": 1.2365859647809105,
+              "slice": 1.0461414476944366,
+              "str": 1.0253909512900101,
+              "string": 1.0396068122499387,
+              "vec": 1.1033146633777244,
+              "vec_deque": 1.0676036835306464
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.064504954767654
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.11047032087486
           }
         },
         "snmalloc": {
@@ -1545,7 +1545,7 @@
             "family_count": 8,
             "family_median_ratios": {
               "binary_heap": 1.3333333333333333,
-              "btree": 1.5,
+              "btree": 1.3333333333333333,
               "linked_list": 1.3333333333333333,
               "slice": 1.3333333333333333,
               "str": 1.3333333333333333,
@@ -1553,47 +1553,47 @@
               "vec": 1.3333333333333333,
               "vec_deque": 1.3333333333333333
             },
-            "headline_ratio": 1.3531090598756028,
+            "headline_ratio": 1.3333333333333333,
             "observation_count": 466,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.3848821642589764,
-              "btree": 1.5126915823085585,
-              "linked_list": 1.4063362699931305,
-              "slice": 1.329659841419412,
-              "str": 1.3425908969544507,
+              "btree": 1.5024973791403067,
+              "linked_list": 1.464320718882499,
+              "slice": 1.345705764442192,
+              "str": 1.3402704974584936,
               "string": 1.3333333333333333,
-              "vec": 1.3608094107168325,
+              "vec": 1.3629136197184861,
               "vec_deque": 1.3333333333333333
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.3742838003705469
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.3821140790359663
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.002854508117427,
-              "btree": 0.9878672401473865,
-              "linked_list": 1.003589375448672,
-              "slice": 0.9952270214210587,
-              "str": 0.9996379959455545,
-              "string": 0.9340444128350247,
-              "vec": 0.9753752947451004,
-              "vec_deque": 0.9050072612250581
+              "binary_heap": 1.0020939733404153,
+              "btree": 0.9796674109929128,
+              "linked_list": 0.9696734059097979,
+              "slice": 0.9966816502318138,
+              "str": 0.99963845402943,
+              "string": 0.9486374789966278,
+              "vec": 0.9770955910458581,
+              "vec_deque": 0.9914823364404055
             },
-            "headline_ratio": 0.9748349769298694,
+            "headline_ratio": 0.9829734571564567,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 1.0067174142787287,
-              "btree": 0.9846863828638259,
-              "linked_list": 0.591309636536591,
-              "slice": 0.915897613343797,
-              "str": 0.9135478044903115,
-              "string": 0.9048355403298274,
-              "vec": 0.9149132520129053,
-              "vec_deque": 0.8270493187132542
+              "binary_heap": 1.0019755657172094,
+              "btree": 0.959792440711821,
+              "linked_list": 0.6009523361028049,
+              "slice": 0.9402945245780822,
+              "str": 0.930315694650803,
+              "string": 0.942642950156488,
+              "vec": 0.9868337881465723,
+              "vec_deque": 0.9867417916917355
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.8724889925920641
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9084905976399279
           }
         },
         "tcmalloc": {
@@ -1617,42 +1617,42 @@
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 2.6866538995899485,
               "btree": 2.9802975525295476,
-              "linked_list": 2.13926789971324,
-              "slice": 2.5071989357221676,
+              "linked_list": 2.4388778293312594,
+              "slice": 2.44236220396436,
               "str": 3.0000000000000004,
               "string": 3.0000000000000004,
               "vec": 2.969423179411973,
               "vec_deque": 3.0000000000000004
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 2.7677072230616866
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 2.804228607857229
           },
           "performance": {
             "diagnostic_only": false,
             "eligibility": "timer-floor-safe",
             "family_count": 8,
             "family_median_ratios": {
-              "binary_heap": 1.0077472749244567,
-              "btree": 0.9982904553520826,
-              "linked_list": 1.0012562814070352,
-              "slice": 0.998219589372567,
-              "str": 0.9999344906649196,
-              "string": 0.9705429920506562,
-              "vec": 0.9638818505647188,
-              "vec_deque": 0.8949331857887766
+              "binary_heap": 1.0004208162044825,
+              "btree": 0.9859847862934186,
+              "linked_list": 0.964575773284949,
+              "slice": 0.9950936121636976,
+              "str": 0.9998586272707994,
+              "string": 0.9744926351691048,
+              "vec": 0.9716437137612755,
+              "vec_deque": 0.9995121157911855
             },
-            "headline_ratio": 0.9786954729679196,
+            "headline_ratio": 0.9863548540510608,
             "observation_count": 236,
             "sensitivity_family_geomean_ratios": {
-              "binary_heap": 1.0098354985605758,
-              "btree": 0.9960611245351586,
-              "linked_list": 0.6878424431652223,
-              "slice": 0.9252880015779609,
-              "str": 0.9867314835871313,
-              "string": 0.9550815241971786,
-              "vec": 0.9389636927316976,
-              "vec_deque": 0.8291055270798295
+              "binary_heap": 0.9869948324663089,
+              "btree": 0.9769019375752637,
+              "linked_list": 0.6970233192126533,
+              "slice": 0.9405265656437142,
+              "str": 1.00076147883495,
+              "string": 0.9758285388502055,
+              "vec": 1.0200249417426464,
+              "vec_deque": 0.9818766329858788
             },
-            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9098610429312377
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.941660827689739
           }
         }
       }
@@ -1662,8 +1662,8 @@
   "reference": "unialloc",
   "schema_version": 2,
   "sources": {
-    "micro_records": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f",
-    "micro_results": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",
+    "micro_records": "4df329a33b469e5be3860a8f5275a8ac19a4564cbda2ad69ffaee61664cc06b4",
+    "micro_results": "dfb2355e0fe24151a9ad12afe20b4b615a521f11bf5c33df2b3a2d5b984d5a2e",
     "type_isolation_results": "3e252a0f8ed1f6ca18c5b63f30acd48dcf5ed0280f29e8ecb1327b659333e8a5"
   }
 }

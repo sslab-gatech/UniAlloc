@@ -1,34 +1,34 @@
 {
   "generated_artifacts": [
     {
-      "bytes": 2083865,
+      "bytes": 2083226,
       "path": "benchmark-results/std-bench-allocator-full-20260714.json",
-      "sha256": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea"
+      "sha256": "dfb2355e0fe24151a9ad12afe20b4b615a521f11bf5c33df2b3a2d5b984d5a2e"
     },
     {
-      "bytes": 3474773,
+      "bytes": 3479542,
       "path": "docs/figures/std-bench-allocator-full-20260714/std-bench-allocator-full-all-cells.csv",
-      "sha256": "b070b0e26843f26bc7e58ae8853eaaba020761a8565083e85c4a6d8ba6acda9b"
+      "sha256": "53ddbb3b0b0d91e83cf4d914c224df6623a60ed6173a02b811843178f3bd9b01"
     },
     {
-      "bytes": 18691,
+      "bytes": 18685,
       "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-distribution.svg",
-      "sha256": "db4eef64b9023cdee82526f871e7cb95d55546e672c5b4b56e637921fffe9e40"
+      "sha256": "a6b918ed9ddbd94d4cb761684841e8dc7281ec59923d6efbc64c474d95c417ef"
     },
     {
-      "bytes": 110716,
+      "bytes": 110523,
       "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-distribution.png",
-      "sha256": "869ae0e3f00b05e778c34fcec208e418d107c560406982fd60d1dff44a647a96"
+      "sha256": "3bed1363a2ab9f281f8b7e9cb57fd92711ed1a16d19358bb31338ad884102c60"
     },
     {
-      "bytes": 67029,
+      "bytes": 66031,
       "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-heatmap.svg",
-      "sha256": "0f929d2bb3776f0ec8dca8c27638908c2c2a1ade369bf4f0ce349dc8e40f540b"
+      "sha256": "4dd5ab983e2bd3a35f89bc5c0742d11caf53d89e73cddae20cd840020bbce53a"
     },
     {
-      "bytes": 159646,
+      "bytes": 156841,
       "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-heatmap.png",
-      "sha256": "eca867942c157099a925aa287083622f16d8edcb10783e0ff2079c9d842006ae"
+      "sha256": "ad66d895507f6e207cf4eca2d47cc7e16a5cdb5e38df42c5f7c9008971472c77"
     }
   ],
   "generator": {
@@ -42,7 +42,7 @@
     },
     "path": "evaluation/scripts/plot_std_bench_allocator_full.py",
     "renderer": "Matplotlib 3.11.0",
-    "sha256": "22e526244de43728509a5fdb92b7d72e487c010f215bfa56e5f1f67ad46e228a"
+    "sha256": "6e45febcf451d0ac4d0fd7f27a7cb71533a87b6a4103a57f2f8bfdb91dcb53af"
   },
   "matrix": {
     "allocator_feature_variants": 7,
@@ -56,14 +56,14 @@
   "source": "rust-std-bench-full-allocator-artifacts",
   "source_artifacts": [
     {
-      "bytes": 2114612,
-      "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-full-20260714/summary.json",
-      "sha256": "9b224be377e1719031bdd907ee26fbed71b916fef6cc6b00b3f0fcde0d96cca9"
+      "bytes": 2114133,
+      "path": "evaluation/raw/std-bench-allocator-full-optimized-20260714/summary.json",
+      "sha256": "3a9061d970bea1b022ddb5b303124b060b2ab929fd2ec7d2381e97ba87f0a4e2"
     },
     {
-      "bytes": 34593157,
-      "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-full-20260714/records.jsonl",
-      "sha256": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f"
+      "bytes": 34966892,
+      "path": "evaluation/raw/std-bench-allocator-full-optimized-20260714/records.jsonl",
+      "sha256": "4df329a33b469e5be3860a8f5275a8ac19a4564cbda2ad69ffaee61664cc06b4"
     }
   ]
 }

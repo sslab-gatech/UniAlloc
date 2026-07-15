@@ -13,20 +13,20 @@
       "sha256": "4280d5f24600fef0dee363e6c0d81a896eb4b2ba7231e4a1116271633c1a1969"
     },
     "microbenchmarks.csv": {
-      "bytes": 1033450,
-      "sha256": "05b5f4fb8b0ee573d492deefc48ec2b16a9daac4365120751aefc2ad47e24490"
+      "bytes": 1033033,
+      "sha256": "4adcf8b9d85ab7cf40eac6a0f8e4936543624c36ce4899f1ebd436072b6503e6"
     },
     "microbenchmarks.png": {
-      "bytes": 235297,
-      "sha256": "56e146313177e49a304d20e69efb07507c7f7c9a61f43291b80e9aba3eaf40f2"
+      "bytes": 230266,
+      "sha256": "d3f2e30ed7daaae937eec3edeff2b6399ae0ab11a5bcdcce16e471c04c5f5b20"
     },
     "microbenchmarks.svg": {
-      "bytes": 1099098,
-      "sha256": "6f1685d8a6fb858670c2f5e12dd3678d138095afb300d736a2ddcf6bcf786d0a"
+      "bytes": 1099105,
+      "sha256": "8499d5ae01afcfeba75a2d156e0a7ba1ea70ecf5393a0a4bdfe60446b995120f"
     },
     "presentation-data.json": {
-      "bytes": 68195,
-      "sha256": "d9909d79f58108a1a4742b3c8b74c96c64dd087d7b31f1f403446274aadca24f"
+      "bytes": 68223,
+      "sha256": "bdbadf80c68e48aaf50a1558ecd0aee2e513f44533091fe4e7ab52a815c19786"
     }
   },
   "generated_utc": "2026-07-15T01:00:00Z",
@@ -34,8 +34,8 @@
   "renderer": "Matplotlib 3.11.0",
   "schema_version": 1,
   "sources": {
-    "micro_records": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f",
-    "micro_results": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",
+    "micro_records": "4df329a33b469e5be3860a8f5275a8ac19a4564cbda2ad69ffaee61664cc06b4",
+    "micro_results": "dfb2355e0fe24151a9ad12afe20b4b615a521f11bf5c33df2b3a2d5b984d5a2e",
     "type_isolation_results": "3e252a0f8ed1f6ca18c5b63f30acd48dcf5ed0280f29e8ecb1327b659333e8a5"
   }
 }

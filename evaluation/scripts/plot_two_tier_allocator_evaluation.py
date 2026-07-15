@@ -49,7 +49,7 @@ DEFAULT_MICRO_RECORDS = (
     REPOSITORY_ROOT
     / "evaluation"
     / "raw"
-    / "std-bench-allocator-full-20260714"
+    / "std-bench-allocator-full-optimized-20260714"
     / "records.jsonl"
 )
 DEFAULT_TYPE_ISOLATION_RESULTS = (
