@@ -1,0 +1,419 @@
+{
+  "base_commit": "e8fcc378c14442fe8993d29578f38eeb5df5acc9",
+  "baseline": {
+    "binary": "/tmp/unialloc-roi-tls-baseline-target/release/deps/std_bench-9742587db21b17ee",
+    "inventory": 468,
+    "sha256": "f08c2bb1353d4ef6feed4ccbba0609b2186513a0d0f5e84930fd4372d75edd9e",
+    "size": 3224032
+  },
+  "decision": "reject_all_no_commit",
+  "decision_reason": "No structural variant met both the allocation benefit and <=1% layout-control regression gates.",
+  "gates": {
+    "focused": "btree candidate median regression <=1%; each of three allocation leaves >=5% faster",
+    "full": "all three controls <=1%; eight allocation-leaf geomean >=5% faster; no allocation leaf >1% slower"
+  },
+  "generated_at_unix_ns": 1784128010217194713,
+  "pre_experiment_verification": [
+    "cargo fmt --all -- --check",
+    "focused TLS identity/failure/teardown tests passed",
+    "default lib 819/819; type_isolation 819/819; type_isolation+stats 915/915; quarantine 821/821; fixed_heap 653/653",
+    "release raw-only feature contract 6/6; concurrent_global_allocator 2/2",
+    "workspace --all-targets passed with two known host rseq tests skipped; std_bench test mode 468/468",
+    "cargo clippy -p unialloc --lib passed with 168 pre-existing warnings"
+  ],
+  "protocol": {
+    "cpu": 24,
+    "discarded_warmups_per_variant_leaf": 1,
+    "driver": "acpi-cpufreq",
+    "fresh_process_per_sample": true,
+    "governor": "schedutil",
+    "numa_node": 0,
+    "order": "AB/BA counterbalanced",
+    "pinning": "numactl --cpunodebind=0 --membind=0 taskset -c 24"
+  },
+  "raw_logs": {
+    "/tmp/unialloc-roi-tls-ab-5run.log": "9f89457cbb488a2c86a6c4795dc39964d87f5cdf0b290495fb2f2b72df5f103e",
+    "/tmp/unialloc-roi-tls-b-focused-3run.log": "cff554563eb7b7204a979288b3c590af0cad6a1a167e31845985d48ff6fb9dd8",
+    "/tmp/unialloc-roi-tls-b2-focused-3run.log": "6acd5e4a75c048cec1ae4f2707fe27edc3ea293c89a021507afc682bdc41fb96",
+    "/tmp/unialloc-roi-tls-b3-focused-3run.log": "ab8eeb2ea4548a7f4a1163b9e325d0eebb41ed74e0c8596dd202661a9fc956a9"
+  },
+  "schema": "unialloc-current-head-hosted-tls-roi-rejection-v1",
+  "variants": {
+    "A_explicit_out_of_line_accessor": {
+      "binary_sha256": "be799305832eb69409663a19c08c1ca63b701bfe367c2bf9767ea8b6fac8eee2",
+      "n5": {
+        "allocation_geomean_delta_pct": -7.552811357999866,
+        "benchmarks": {
+          "btree::map::iter_100": {
+            "baseline": {
+              "max": 109931.11,
+              "median": 109772.48,
+              "min": 109604.54
+            },
+            "candidate": {
+              "max": 112261.15,
+              "median": 112013.59,
+              "min": 111907.38
+            },
+            "delta_pct": 2.0415954891426447,
+            "kind": "layout_control"
+          },
+          "linked_list::bench_collect_into": {
+            "baseline": {
+              "max": 843.4,
+              "median": 841.38,
+              "min": 840.91
+            },
+            "candidate": {
+              "max": 815.07,
+              "median": 789.29,
+              "min": 785.04
+            },
+            "delta_pct": -6.191019515557783,
+            "kind": "allocation_heavy"
+          },
+          "linked_list::bench_iter": {
+            "baseline": {
+              "max": 93.38,
+              "median": 93.34,
+              "min": 93.31
+            },
+            "candidate": {
+              "max": 93.29,
+              "median": 93.27,
+              "min": 93.19
+            },
+            "delta_pct": -0.07499464323977856,
+            "kind": "layout_control"
+          },
+          "linked_list::bench_push_front_pop_front": {
+            "baseline": {
+              "max": 12.2,
+              "median": 12.19,
+              "min": 12.16
+            },
+            "candidate": {
+              "max": 11.29,
+              "median": 11.23,
+              "min": 11.21
+            },
+            "delta_pct": -7.875307629204253,
+            "kind": "allocation_heavy"
+          },
+          "slice::contains_last_element": {
+            "baseline": {
+              "max": 4.9,
+              "median": 4.83,
+              "min": 4.66
+            },
+            "candidate": {
+              "max": 5.15,
+              "median": 4.86,
+              "min": 4.71
+            },
+            "delta_pct": 0.6211180124223725,
+            "kind": "layout_control"
+          },
+          "string::bench_from_str": {
+            "baseline": {
+              "max": 13.81,
+              "median": 13.25,
+              "min": 13.23
+            },
+            "candidate": {
+              "max": 12.54,
+              "median": 12.51,
+              "min": 12.49
+            },
+            "delta_pct": -5.584905660377359,
+            "kind": "allocation_heavy"
+          },
+          "string::bench_with_capacity": {
+            "baseline": {
+              "max": 12.28,
+              "median": 12.1,
+              "min": 12.05
+            },
+            "candidate": {
+              "max": 11.25,
+              "median": 11.24,
+              "min": 11.23
+            },
+            "delta_pct": -7.107438016528922,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_extend_from_slice_1000_1000": {
+            "baseline": {
+              "max": 346.29,
+              "median": 341.34,
+              "min": 340.53
+            },
+            "candidate": {
+              "max": 344.84,
+              "median": 337.21,
+              "min": 336.06
+            },
+            "delta_pct": -1.20993730591199,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_0010": {
+            "baseline": {
+              "max": 12.56,
+              "median": 12.53,
+              "min": 12.51
+            },
+            "candidate": {
+              "max": 11.28,
+              "median": 11.27,
+              "min": 11.26
+            },
+            "delta_pct": -10.05586592178771,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_0100": {
+            "baseline": {
+              "max": 12.54,
+              "median": 12.51,
+              "min": 12.49
+            },
+            "candidate": {
+              "max": 11.35,
+              "median": 11.28,
+              "min": 11.26
+            },
+            "delta_pct": -9.832134292565954,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_1000": {
+            "baseline": {
+              "max": 13.03,
+              "median": 13.01,
+              "min": 13.0
+            },
+            "candidate": {
+              "max": 11.43,
+              "median": 11.43,
+              "min": 11.42
+            },
+            "delta_pct": -12.144504227517295,
+            "kind": "allocation_heavy"
+          }
+        },
+        "sha256": "cb27fc386cf2fb4c21b89c6c4ebf1b1f08e8613243a1686286270c43fe7e1c63",
+        "source": "/tmp/unialloc-roi-tls-ab-5run.json"
+      },
+      "size": 3224160,
+      "structure": ".text and btree addresses shifted +0x20 by one extra FDE",
+      "verdict": "reject: allocation geomean improved 7.55%, but btree iter control regressed 2.04%"
+    },
+    "B2_fde_budget_restored": {
+      "binary_sha256": "b57438aa99c03692b6ed4aa7cca1100c0b18a3e3ef720a2cba081d130d808088",
+      "n3": {
+        "allocation_geomean_delta_pct": -4.698802263909519,
+        "benchmarks": {
+          "btree::map::iter_100": {
+            "baseline": {
+              "max": 110273.98,
+              "median": 109451.02,
+              "min": 109378.64
+            },
+            "candidate": {
+              "max": 109700.82,
+              "median": 109587.7,
+              "min": 109536.97
+            },
+            "delta_pct": 0.12487777637886222,
+            "kind": "layout_control"
+          },
+          "linked_list::bench_collect_into": {
+            "baseline": {
+              "max": 843.73,
+              "median": 841.64,
+              "min": 839.39
+            },
+            "candidate": {
+              "max": 797.32,
+              "median": 795.39,
+              "min": 793.12
+            },
+            "delta_pct": -5.495223611045108,
+            "kind": "allocation_heavy"
+          },
+          "linked_list::bench_push_front_pop_front": {
+            "baseline": {
+              "max": 17.97,
+              "median": 12.18,
+              "min": 12.12
+            },
+            "candidate": {
+              "max": 12.61,
+              "median": 11.63,
+              "min": 11.62
+            },
+            "delta_pct": -4.515599343185539,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_1000": {
+            "baseline": {
+              "max": 12.99,
+              "median": 12.99,
+              "min": 12.99
+            },
+            "candidate": {
+              "max": 12.46,
+              "median": 12.46,
+              "min": 12.19
+            },
+            "delta_pct": -4.0800615858352485,
+            "kind": "allocation_heavy"
+          }
+        },
+        "sha256": "098dd43080623b5db7e929476771ee1ef7e0cb99f0ea0c2d9fc8fbbc713d9c18",
+        "source": "/tmp/unialloc-roi-tls-b2-focused-3run.json"
+      },
+      "size": 3224048,
+      "structure": "inline failure trampoline restores baseline .eh_frame/.text/btree addresses; warm DerefMut remains far from cold init",
+      "verdict": "reject: btree +0.12%, but push/pop and vec improvements were only 4.52% and 4.08%"
+    },
+    "B3_shared_accessor_stable_layout": {
+      "binary_sha256": "bf27cbb2ebe4bd37fd207845ff54af9c2597c9f5d93a52449087e5aa09610151",
+      "n3": {
+        "allocation_geomean_delta_pct": -3.0486498004844154,
+        "benchmarks": {
+          "btree::map::iter_100": {
+            "baseline": {
+              "max": 109485.51,
+              "median": 109430.95,
+              "min": 109383.38
+            },
+            "candidate": {
+              "max": 109491.94,
+              "median": 109458.54,
+              "min": 109446.31
+            },
+            "delta_pct": 0.025212245712924464,
+            "kind": "layout_control"
+          },
+          "linked_list::bench_collect_into": {
+            "baseline": {
+              "max": 842.0,
+              "median": 839.34,
+              "min": 838.53
+            },
+            "candidate": {
+              "max": 806.16,
+              "median": 805.95,
+              "min": 805.41
+            },
+            "delta_pct": -3.978125670169419,
+            "kind": "allocation_heavy"
+          },
+          "linked_list::bench_push_front_pop_front": {
+            "baseline": {
+              "max": 12.28,
+              "median": 12.17,
+              "min": 12.15
+            },
+            "candidate": {
+              "max": 11.61,
+              "median": 11.55,
+              "min": 11.53
+            },
+            "delta_pct": -5.094494658997528,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_1000": {
+            "baseline": {
+              "max": 12.98,
+              "median": 12.98,
+              "min": 12.97
+            },
+            "candidate": {
+              "max": 12.98,
+              "median": 12.98,
+              "min": 12.97
+            },
+            "delta_pct": 0.0,
+            "kind": "allocation_heavy"
+          }
+        },
+        "sha256": "ca1b401b035ded6ff1a7f18472872c904b41ccc4e16bd082d331f4464755bb37",
+        "source": "/tmp/unialloc-roi-tls-b3-focused-3run.json"
+      },
+      "patch": "/tmp/unialloc-roi-tls-b3.patch",
+      "patch_sha256": "0b6d7a77c25d0b106b537d6bd2d1c9c20bb5ac433a1eb6e60a8c307f885d72e9",
+      "size": 3224000,
+      "structure": "shared 19-byte accessor adjacent to cold init; baseline .eh_frame/.text/btree addresses retained; standard Rust attributes only",
+      "verdict": "reject: btree +0.03%, but collect improved only 3.98% and vec showed 0.00%"
+    },
+    "B_compact_derefmut_cold_init": {
+      "binary_sha256": "419ef00e1520da473f3e0a6cf99bced72aea03510129eba30f72be2270c91942",
+      "n3": {
+        "allocation_geomean_delta_pct": -8.477253163407738,
+        "benchmarks": {
+          "btree::map::iter_100": {
+            "baseline": {
+              "max": 110388.43,
+              "median": 110254.23,
+              "min": 109905.48
+            },
+            "candidate": {
+              "max": 112241.46,
+              "median": 112151.99,
+              "min": 112120.01
+            },
+            "delta_pct": 1.7212582229271467,
+            "kind": "layout_control"
+          },
+          "linked_list::bench_collect_into": {
+            "baseline": {
+              "max": 840.77,
+              "median": 839.0,
+              "min": 838.84
+            },
+            "candidate": {
+              "max": 789.22,
+              "median": 788.58,
+              "min": 787.12
+            },
+            "delta_pct": -6.009535160905832,
+            "kind": "allocation_heavy"
+          },
+          "linked_list::bench_push_front_pop_front": {
+            "baseline": {
+              "max": 12.22,
+              "median": 12.19,
+              "min": 12.18
+            },
+            "candidate": {
+              "max": 11.32,
+              "median": 11.31,
+              "min": 11.26
+            },
+            "delta_pct": -7.2190319934372305,
+            "kind": "allocation_heavy"
+          },
+          "vec::bench_with_capacity_1000": {
+            "baseline": {
+              "max": 13.07,
+              "median": 13.07,
+              "min": 13.03
+            },
+            "candidate": {
+              "max": 11.5,
+              "median": 11.49,
+              "min": 11.43
+            },
+            "delta_pct": -12.088752869166031,
+            "kind": "allocation_heavy"
+          }
+        },
+        "sha256": "e37d1c9b05cd43ac18c49642d22424f4317ac39328b98bfa4ea1efc3b5ca8379",
+        "source": "/tmp/unialloc-roi-tls-b-focused-3run.json"
+      },
+      "size": 3224192,
+      "structure": "19-byte DerefMut plus cold initializer; .text and btree still shifted +0x20",
+      "verdict": "reject: btree iter control regressed 1.72%"
+    }
+  }
+}
