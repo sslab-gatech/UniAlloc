@@ -1198,14 +1198,16 @@ impl ThreadCache {
     pub fn init(&mut self) {}
 
     #[inline]
+    fn class_cached_object_count(unit: &ThreadCacheUnit) -> usize {
+        unit.list.length.saturating_add(unit.bump_len())
+    }
+
+    #[inline]
     fn class_cached_object_bytes(idx: usize, unit: &ThreadCacheUnit) -> usize {
         if idx == 0 || idx >= TOTAL_SIZE_CLASS {
             return 0;
         }
-        unit.list
-            .length
-            .saturating_add(unit.bump_len())
-            .saturating_mul(get_rounded_size_by_idx(idx))
+        Self::class_cached_object_count(unit).saturating_mul(get_rounded_size_by_idx(idx))
     }
 
     fn recompute_cached_object_accounting(&self) -> (usize, usize, ActiveCachedClassBits) {
@@ -1311,6 +1313,37 @@ impl ThreadCache {
                 }
             }
             _ => {}
+        }
+    }
+
+    #[inline]
+    fn account_class_cached_object_count_change(
+        &mut self,
+        idx: usize,
+        rounded_size: usize,
+        before_count: usize,
+        after_count: usize,
+    ) {
+        if after_count >= before_count {
+            self.cached_object_bytes = self
+                .cached_object_bytes
+                .saturating_add((after_count - before_count).saturating_mul(rounded_size));
+        } else {
+            self.cached_object_bytes = self
+                .cached_object_bytes
+                .saturating_sub((before_count - after_count).saturating_mul(rounded_size));
+        }
+
+        if before_count == 0
+            && after_count != 0
+            && self.active_cached_class_bits.set_present(idx, true)
+        {
+            self.active_cached_classes = self.active_cached_classes.saturating_add(1);
+        } else if before_count != 0
+            && after_count == 0
+            && self.active_cached_class_bits.set_present(idx, false)
+        {
+            self.active_cached_classes = self.active_cached_classes.saturating_sub(1);
         }
     }
 
@@ -1594,7 +1627,8 @@ impl ThreadCache {
             if unlikely(idx == 0) {
                 return NonNull::new(layout.align() as *mut u8).ok_or(AllocError::ENOMEM);
             }
-            let before_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let rounded_size = get_rounded_size_by_idx(idx);
+            let before_count = Self::class_cached_object_count(&self.list[idx]);
             let mut alignment_miss_streak = self.alignment_miss_streaks.get(idx);
             let result = {
                 let size_cache: &mut ThreadCacheUnit = &mut self.list[idx];
@@ -1605,9 +1639,16 @@ impl ThreadCache {
                 )
             };
             self.alignment_miss_streaks.set(idx, alignment_miss_streak);
-            let after_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
-            self.account_class_cached_object_change(idx, before_bytes, after_bytes);
-            self.trim_total_cached_object_bytes(Some(idx));
+            let after_count = Self::class_cached_object_count(&self.list[idx]);
+            self.account_class_cached_object_count_change(
+                idx,
+                rounded_size,
+                before_count,
+                after_count,
+            );
+            if after_count > before_count {
+                self.trim_total_cached_object_bytes(Some(idx));
+            }
             result
         } else {
             // 3. Large objects bypass the thread cache.  They are already page
@@ -1627,7 +1668,7 @@ impl ThreadCache {
                 return;
             }
             let rounded_size = get_rounded_size_by_idx(idx);
-            let before_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let before_count = Self::class_cached_object_count(&self.list[idx]);
             let disposition = {
                 let size_cache: &mut ThreadCacheUnit = &mut self.list[idx];
                 if thread_cache_should_bypass_local_cache(idx, rounded_size) {
@@ -1642,18 +1683,25 @@ impl ThreadCache {
                     size_cache.deallocate(idx, ptr, rounded_size)
                 }
             };
-            let after_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
-            if let Some(disposition) = disposition {
-                self.account_class_cached_object_change_after_flush(
-                    idx,
-                    before_bytes,
-                    after_bytes,
-                    disposition,
-                );
+            let after_count = Self::class_cached_object_count(&self.list[idx]);
+            if matches!(
+                disposition,
+                Some(FlushDisposition::FailedAfterTransferAttempt)
+            ) {
+                self.sync_cached_object_bytes();
             } else {
-                self.account_class_cached_object_change(idx, before_bytes, after_bytes);
+                self.account_class_cached_object_count_change(
+                    idx,
+                    rounded_size,
+                    before_count,
+                    after_count,
+                );
             }
-            self.trim_total_cached_object_bytes(Some(idx));
+            let (flush_bytes, _target_bytes) =
+                thread_cache_total_pressure_budget(self.active_cached_class_count());
+            if self.cached_object_bytes > flush_bytes {
+                self.trim_total_cached_object_bytes(Some(idx));
+            }
         } else {
             // 3. Large chunks go straight back to the zone for immediate reuse
             // by any thread instead of being pinned in a local cache.
@@ -4451,6 +4499,67 @@ mod tests {
             cache.previous_active_cached_class_idx(TOTAL_SIZE_CLASS - 1),
             None
         );
+    }
+
+    #[test]
+    fn thread_cache_warm_allocations_keep_exact_aggregate_accounting() {
+        let mut cache = ThreadCache::new();
+        let idx = 3;
+        let rounded_size = get_rounded_size_by_idx(idx);
+        let layout = Layout::from_size_align(rounded_size, align_of::<usize>())
+            .expect("size classes are word-aligned layouts");
+        let mut chunks = [0usize; 2];
+        let first = chunks.as_mut_ptr().cast::<u8>();
+        let second = unsafe { chunks.as_mut_ptr().add(1).cast::<u8>() };
+
+        cache.list[idx].free(first);
+        cache.list[idx].free(second);
+        cache.alignment_miss_streaks.set(idx, 2);
+        cache.sync_cached_object_bytes();
+
+        let allocated_second = cache
+            .allocate(layout)
+            .expect("warm local allocation should pop the list head");
+        assert_eq!(allocated_second.as_ptr(), second);
+        assert_eq!(cache.cached_object_bytes, rounded_size);
+        assert_eq!(cache.active_cached_class_count(), 1);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        assert_eq!(cache.alignment_miss_streaks.get(idx), 0);
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+
+        let allocated_first = cache
+            .allocate(layout)
+            .expect("last warm local allocation should pop the remaining node");
+        assert_eq!(allocated_first.as_ptr(), first);
+        assert_eq!(cache.cached_object_bytes, 0);
+        assert_eq!(cache.active_cached_class_count(), 0);
+        assert!(!cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+    }
+
+    #[test]
+    fn thread_cache_ordinary_frees_keep_exact_aggregate_accounting() {
+        let mut cache = ThreadCache::new();
+        let idx = 3;
+        let rounded_size = get_rounded_size_by_idx(idx);
+        let layout = Layout::from_size_align(rounded_size, align_of::<usize>())
+            .expect("size classes are word-aligned layouts");
+        let mut chunks = [0usize; 2];
+        let first = NonNull::new(chunks.as_mut_ptr().cast::<u8>()).expect("non-null chunk");
+        let second = NonNull::new(unsafe { chunks.as_mut_ptr().add(1).cast::<u8>() })
+            .expect("non-null chunk");
+
+        cache.deallocate(first, layout);
+        assert_eq!(cache.cached_object_bytes, rounded_size);
+        assert_eq!(cache.active_cached_class_count(), 1);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+
+        cache.deallocate(second, layout);
+        assert_eq!(cache.cached_object_bytes, rounded_size * 2);
+        assert_eq!(cache.active_cached_class_count(), 1);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
     }
 
     #[test]
