@@ -414,10 +414,10 @@ def validate(
     assert int(runtime["producer_pointer"]) != int(runtime["local_pointer"]), runtime
     assert int(runtime["producer_pointer"]) == int(runtime["producer_recovery_pointer"]), runtime
     assert int(runtime["local_pointer"]) == int(runtime["local_recovery_pointer"]), runtime
-    assert int(runtime["first_crosscrate_mismatch_delta"]) == 1, runtime
-    assert int(runtime["second_crosscrate_mismatch_delta"]) == 1, runtime
+    assert int(runtime["first_crosscrate_mismatch_delta"]) == 0, runtime
+    assert int(runtime["second_crosscrate_mismatch_delta"]) == 0, runtime
     assert int(runtime["recovery_identity_matches"]) == 2, runtime
-    assert int(runtime["recovery_identity_mismatches"]) == 2, runtime
+    assert int(runtime["recovery_identity_mismatches"]) == 0, runtime
     assert int(runtime["side_cache_corrupt_slots"]) == 0, runtime
     for field, expected in (
         ("typed_allocations", 4),
@@ -433,28 +433,37 @@ def validate(
     ):
         assert int(runtime[field]) == expected, (field, runtime)
 
-    requested_callsite = int(runtime["last_mismatch_requested_callsite"])
-    requested_drop = unique_row(
-        [
-            row
-            for row in app_rows
-            if row.get("lowering_kind") == "semantic_scope_drop_rewrite"
-            and int(row.get("callsite") or 0) == requested_callsite
-        ],
-        "application cross-crate String Drop",
-    )
-    assert int(requested_drop.get("type_id") or 0) == type_id, requested_drop
-    assert int(requested_drop.get("module_id") or 0) == app_module, requested_drop
-    assert int(requested_drop.get("flags") or 0) & TYPE_ISOLATED, requested_drop
-    assert "ReturnedString" in str(requested_drop.get("destination_type") or ""), requested_drop
-    assert requested_drop.get("metadata_pairing_contract") == (
-        "semantic_scope_drop_active_metadata"
-    ), requested_drop
-    assert int(runtime["last_mismatch_requested_type_id"]) == type_id, runtime
-    assert int(runtime["last_mismatch_recorded_type_id"]) == type_id, runtime
-    assert int(runtime["last_mismatch_requested_module_id"]) == app_module, runtime
-    assert int(runtime["last_mismatch_recorded_module_id"]) == producer_module, runtime
-    assert int(runtime["last_mismatch_recorded_callsite"]) == producer_callsite, runtime
+    app_rewrite_rows = app_audit.get("rewrite_candidates") or []
+    assert isinstance(app_rewrite_rows, list), app_rewrite_rows
+    recovery_rows = [
+        row
+        for row in app_rewrite_rows
+        if isinstance(row, dict)
+        and row.get("mir_function") == "main"
+        and row.get("callee") == "TerminatorKind::Drop"
+        and row.get("lowering_kind")
+        == "semantic_scope_drop_effectful_owner_recovery_skipped"
+        and row.get("rewrite_status")
+        == "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery"
+        and row.get("metadata_pairing_contract")
+        == "allocation_scope_to_authenticated_recovery_record"
+        and row.get("destination_type")
+        == "returned_string_producer::ReturnedString"
+        and row.get("semantic_object_type") == "std::string::String"
+        and row.get("replacement_symbol")
+        == "authenticated_allocation_recovery_record"
+    ]
+    assert len(recovery_rows) == 4, recovery_rows
+    assert all(int(row.get("type_id") or 0) == 0 for row in recovery_rows), recovery_rows
+    for suffix in (
+        "requested_type_id",
+        "recorded_type_id",
+        "requested_module_id",
+        "recorded_module_id",
+        "requested_callsite",
+        "recorded_callsite",
+    ):
+        assert int(runtime[f"last_mismatch_{suffix}"]) == 0, (suffix, runtime)
 
     type_rows = runtime.get("type_rows")
     assert isinstance(type_rows, list), runtime
@@ -492,7 +501,7 @@ def validate(
         "producer_module_id": producer_module,
         "application_module_id": app_module,
         "producer_allocation_callsite": producer_callsite,
-        "application_drop_callsite": requested_callsite,
+        "authenticated_recovery_drop_row_count": len(recovery_rows),
         "producer_runtime": producer_runtime,
         "application_runtime": app_runtime,
         "runtime": runtime,
@@ -523,6 +532,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-crosscrate-string-") as raw:
         workspace = Path(raw)
         app = write_fixture(workspace)
+        # Preserve the repository's intentionally pinned, yanked dependency
+        # versions in this detached offline workspace.
+        shutil.copy2(ROOT / "Cargo.lock", workspace / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         build_env = os.environ.copy()
         build_env["RUSTC_BOOTSTRAP"] = "1"
@@ -595,7 +607,7 @@ def main() -> int:
                 "pass_source": str(pass_source),
                 "boundaries": [
                     "Functional actual-rustc cross-crate recovery and module-isolation regression only; no benchmark or performance claim.",
-                    "The visible module mismatch is expected for a returned owner because the consumer compiler cannot reconstruct the producer allocation module; allocation-time recovery remains authoritative.",
+                    "Returned aggregate Drop is deliberately fail-closed to the authenticated allocation-time recovery record, so producer identity is recovered without manufacturing a consumer identity mismatch.",
                     "This bounded String fixture does not establish universal cross-crate owner coverage or prove the Oxipng OutFile/PathBuf aggregate path.",
                 ],
                 "evidence": evidence,

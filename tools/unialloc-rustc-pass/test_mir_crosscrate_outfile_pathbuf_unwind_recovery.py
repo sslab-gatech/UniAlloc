@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove allocation-time OutFile/PathBuf identity remains authoritative during cleanup unwind."""
+"""Prove unsupported OutFile/PathBuf cleanup-unwind stays fail-closed."""
 
 from __future__ import annotations
 
@@ -261,16 +261,12 @@ fn main() {
         .recovery_identity_mismatches
         .saturating_sub(before_unwind.recovery_identity_mismatches);
     assert_eq!(
-        unwind_mismatch_delta, 1,
-        "one returned aggregate cleanup Drop must produce one expected module recovery mismatch"
+        unwind_mismatch_delta, 0,
+        "an unsupported aggregate must stay outside authenticated recovery"
     );
 
     let producer_recovery_pointer =
         outfile_pathbuf_unwind_producer::clone_drop_and_return_pointer(&producer_seed);
-    assert_eq!(
-        producer_recovery_pointer, unwind_pointer,
-        "the producer module must reuse its recovered PathBuf storage after unwind"
-    );
 
     let stats = semantic_stats_snapshot();
     let fallback = semantic_fallback_attribution_snapshot();
@@ -284,17 +280,19 @@ fn main() {
         after_unwind.recovery_identity_mismatches,
         "the producer same-domain lifecycle must not add a recovery mismatch"
     );
-    assert_eq!(stats.typed_allocations, 2, "{stats:?}");
-    assert_eq!(stats.typed_deallocations, 2, "{stats:?}");
-    assert_eq!(stats.typed_cache_hits, 1, "{stats:?}");
-    assert_eq!(stats.typed_cache_inserts, 2, "{stats:?}");
-    assert_eq!(stats.fallback_allocations, 0, "{stats:?}");
-    assert_eq!(stats.fallback_deallocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_allocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_deallocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_cache_hits, 0, "{stats:?}");
+    assert_eq!(stats.typed_cache_inserts, 0, "{stats:?}");
+    assert_eq!(stats.fallback_allocations, 2, "{stats:?}");
+    assert_eq!(stats.fallback_deallocations, 2, "{stats:?}");
     assert_eq!(stats.semantic_type_stats_dropped_events, 0, "{stats:?}");
-    assert_eq!(fallback.raw_alloc_no_metadata, 0, "{fallback:?}");
-    assert_eq!(fallback.raw_dealloc_no_metadata, 0, "{fallback:?}");
+    assert_eq!(fallback.raw_alloc_no_metadata, 2, "{fallback:?}");
+    assert_eq!(fallback.raw_dealloc_no_metadata, 2, "{fallback:?}");
     assert_eq!(fallback.raw_realloc_no_metadata, 0, "{fallback:?}");
     assert_eq!(side_cache.corrupt_slots, 0, "{side_cache:?}");
+    assert_eq!(side_cache.occupied_entries, 0, "{side_cache:?}");
+    assert_eq!(side_cache.retained_bytes, 0, "{side_cache:?}");
 
     semantic_type_stats_recording_disable();
     semantic_stats_recording_disable();
@@ -307,7 +305,7 @@ fn main() {
             "\"panic_observed\":{},",
             "\"unwind_pointer\":{},",
             "\"producer_recovery_pointer\":{},",
-            "\"producer_exact_reuse_after_unwind\":true,",
+            "\"pointer_placement_asserted\":false,",
             "\"unwind_mismatch_delta\":{},",
             "\"typed_allocations\":{},",
             "\"typed_deallocations\":{},",
@@ -327,6 +325,8 @@ fn main() {
             "\"mismatch_requested_callsite\":{},",
             "\"mismatch_recorded_callsite\":{},",
             "\"side_cache_corrupt_slots\":{},",
+            "\"side_cache_occupied_entries\":{},",
+            "\"side_cache_retained_bytes\":{},",
             "\"semantic_type_stats_dropped_events\":{},",
             "\"type_rows\":{}",
             "}}"
@@ -353,6 +353,8 @@ fn main() {
         after_unwind.last_mismatch_requested_callsite,
         after_unwind.last_mismatch_recorded_callsite,
         side_cache.corrupt_slots,
+        side_cache.occupied_entries,
+        side_cache.retained_bytes,
         stats.semantic_type_stats_dropped_events,
         type_rows,
     );
@@ -362,19 +364,10 @@ fn main() {
     return app
 
 
-def applied_rows(audit: dict[str, object]) -> list[dict[str, object]]:
+def rewrite_rows(audit: dict[str, object]) -> list[dict[str, object]]:
     rows = audit.get("rewrite_candidates") or []
-    return [
-        row
-        for row in rows
-        if isinstance(row, dict)
-        and row.get("rewrite_status")
-        in {
-            "actual_semantic_scope_enter_exit_rewrite_applied",
-            "actual_semantic_scope_drop_rewrite_applied",
-        }
-        and "PathBuf" in str(row.get("semantic_object_type") or "")
-    ]
+    assert isinstance(rows, list), rows
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def unique_row(rows: list[dict[str, object]], label: str) -> dict[str, object]:
@@ -385,154 +378,146 @@ def unique_row(rows: list[dict[str, object]], label: str) -> dict[str, object]:
 def validate(
     producer_audit: dict[str, object], app_audit: dict[str, object], stdout: str
 ) -> dict[str, object]:
-    producer_rows = applied_rows(producer_audit)
-    app_rows = applied_rows(app_audit)
-    producer_alloc = unique_row(
+    producer_rows = rewrite_rows(producer_audit)
+    app_rows = rewrite_rows(app_audit)
+
+    def is_unresolved_candidate(row: dict[str, object]) -> bool:
+        return (
+            row.get("lowering_kind")
+            == "semantic_scope_unsolved_heap_object_candidate"
+            and row.get("rewrite_status")
+            == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+            and row.get("metadata_pairing_contract")
+            == "audit_only_unresolved_heap_object_type"
+            and int(row.get("type_id") or 0) == 0
+        )
+
+    def is_authenticated_drop_skip(row: dict[str, object]) -> bool:
+        return (
+            row.get("callee") == "TerminatorKind::Drop"
+            and row.get("semantic_object_type") == "std::path::PathBuf"
+            and row.get("lowering_kind")
+            == "semantic_scope_drop_effectful_owner_recovery_skipped"
+            and row.get("rewrite_status")
+            == "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery"
+            and row.get("metadata_pairing_contract")
+            == "allocation_scope_to_authenticated_recovery_record"
+            and int(row.get("type_id") or 0) == 0
+        )
+
+    producer_clone = unique_row(
         [
             row
             for row in producer_rows
-            if str(row.get("mir_function") or "")
-            == "<OutFile as std::clone::Clone>::clone"
+            if row.get("mir_function") == "<OutFile as std::clone::Clone>::clone"
             and row.get("destination_type")
             == "std::option::Option<std::path::PathBuf>"
-            and "clone::Clone" in str(row.get("callee") or "")
-            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and is_unresolved_candidate(row)
         ],
-        "producer OutFile::clone Option<PathBuf> allocation",
+        "producer OutFile::clone fail-closed Option<PathBuf> candidate",
     )
-    producer_drops = [
+    producer_outer_clones = [
         row
         for row in producer_rows
-        if "clone_drop_and_return_pointer" in str(row.get("mir_function") or "")
-        and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
-        and "OutFile" in str(row.get("destination_type") or "")
+        if row.get("mir_function")
+        in {"clone_outfile", "clone_drop_and_return_pointer"}
+        and row.get("destination_type") == "OutFile"
+        and is_unresolved_candidate(row)
     ]
-    assert producer_drops, "missing producer same-domain OutFile Drop"
+    assert {
+        str(row.get("mir_function") or "") for row in producer_outer_clones
+    } == {"clone_outfile", "clone_drop_and_return_pointer"}, producer_outer_clones
+    assert len(producer_outer_clones) == 2, producer_outer_clones
+    producer_drop_rows = [
+        row
+        for row in producer_rows
+        if row.get("mir_function") == "clone_drop_and_return_pointer"
+        and row.get("destination_type") == "OutFile"
+        and is_authenticated_drop_skip(row)
+    ]
+    assert len(producer_drop_rows) == 2, producer_drop_rows
+
+    app_clone = unique_row(
+        [
+            row
+            for row in app_rows
+            if row.get("mir_function") == "unwind_returned_outfile"
+            and "clone_outfile" in str(row.get("callee") or "")
+            and row.get("destination_type")
+            == "outfile_pathbuf_unwind_producer::OutFile"
+            and is_unresolved_candidate(row)
+        ],
+        "application cleanup-unwind fail-closed OutFile clone candidate",
+    )
     cleanup_drop = unique_row(
         [
             row
             for row in app_rows
-            if "unwind_returned_outfile" in str(row.get("mir_function") or "")
-            and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
-            and "OutFile" in str(row.get("destination_type") or "")
+            if row.get("mir_function") == "unwind_returned_outfile"
+            and row.get("destination_type")
+            == "outfile_pathbuf_unwind_producer::OutFile"
+            and is_authenticated_drop_skip(row)
         ],
-        "application OutFile cleanup Drop",
+        "application cleanup-unwind authenticated recovery skip",
     )
-
-    type_id = int(producer_alloc.get("type_id") or 0)
-    producer_module = int(producer_alloc.get("module_id") or 0)
-    producer_callsite = int(producer_alloc.get("callsite") or 0)
-    app_module = int(cleanup_drop.get("module_id") or 0)
-    cleanup_callsite = int(cleanup_drop.get("callsite") or 0)
-    producer_drop_callsites = [int(row.get("callsite") or 0) for row in producer_drops]
-    assert type_id != 0
-    assert producer_module != 0 and app_module != 0 and producer_module != app_module
-    assert producer_callsite != 0 and cleanup_callsite != 0
-    assert all(producer_drop_callsites), producer_drops
-    assert int(cleanup_drop.get("type_id") or 0) == type_id, cleanup_drop
-    assert all(int(row.get("type_id") or 0) == type_id for row in producer_drops), producer_drops
-    assert all(
-        int(row.get("module_id") or 0) == producer_module for row in producer_drops
-    ), producer_drops
-    for row in (producer_alloc, cleanup_drop, *producer_drops):
-        assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
-    assert producer_alloc.get("metadata_pairing_contract") == (
-        "semantic_scope_active_metadata"
-    ), producer_alloc
-    for row in (*producer_drops, cleanup_drop):
-        assert row.get("callee") == "TerminatorKind::Drop", row
-        assert row.get("metadata_pairing_contract") == (
-            "semantic_scope_drop_active_metadata"
-        ), row
-
-    # `unwind_returned_outfile` has return type `!` and its sole returned
-    # aggregate can only be destroyed from the panic cleanup block. A cleanup
-    # Drop cannot itself install a second unwind-pop edge. The runtime mismatch
-    # callsite check below proves that this exact audited row executed.
-    assert cleanup_drop.get("semantic_scope_unwind_pop_inserted") is False, cleanup_drop
-    assert "original unwind cleanup also passes through pop" not in str(
-        cleanup_drop.get("replacement_preview") or ""
-    ), cleanup_drop
     assert str(cleanup_drop.get("basic_block") or "").startswith("bb"), cleanup_drop
-    assert "src/main.rs" in str(cleanup_drop.get("source_span") or ""), cleanup_drop
+    assert "application/src/main.rs" in str(
+        cleanup_drop.get("source_span") or ""
+    ), cleanup_drop
+    assert not any(
+        "_local" in str(row.get("replacement_symbol") or "")
+        for row in [*producer_rows, *app_rows]
+    ), "unsupported OutFile/PathBuf rows must never select the local ABI"
 
     runtime_lines = [line for line in stdout.splitlines() if line.startswith("{")]
     assert len(runtime_lines) == 1, stdout
     runtime = json.loads(runtime_lines[0])
     assert runtime.get("source") == "crosscrate_outfile_pathbuf_unwind_recovery", runtime
     assert runtime.get("panic_observed") is True, runtime
-    assert runtime.get("producer_exact_reuse_after_unwind") is True, runtime
+    assert runtime.get("pointer_placement_asserted") is False, runtime
     assert int(runtime["unwind_pointer"]) != 0, runtime
-    assert int(runtime["unwind_pointer"]) == int(runtime["producer_recovery_pointer"]), runtime
-    assert int(runtime["unwind_mismatch_delta"]) == 1, runtime
-    assert int(runtime["recovery_identity_matches"]) == 1, runtime
-    assert int(runtime["recovery_identity_mismatches"]) == 1, runtime
-    assert int(runtime["side_cache_corrupt_slots"]) == 0, runtime
+    assert int(runtime["producer_recovery_pointer"]) != 0, runtime
     for field, expected in (
-        ("typed_allocations", 2),
-        ("typed_deallocations", 2),
-        ("typed_cache_hits", 1),
-        ("typed_cache_inserts", 2),
-        ("fallback_allocations", 0),
-        ("fallback_deallocations", 0),
-        ("raw_alloc_no_metadata", 0),
-        ("raw_dealloc_no_metadata", 0),
+        ("typed_allocations", 0),
+        ("typed_deallocations", 0),
+        ("typed_cache_hits", 0),
+        ("typed_cache_inserts", 0),
+        ("fallback_allocations", 2),
+        ("fallback_deallocations", 2),
+        ("raw_alloc_no_metadata", 2),
+        ("raw_dealloc_no_metadata", 2),
         ("raw_realloc_no_metadata", 0),
+        ("recovery_identity_matches", 0),
+        ("recovery_identity_mismatches", 0),
+        ("unwind_mismatch_delta", 0),
+        ("side_cache_corrupt_slots", 0),
+        ("side_cache_occupied_entries", 0),
+        ("side_cache_retained_bytes", 0),
         ("semantic_type_stats_dropped_events", 0),
     ):
         assert int(runtime[field]) == expected, (field, runtime)
-
-    assert int(runtime["mismatch_requested_type_id"]) == type_id, runtime
-    assert int(runtime["mismatch_recorded_type_id"]) == type_id, runtime
-    assert int(runtime["mismatch_requested_module_id"]) == app_module, runtime
-    assert int(runtime["mismatch_recorded_module_id"]) == producer_module, runtime
-    assert int(runtime["mismatch_requested_callsite"]) == cleanup_callsite, runtime
-    assert int(runtime["mismatch_recorded_callsite"]) == producer_callsite, runtime
-
-    type_rows = runtime.get("type_rows")
-    assert isinstance(type_rows, list), runtime
-    matching = [
-        row
-        for row in type_rows
-        if isinstance(row, dict)
-        and int(row.get("type_id") or 0) == type_id
-        and int(row.get("module_id") or 0) == producer_module
-    ]
-    assert matching, type_rows
-    assert all(
-        int(row.get("policy_flags_seen") or 0) & TYPE_ISOLATED for row in matching
-    ), matching
-    producer_runtime = {
-        field: sum(int(row.get(field) or 0) for row in matching)
-        for field in ("allocations", "deallocations", "cache_hits", "cache_inserts")
-    }
-    assert producer_runtime == {
-        "allocations": 2,
-        "deallocations": 2,
-        "cache_hits": 1,
-        "cache_inserts": 2,
-    }, (producer_runtime, type_rows)
-    assert not [
-        row
-        for row in type_rows
-        if isinstance(row, dict)
-        and int(row.get("type_id") or 0) == type_id
-        and int(row.get("module_id") or 0) == app_module
-        and (int(row.get("allocations") or 0) or int(row.get("deallocations") or 0))
-    ], type_rows
+    for suffix in (
+        "requested_type_id",
+        "recorded_type_id",
+        "requested_module_id",
+        "recorded_module_id",
+        "requested_callsite",
+        "recorded_callsite",
+    ):
+        assert int(runtime[f"mismatch_{suffix}"]) == 0, (suffix, runtime)
+    assert runtime.get("type_rows") == [], runtime
 
     return {
-        "type_id": type_id,
-        "producer_module_id": producer_module,
-        "application_module_id": app_module,
-        "producer_allocation_callsite": producer_callsite,
-        "application_cleanup_drop_callsite": cleanup_callsite,
-        "producer_drop_callsites": producer_drop_callsites,
-        "cleanup_drop_basic_block": cleanup_drop.get("basic_block"),
-        "cleanup_drop_source_span": cleanup_drop.get("source_span"),
-        "producer_runtime": producer_runtime,
+        "producer_clone_status": producer_clone["rewrite_status"],
+        "producer_clone_contract": producer_clone["metadata_pairing_contract"],
+        "producer_outer_clone_fail_closed_count": len(producer_outer_clones),
+        "producer_authenticated_drop_fail_closed_count": len(producer_drop_rows),
+        "app_clone_status": app_clone["rewrite_status"],
+        "cleanup_drop_basic_block": cleanup_drop["basic_block"],
+        "cleanup_drop_source_span": cleanup_drop["source_span"],
         "runtime": runtime,
     }
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -560,6 +545,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-crosscrate-outfile-unwind-") as raw:
         workspace = Path(raw)
         app = write_fixture(workspace)
+        # Preserve the repository's intentionally pinned, yanked dependency
+        # versions in this detached offline workspace.
+        shutil.copy2(ROOT / "Cargo.lock", workspace / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         build_env = os.environ.copy()
         build_env["RUSTC_BOOTSTRAP"] = "1"
@@ -634,10 +622,10 @@ def main() -> int:
                 "toolchain": toolchain,
                 "pass_source": str(pass_source),
                 "boundaries": [
-                    "Functional actual-rustc cross-crate OutFile/PathBuf cleanup-unwind recovery regression only; the sibling normal-return probe carries the wrong-module non-reuse/module-isolation oracle; no benchmark or performance claim.",
-                    "The one visible module mismatch is expected when the consumer cleanup Drop cannot reconstruct the producer clone module; the allocation-time recovery record remains authoritative.",
+                    "Functional actual-rustc cross-crate OutFile/PathBuf cleanup-unwind fail-closed regression only; no benchmark or performance claim.",
+                    "The unsupported aggregate clone and cleanup Drop carry type_id zero and stay on the raw fallback route.",
+                    "Pointer addresses remain diagnostic because raw fallback placement is outside this compiler-contract probe.",
                     "The isolated Cargo invocation opts into panic=unwind solely to execute the returned aggregate cleanup edge; repository profiles remain unchanged.",
-                    "This bounded OutFile-like fixture does not establish universal cross-crate owner coverage or whole-application exact pairing.",
                 ],
                 "evidence": evidence,
             },

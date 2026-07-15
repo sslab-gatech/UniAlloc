@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove OutFile-like PathBuf clones recover allocation-module isolation."""
+"""Prove unsupported OutFile-like PathBuf clones stay fail-closed."""
 
 from __future__ import annotations
 
@@ -232,10 +232,9 @@ fn main() {
     {
         let local = clone_local_path(&application_seed);
         local_pointer = path_pointer(&local);
-        assert_ne!(
-            local_pointer, producer_pointer,
-            "the application PathBuf module must not reuse the producer module cache"
-        );
+        // The producer aggregate is currently unsupported and follows the raw
+        // fallback route, so allocator placement is outside this probe's
+        // compiler-contract assertions.
     }
     let after_local_drop = semantic_metadata_validation_snapshot();
     assert_eq!(
@@ -249,10 +248,6 @@ fn main() {
     {
         let second = outfile_pathbuf_producer::clone_outfile(&producer_seed);
         producer_recovery_pointer = second.pointer();
-        assert_eq!(
-            producer_recovery_pointer, producer_pointer,
-            "the producer module must recover its own cached PathBuf storage"
-        );
         before_second_drop = semantic_metadata_validation_snapshot();
     }
     let after_second_drop = semantic_metadata_validation_snapshot();
@@ -264,10 +259,6 @@ fn main() {
     {
         let local_again = clone_local_path(&application_seed);
         local_recovery_pointer = path_pointer(&local_again);
-        assert_eq!(
-            local_recovery_pointer, local_pointer,
-            "the application module must recover its own cached PathBuf storage"
-        );
     }
 
     let stats = semantic_stats_snapshot();
@@ -277,17 +268,19 @@ fn main() {
     let mut rows = [SemanticTypeStatsSnapshot::empty(); 16];
     let row_count = semantic_type_stats_snapshot(&mut rows);
 
-    assert_eq!(stats.typed_allocations, 4, "{stats:?}");
-    assert_eq!(stats.typed_deallocations, 4, "{stats:?}");
-    assert_eq!(stats.typed_cache_hits, 2, "{stats:?}");
-    assert_eq!(stats.typed_cache_inserts, 4, "{stats:?}");
-    assert_eq!(stats.fallback_allocations, 0, "{stats:?}");
-    assert_eq!(stats.fallback_deallocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_allocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_deallocations, 0, "{stats:?}");
+    assert_eq!(stats.typed_cache_hits, 0, "{stats:?}");
+    assert_eq!(stats.typed_cache_inserts, 0, "{stats:?}");
+    assert_eq!(stats.fallback_allocations, 4, "{stats:?}");
+    assert_eq!(stats.fallback_deallocations, 4, "{stats:?}");
     assert_eq!(stats.semantic_type_stats_dropped_events, 0, "{stats:?}");
-    assert_eq!(fallback.raw_alloc_no_metadata, 0, "{fallback:?}");
-    assert_eq!(fallback.raw_dealloc_no_metadata, 0, "{fallback:?}");
+    assert_eq!(fallback.raw_alloc_no_metadata, 4, "{fallback:?}");
+    assert_eq!(fallback.raw_dealloc_no_metadata, 4, "{fallback:?}");
     assert_eq!(fallback.raw_realloc_no_metadata, 0, "{fallback:?}");
     assert_eq!(side_cache.corrupt_slots, 0, "{side_cache:?}");
+    assert_eq!(side_cache.occupied_entries, 0, "{side_cache:?}");
+    assert_eq!(side_cache.retained_bytes, 0, "{side_cache:?}");
 
     semantic_type_stats_recording_disable();
     semantic_stats_recording_disable();
@@ -302,9 +295,7 @@ fn main() {
             "\"local_pointer\":{},",
             "\"producer_recovery_pointer\":{},",
             "\"local_recovery_pointer\":{},",
-            "\"wrong_module_non_reuse\":true,",
-            "\"producer_exact_reuse\":true,",
-            "\"application_exact_reuse\":true,",
+            "\"pointer_placement_asserted\":false,",
             "\"first_crosscrate_mismatch_delta\":{},",
             "\"second_crosscrate_mismatch_delta\":{},",
             "\"typed_allocations\":{},",
@@ -331,6 +322,8 @@ fn main() {
             "\"last_mismatch_requested_callsite\":{},",
             "\"last_mismatch_recorded_callsite\":{},",
             "\"side_cache_corrupt_slots\":{},",
+            "\"side_cache_occupied_entries\":{},",
+            "\"side_cache_retained_bytes\":{},",
             "\"semantic_type_stats_dropped_events\":{},",
             "\"type_rows\":{}",
             "}}"
@@ -365,6 +358,8 @@ fn main() {
         validation.last_mismatch_requested_callsite,
         validation.last_mismatch_recorded_callsite,
         side_cache.corrupt_slots,
+        side_cache.occupied_entries,
+        side_cache.retained_bytes,
         stats.semantic_type_stats_dropped_events,
         type_rows,
     );
@@ -375,19 +370,10 @@ fn main() {
     return app
 
 
-def applied_rows(audit: dict[str, object]) -> list[dict[str, object]]:
+def rewrite_rows(audit: dict[str, object]) -> list[dict[str, object]]:
     rows = audit.get("rewrite_candidates") or []
-    return [
-        row
-        for row in rows
-        if isinstance(row, dict)
-        and row.get("rewrite_status")
-        in {
-            "actual_semantic_scope_enter_exit_rewrite_applied",
-            "actual_semantic_scope_drop_rewrite_applied",
-        }
-        and "PathBuf" in str(row.get("semantic_object_type") or "")
-    ]
+    assert isinstance(rows, list), rows
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def unique_row(rows: list[dict[str, object]], label: str) -> dict[str, object]:
@@ -398,160 +384,119 @@ def unique_row(rows: list[dict[str, object]], label: str) -> dict[str, object]:
 def validate(
     producer_audit: dict[str, object], app_audit: dict[str, object], stdout: str
 ) -> dict[str, object]:
-    producer_rows = applied_rows(producer_audit)
-    app_rows = applied_rows(app_audit)
-    producer_alloc = unique_row(
+    producer_rows = rewrite_rows(producer_audit)
+    app_rows = rewrite_rows(app_audit)
+
+    def is_unresolved_candidate(row: dict[str, object]) -> bool:
+        return (
+            row.get("lowering_kind")
+            == "semantic_scope_unsolved_heap_object_candidate"
+            and row.get("rewrite_status")
+            == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+            and row.get("metadata_pairing_contract")
+            == "audit_only_unresolved_heap_object_type"
+            and int(row.get("type_id") or 0) == 0
+        )
+
+    def is_authenticated_drop_skip(row: dict[str, object]) -> bool:
+        return (
+            row.get("callee") == "TerminatorKind::Drop"
+            and row.get("lowering_kind")
+            == "semantic_scope_drop_effectful_owner_recovery_skipped"
+            and row.get("rewrite_status")
+            == "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery"
+            and row.get("metadata_pairing_contract")
+            == "allocation_scope_to_authenticated_recovery_record"
+            and row.get("replacement_symbol")
+            == "authenticated_allocation_recovery_record"
+            and int(row.get("type_id") or 0) == 0
+        )
+
+    producer_clone = unique_row(
         [
             row
             for row in producer_rows
-            if str(row.get("mir_function") or "")
-            == "<OutFile as std::clone::Clone>::clone"
+            if row.get("mir_function") == "<OutFile as std::clone::Clone>::clone"
             and row.get("destination_type")
             == "std::option::Option<std::path::PathBuf>"
-            and "clone::Clone" in str(row.get("callee") or "")
-            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and is_unresolved_candidate(row)
         ],
-        "producer OutFile::clone Option<PathBuf> allocation",
+        "producer OutFile::clone fail-closed Option<PathBuf> candidate",
     )
-    app_alloc = unique_row(
-        [
-            row
-            for row in app_rows
-            if "clone_local_path" in str(row.get("mir_function") or "")
-            and row.get("destination_type") == "std::path::PathBuf"
-            and "clone::Clone" in str(row.get("callee") or "")
-            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
-        ],
-        "application PathBuf::clone allocation",
-    )
-
-    type_id = int(producer_alloc.get("type_id") or 0)
-    producer_module = int(producer_alloc.get("module_id") or 0)
-    app_module = int(app_alloc.get("module_id") or 0)
-    producer_callsite = int(producer_alloc.get("callsite") or 0)
-    assert type_id != 0 and int(app_alloc.get("type_id") or 0) == type_id
-    assert producer_module != 0 and app_module != 0 and producer_module != app_module
-    assert producer_callsite != 0
-    assert int(producer_alloc.get("flags") or 0) & TYPE_ISOLATED, producer_alloc
-    assert int(app_alloc.get("flags") or 0) & TYPE_ISOLATED, app_alloc
-    assert producer_alloc.get("metadata_pairing_contract") == (
-        "semantic_scope_active_metadata"
-    ), producer_alloc
-    assert app_alloc.get("metadata_pairing_contract") == (
-        "semantic_scope_active_metadata"
-    ), app_alloc
+    app_clone_outfile = [
+        row
+        for row in app_rows
+        if row.get("mir_function") == "main"
+        and "clone_outfile" in str(row.get("callee") or "")
+        and row.get("destination_type") == "outfile_pathbuf_producer::OutFile"
+        and is_unresolved_candidate(row)
+    ]
+    app_clone_path = [
+        row
+        for row in app_rows
+        if row.get("mir_function") == "main"
+        and "clone_local_path" in str(row.get("callee") or "")
+        and row.get("destination_type") == "std::path::PathBuf"
+        and is_unresolved_candidate(row)
+    ]
+    assert len(app_clone_outfile) == 2, app_clone_outfile
+    assert len(app_clone_path) == 2, app_clone_path
+    authenticated_drop_rows = [
+        row
+        for row in app_rows
+        if row.get("destination_type") == "outfile_pathbuf_producer::OutFile"
+        and row.get("semantic_object_type") == "std::path::PathBuf"
+        and is_authenticated_drop_skip(row)
+    ]
+    assert len(authenticated_drop_rows) == 5, authenticated_drop_rows
+    assert not any(
+        "_local" in str(row.get("replacement_symbol") or "")
+        for row in [*producer_rows, *app_rows]
+    ), "unsupported OutFile/PathBuf rows must never select the local ABI"
 
     runtime_lines = [line for line in stdout.splitlines() if line.startswith("{")]
     assert len(runtime_lines) == 1, stdout
     runtime = json.loads(runtime_lines[0])
     assert runtime.get("source") == "crosscrate_outfile_pathbuf_recovery", runtime
-    assert runtime.get("wrong_module_non_reuse") is True, runtime
-    assert runtime.get("producer_exact_reuse") is True, runtime
-    assert runtime.get("application_exact_reuse") is True, runtime
-    assert int(runtime["producer_pointer"]) != int(runtime["local_pointer"]), runtime
-    assert int(runtime["producer_pointer"]) == int(runtime["producer_recovery_pointer"]), runtime
-    assert int(runtime["local_pointer"]) == int(runtime["local_recovery_pointer"]), runtime
-    assert int(runtime["first_crosscrate_mismatch_delta"]) == 1, runtime
-    assert int(runtime["second_crosscrate_mismatch_delta"]) == 1, runtime
-    assert int(runtime["recovery_identity_matches"]) == 2, runtime
-    assert int(runtime["recovery_identity_mismatches"]) == 2, runtime
-    assert int(runtime["side_cache_corrupt_slots"]) == 0, runtime
+    assert runtime.get("pointer_placement_asserted") is False, runtime
     for field, expected in (
-        ("typed_allocations", 4),
-        ("typed_deallocations", 4),
-        ("typed_cache_hits", 2),
-        ("typed_cache_inserts", 4),
-        ("fallback_allocations", 0),
-        ("fallback_deallocations", 0),
-        ("raw_alloc_no_metadata", 0),
-        ("raw_dealloc_no_metadata", 0),
+        ("typed_allocations", 0),
+        ("typed_deallocations", 0),
+        ("typed_cache_hits", 0),
+        ("typed_cache_inserts", 0),
+        ("fallback_allocations", 4),
+        ("fallback_deallocations", 4),
+        ("raw_alloc_no_metadata", 4),
+        ("raw_dealloc_no_metadata", 4),
         ("raw_realloc_no_metadata", 0),
+        ("recovery_identity_matches", 0),
+        ("recovery_identity_mismatches", 0),
+        ("first_crosscrate_mismatch_delta", 0),
+        ("second_crosscrate_mismatch_delta", 0),
+        ("side_cache_corrupt_slots", 0),
+        ("side_cache_occupied_entries", 0),
+        ("side_cache_retained_bytes", 0),
         ("semantic_type_stats_dropped_events", 0),
     ):
         assert int(runtime[field]) == expected, (field, runtime)
-
-    first_requested_callsite = int(runtime["first_mismatch_requested_callsite"])
-    second_requested_callsite = int(runtime["last_mismatch_requested_callsite"])
-    assert first_requested_callsite != 0, runtime
-    assert second_requested_callsite != 0, runtime
-    assert first_requested_callsite != second_requested_callsite, runtime
-
-    def validate_consumer_drop(callsite: int, label: str) -> dict[str, object]:
-        requested_drop = unique_row(
-            [
-                row
-                for row in app_rows
-                if row.get("lowering_kind") == "semantic_scope_drop_rewrite"
-                and int(row.get("callsite") or 0) == callsite
-            ],
-            label,
-        )
-        assert int(requested_drop.get("type_id") or 0) == type_id, requested_drop
-        assert int(requested_drop.get("module_id") or 0) == app_module, requested_drop
-        assert int(requested_drop.get("flags") or 0) & TYPE_ISOLATED, requested_drop
-        assert "OutFile" in str(
-            requested_drop.get("destination_type") or ""
-        ), requested_drop
-        assert requested_drop.get("metadata_pairing_contract") == (
-            "semantic_scope_drop_active_metadata"
-        ), requested_drop
-        return requested_drop
-
-    validate_consumer_drop(
-        first_requested_callsite, "first application cross-crate OutFile PathBuf Drop"
-    )
-    validate_consumer_drop(
-        second_requested_callsite, "second application cross-crate OutFile PathBuf Drop"
-    )
     for prefix in ("first_mismatch", "last_mismatch"):
-        assert int(runtime[f"{prefix}_requested_type_id"]) == type_id, runtime
-        assert int(runtime[f"{prefix}_recorded_type_id"]) == type_id, runtime
-        assert int(runtime[f"{prefix}_requested_module_id"]) == app_module, runtime
-        assert int(runtime[f"{prefix}_recorded_module_id"]) == producer_module, runtime
-        assert int(runtime[f"{prefix}_recorded_callsite"]) == producer_callsite, runtime
-
-    type_rows = runtime.get("type_rows")
-    assert isinstance(type_rows, list), runtime
-
-    def aggregate_runtime(module_id: int, label: str) -> dict[str, int]:
-        matching = [
-            row
-            for row in type_rows
-            if isinstance(row, dict)
-            and int(row.get("type_id") or 0) == type_id
-            and int(row.get("module_id") or 0) == module_id
-        ]
-        assert matching, (label, type_rows)
-        assert all(
-            int(row.get("policy_flags_seen") or 0) & TYPE_ISOLATED for row in matching
-        ), (label, matching)
-        return {
-            field: sum(int(row.get(field) or 0) for row in matching)
-            for field in ("allocations", "deallocations", "cache_hits", "cache_inserts")
-        }
-
-    producer_runtime = aggregate_runtime(producer_module, "producer")
-    app_runtime = aggregate_runtime(app_module, "application")
-    expected_runtime = {
-        "allocations": 2,
-        "deallocations": 2,
-        "cache_hits": 1,
-        "cache_inserts": 2,
-    }
-    assert producer_runtime == expected_runtime, (producer_runtime, type_rows)
-    assert app_runtime == expected_runtime, (app_runtime, type_rows)
+        for suffix in (
+            "requested_type_id",
+            "recorded_type_id",
+            "requested_module_id",
+            "recorded_module_id",
+            "requested_callsite",
+            "recorded_callsite",
+        ):
+            assert int(runtime[f"{prefix}_{suffix}"]) == 0, (prefix, suffix, runtime)
+    assert runtime.get("type_rows") == [], runtime
 
     return {
-        "type_id": type_id,
-        "producer_module_id": producer_module,
-        "application_module_id": app_module,
-        "producer_allocation_callsite": producer_callsite,
-        "application_drop_callsites": [
-            first_requested_callsite,
-            second_requested_callsite,
-        ],
-        "producer_runtime": producer_runtime,
-        "application_runtime": app_runtime,
+        "producer_clone_status": producer_clone["rewrite_status"],
+        "producer_clone_contract": producer_clone["metadata_pairing_contract"],
+        "app_clone_outfile_fail_closed_count": len(app_clone_outfile),
+        "app_clone_pathbuf_fail_closed_count": len(app_clone_path),
+        "authenticated_drop_fail_closed_count": len(authenticated_drop_rows),
         "runtime": runtime,
     }
 
@@ -580,6 +525,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-crosscrate-outfile-") as raw:
         workspace = Path(raw)
         app = write_fixture(workspace)
+        # Preserve the repository's intentionally pinned, yanked dependency
+        # versions in this detached offline workspace.
+        shutil.copy2(ROOT / "Cargo.lock", workspace / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         build_env = os.environ.copy()
         build_env["RUSTC_BOOTSTRAP"] = "1"
@@ -651,9 +599,9 @@ def main() -> int:
                 "toolchain": toolchain,
                 "pass_source": str(pass_source),
                 "boundaries": [
-                    "Functional actual-rustc cross-crate OutFile/PathBuf recovery and module-isolation regression only; no benchmark or performance claim.",
-                    "The visible module mismatch is expected for a returned aggregate because the consumer compiler cannot reconstruct the producer clone module; allocation-time recovery remains authoritative.",
-                    "This bounded OutFile-like fixture minimizes the observed Oxipng mismatch shape but does not establish universal cross-crate owner coverage or whole-application exact pairing.",
+                    "Functional actual-rustc cross-crate OutFile/PathBuf fail-closed regression only; no benchmark or performance claim.",
+                    "The producer aggregate remains unsupported: allocation and Drop candidates carry type_id zero and stay on the raw fallback route.",
+                    "Pointer addresses remain diagnostic because raw fallback placement is outside this compiler-contract probe.",
                 ],
                 "evidence": evidence,
             },
