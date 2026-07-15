@@ -2731,6 +2731,13 @@ def join_compiler_runtime_sites(
     }
 
 
+def compact_compiler_runtime_exact_join(
+    exact_join: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Retain every join claim field while keeping large per-site rows external."""
+    return {key: value for key, value in exact_join.items() if key != "rows"}
+
+
 def run_stage_a_sample(
     target_id: str,
     build_group: str,
@@ -2828,20 +2835,9 @@ def run_stage_a_sample(
         if process["smaps_samples"]
         else None,
         "output_identity": output_identity,
-        "compiler_runtime_exact_join": {
-            key: exact_join[key]
-            for key in (
-                "source",
-                "status",
-                "compiler_complete_key_count",
-                "compiler_incomplete_key_count",
-                "matched_site_count",
-                "unmatched_site_count",
-                "match_coverage",
-                "runtime_join_rewrite_success",
-                "runtime_site_count",
-            )
-        },
+        "compiler_runtime_exact_join": compact_compiler_runtime_exact_join(
+            exact_join
+        ),
         "compiler_runtime_exact_join_path": str(
             (artifact_dir / "compiler-runtime-exact-join.json").resolve()
         ),

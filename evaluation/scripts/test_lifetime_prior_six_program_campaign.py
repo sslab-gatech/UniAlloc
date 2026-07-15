@@ -455,6 +455,45 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual("no-static-coverage", result["status"])
         self.assertFalse(result["static_coverage_claim_eligible"])
 
+    def test_prior_eligibility_survives_run_projection_into_target_state(self) -> None:
+        runtime = {
+            field: index + 1
+            for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
+        }
+        applied_long = {
+            **runtime,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 2,
+            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+        }
+        long_join = campaign.join_compiler_runtime_sites(
+            {"rows": [applied_long]}, [runtime]
+        )
+        long_projection = campaign.compact_compiler_runtime_exact_join(long_join)
+        self.assertNotIn("rows", long_projection)
+        self.assertTrue(long_projection["static_coverage_claim_eligible"])
+        self.assertEqual(1, long_projection["matched_applied_prior_site_count"])
+        long_state = campaign.target_static_coverage_state(
+            {"compiler-prior": {"compiler_runtime_exact_join": long_projection}}
+        )
+        self.assertEqual("complete", long_state["status"])
+        self.assertTrue(long_state["claim_eligible"])
+
+        unknown = {
+            **runtime,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 0,
+            "lifetime_hint_basis": "default_unknown",
+        }
+        unknown_projection = campaign.compact_compiler_runtime_exact_join(
+            campaign.join_compiler_runtime_sites({"rows": [unknown]}, [runtime])
+        )
+        unknown_state = campaign.target_static_coverage_state(
+            {"compiler-prior": {"compiler_runtime_exact_join": unknown_projection}}
+        )
+        self.assertEqual("complete-no-static-coverage", unknown_state["status"])
+        self.assertFalse(unknown_state["claim_eligible"])
+
     def test_all_unknown_only_marks_static_coverage_not_measured(self) -> None:
         state = campaign.target_static_coverage_state(
             {
