@@ -592,6 +592,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-generic-box-mono-") as raw:
         workspace = Path(raw)
         app = write_probe(workspace)
+        # Keep the repository's intentionally pinned, yanked dependencies
+        # resolvable in this detached offline workspace.
+        shutil.copy2(ROOT / "Cargo.lock", workspace / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         env = os.environ.copy()
         env["RUSTC_BOOTSTRAP"] = "1"
