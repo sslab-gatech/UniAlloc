@@ -1,0 +1,797 @@
+{
+  "artifacts": {
+    "b2_binary_layout_evidence": {
+      "path": "/tmp/unialloc-roi-accounting-b2-layout-20260715.txt",
+      "sha256": "aa7d6aa219d1a8387d70bc677ad28504d97a3c0558d9adc573769ff776e820b2"
+    },
+    "binary_layout_evidence": {
+      "path": "/tmp/unialloc-roi-accounting-binary-layout-20260715.txt",
+      "sha256": "c7d55a86101bda55f1fd2583aa72cf6ad8387034472b0aa92a305553f04f14a7"
+    },
+    "cpu_idle_logs": {
+      "std_rejected_cpu24": "e9adbdab7f846f0164afe60212ad64fbfd862f9c6a5c77f773d9818f86503973",
+      "std_selected_cpu30": "39af8ba84a987dd2f427685c72e63d7d43ad95841e27189a51557ce5522c5dac",
+      "steady_intermediate_cpu30": "92cbc437174977d3e8a25dfcf4585afcea7d60acef7a212e66daca8af15268a5",
+      "steady_intermediate_cpu30_retry": "2bfeb4d840b00442f2c56b2f74facd75dc030fb94a2765af30ed85f3c0b3b6db",
+      "steady_rejected_cpu20": "12abdaac96c65320938c470ae39aff39ac47e19bdef8de22e196ed6c0068b8f9",
+      "steady_selected_cpu26": "a5be6efb0af4e27c151b29d9ce8360b5292801505c08ddd860a162c289713db4"
+    },
+    "immutable_binaries": {
+      "b2_hot_cold_split": {
+        "binary": "/tmp/unialloc-roi-accounting-b2-std-bench-20260715",
+        "sha256": "cd712cf6a1eca56a0e7b269552a1f58c9ee8645c70a79d93cd6af7ff09694c6a",
+        "size_bytes": 3223616
+      },
+      "std_baseline": {
+        "binary": "/tmp/unialloc-roi-accounting-baseline-std-bench-20260715",
+        "sha256": "f08c2bb1353d4ef6feed4ccbba0609b2186513a0d0f5e84930fd4372d75edd9e",
+        "size_bytes": 3224032
+      },
+      "std_candidate": {
+        "binary": "/tmp/unialloc-roi-accounting-candidate-std-bench-20260715",
+        "sha256": "84319bd53e5269de9a0255fe7c56777472d82791e04381fb19c392f6425080d1",
+        "size_bytes": 3223552
+      },
+      "steady_baseline": {
+        "binary": "/tmp/unialloc-roi-accounting-steady-baseline-20260715",
+        "sha256": "ec6900eea330ffae84db15289b96051ec2e45191eebe149ee903668d91eee0ef",
+        "size_bytes": 853440
+      },
+      "steady_candidate": {
+        "binary": "/tmp/unialloc-roi-accounting-steady-candidate-20260715",
+        "sha256": "f7f5665ed8a64b6b3ab288f08a3e8d8bd1efd048b966ec21a993608348382913",
+        "size_bytes": 853208
+      }
+    },
+    "std_inventory": {
+      "baseline_sha256": "62867148ad5ae0f00b80a0ff6938d7ca229da4d32d8de137ec6971f9a08998be",
+      "byte_identical": true,
+      "candidate_sha256": "62867148ad5ae0f00b80a0ff6938d7ca229da4d32d8de137ec6971f9a08998be",
+      "entries": 470
+    },
+    "std_raw_json": {
+      "path": "/tmp/unialloc-roi-accounting-std-ab-n3-20260715.json",
+      "sha256": "564f2b81648f51d115bb035411567d73eacdd992b72ab11de23381fbd4c6f1c5"
+    },
+    "std_runner": {
+      "path": "/tmp/run_unialloc_tls_ab.py",
+      "sha256": "0d17195d8cf0dc66827b2542d2d75bd9af655340a3d252303ae3933202e935ce"
+    },
+    "steady_harness_source": {
+      "path": "/tmp/unialloc-roi-accounting-steady-bench-20260715/src/main.rs",
+      "sha256": "53cec9d4f935fdcbf5bf5b7cbc3e870dad621c1b6dea5def6acd7df6e45d2780"
+    },
+    "steady_raw_json": {
+      "path": "/tmp/unialloc-roi-accounting-steady-ab-n3-20260715.json",
+      "sha256": "5d71e792186b8ffd1bbcfa168f3deec5099fbecf4ec23cc3b46ea7c278a500c4"
+    },
+    "steady_runner": {
+      "path": "/tmp/run_unialloc_accounting_steady_ab.py",
+      "sha256": "6f223bbe145386cbf40d3d84a616375bbec2bd91527c7cfa188c2c7ae83fd3f4"
+    }
+  },
+  "attribution_and_layout_boundary": {
+    "binary_sections": {
+      "b2_hot_cold_split": {
+        "btree_bench_iter_address": "0xba150",
+        "btree_bench_iter_offset_from_text": "0x623f0",
+        "btree_ns_iter_inner_address": "0x76c20",
+        "btree_ns_iter_inner_offset_from_text": "0x1eec0",
+        "eh_frame_address": "0x3cbf0",
+        "eh_frame_header_address": "0x39168",
+        "eh_frame_size_bytes": 106864,
+        "elf_text_address": "0x57d60",
+        "elf_text_size_bytes": 2110046,
+        "fde_count": 1871,
+        "gcc_except_table_address": "0x17db0",
+        "gcc_except_table_size_bytes": 47112,
+        "layout_gate": "fail: .text and btree remain 0x20 below baseline absolute addresses",
+        "rodata_address": "0x235c0",
+        "timing_action": "No B2 benchmark samples were accepted. Timing was canceled during the discarded btree warmup after the parent gate reaffirmed exact absolute-address restoration; stdout stayed empty and no result JSON was produced.",
+        "whole_elf_sha256": "cd712cf6a1eca56a0e7b269552a1f58c9ee8645c70a79d93cd6af7ff09694c6a",
+        "whole_elf_size_bytes": 3223616
+      },
+      "baseline": {
+        "elf_text_address": "0x57d80",
+        "elf_text_size_bytes": 2110446,
+        "size_bss_bytes": 114028,
+        "size_data_bytes": 391113,
+        "size_text_bytes": 2465479
+      },
+      "candidate": {
+        "elf_text_address": "0x57d50",
+        "elf_text_size_bytes": 2109998,
+        "size_bss_bytes": 114524,
+        "size_data_bytes": 391113,
+        "size_text_bytes": 2464995
+      },
+      "frame_and_address_comparison": {
+        "baseline": {
+          "btree_bench_iter_address": "0xba170",
+          "eh_frame_size_bytes": 106888,
+          "fde_count": 1871,
+          "text_address": "0x57d80"
+        },
+        "candidate_b1": {
+          "btree_bench_iter_address": "0xba140",
+          "eh_frame_size_bytes": 106860,
+          "fde_count": 1871,
+          "text_address": "0x57d50"
+        },
+        "candidate_b2": {
+          "btree_bench_iter_address": "0xba150",
+          "eh_frame_size_bytes": 106864,
+          "fde_count": 1871,
+          "text_address": "0x57d60"
+        },
+        "constant_relative_offsets": {
+          "btree_bench_iter_from_text": "0x623f0",
+          "btree_ns_iter_inner_from_text": "0x1eec0"
+        }
+      }
+    },
+    "btree::map::iter_100": {
+      "classification": "allocator-free layout control",
+      "decision": "The layout confound still violates the holistic <=1% control gate; no padding or link-layout compensation was attempted.",
+      "layout_evidence": "Selected benchmark symbols shift by -0x30 in the candidate, .text shrinks by 448 section bytes, and executable text reported by size shrinks by 484 bytes.",
+      "source": "unialloc/benches/btree/map.rs:347-359,377-380",
+      "timed_work": "The BTreeMap is built before b.iter; the timed closure traverses 100 entries 1,000 times."
+    },
+    "string::bench_from_str": {
+      "classification": "allocation-heavy",
+      "decision": "Treat the +5.697% median as a real allocator-path gate failure.",
+      "source": "unialloc/benches/string.rs:103-107",
+      "timed_work": "String::from allocates and copies, then the returned String is dropped between iterations."
+    }
+  },
+  "correctness_regression": {
+    "b2_hot_cold_split": {
+      "focused_default": "75 passed",
+      "focused_fixed_heap_stats": "87 passed",
+      "source_action": "Restored to candidate commit afe6a91 after the immutable layout gate failed.",
+      "source_diff": "7 insertions, 3 deletions: inline upper-bound threshold predicate plus a cold, never-inlined exact sync/trim helper"
+    },
+    "independent_review": "Safety proof accepted with no blocker; requested batch-count-one and mixed-sequence invariant tests were added before timing.",
+    "locked_invariants": [
+      "Maintained bytes stay greater than or equal to an exact cache walk between synchronizations.",
+      "Maintained active count stays greater than or equal to the exact active count, and every exact-active class remains in the hint bitmap.",
+      "Batch-count one, cold-refill tail accounting, dense stale hints, failure restoration, alignment misses, snapshots, and teardown repair remain covered.",
+      "A long real-slab sequence covers warm allocate/free, strict-alignment miss, returned suffix, and final exact snapshot."
+    ],
+    "result": "pass",
+    "static_analysis": {
+      "boundary": "The repository warning backlog prevents a -D warnings gate; the warning log is retained by hash and the candidate is rejected on performance independently.",
+      "command": "cargo clippy --workspace --all-targets",
+      "log_sha256": "6c002ea8a42618b5164cdba86b8e6ed95684e88eab9fce90c051014141c62169",
+      "result": "completed with 168 warnings"
+    },
+    "tests": [
+      {
+        "command": "cargo test -p unialloc --lib thread_cache_",
+        "result": "75 passed"
+      },
+      {
+        "command": "cargo test -p unialloc --no-default-features --features fixed_heap,stats --lib thread_cache_",
+        "result": "87 passed"
+      },
+      {
+        "command": "cargo test -p unialloc --lib",
+        "result": "821 passed"
+      },
+      {
+        "command": "cargo test -p unialloc --no-default-features --features fixed_heap,stats --lib",
+        "result": "746 passed"
+      },
+      {
+        "command": "cargo test --workspace",
+        "result": "pass; unialloc lib 821, std_bench test-once 468, alloc_macros 2, integration and doc tests pass"
+      }
+    ]
+  },
+  "decision": {
+    "integration_action": "Keep the candidate source commit isolated; cherry-pick only this evidence commit. Do not merge the candidate into dev or main.",
+    "n5_action": "Stopped at the predefined n3 fail-fast gate after two hard failures; n5 was not authorized for a rejected candidate.",
+    "reason": "The candidate clears the aggregate allocation-speed target and the targeted size/RSS probe, while the complete guardrail rejects it on string::bench_from_str (+5.697%) and the allocator-free btree::map::iter_100 control (+22.583%).",
+    "verdict": "reject",
+    "whole_regression_policy": "A local win cannot compensate for a benchmark leaf or allocator-free control above its regression limit."
+  },
+  "experiment": "deferred conservative ThreadCache accounting",
+  "generated_at": "2026-07-15T15:40:56.408304+00:00",
+  "measurement_protocol": {
+    "common": {
+      "builds": "Baseline and candidate were built sequentially from the same source path and copied to immutable mode-0555 binaries.",
+      "numa_node": 0,
+      "sampling": "One discarded warmup per variant and leaf/size, fresh process per sample, AB/BA alternating order, n3, median with min/max."
+    },
+    "std_bench": {
+      "controls": [
+        "btree::map::iter_100",
+        "linked_list::bench_iter",
+        "slice::contains_last_element"
+      ],
+      "cpu": 30,
+      "cpu_selection": "CPU24/sibling88 was rejected because CPU24 sampled 0% idle; CPU30/sibling94 was clean.",
+      "cpu_sibling": 94,
+      "discarded_warmups_per_variant_per_benchmark": 1,
+      "fresh_process_per_sample": true,
+      "measured_runs_per_variant_per_benchmark": 3,
+      "pinning": "numactl --cpunodebind=0 --membind=0 taskset -c 30",
+      "pre_run_idle_average_percent": {
+        "cpu30": 100.0,
+        "cpu94": 99.8
+      },
+      "variant_order": "warmup baseline,candidate; measured rounds alternate baseline,candidate then candidate,baseline"
+    },
+    "steady_size_probe": {
+      "cpu": 26,
+      "cpu_selection": "CPU30/94 showed intermittent load and CPU20 sampled 0.2% idle; the node-wide sample and a final five-second sample selected CPU26/sibling90.",
+      "cpu_sibling": 90,
+      "discarded_warmup_processes_per_variant_per_size": 1,
+      "fresh_process_per_sample": true,
+      "internal_warmup_iterations_per_process": "min(iterations, 100000)",
+      "iterations": {
+        "16": 10000000,
+        "28032": 2000000,
+        "8": 10000000
+      },
+      "measured_runs_per_variant_per_size": 3,
+      "pinning": "numactl --physcpubind=26 --membind=0",
+      "pre_run_idle_average_percent": {
+        "cpu26": 99.2,
+        "cpu90": 99.0
+      },
+      "sizes_bytes": [
+        8,
+        16,
+        28032
+      ],
+      "summary": "median with min/max",
+      "variant_order": "AB on odd rounds, BA on even rounds"
+    }
+  },
+  "metric_convention": "runtime_delta_percent = (candidate / baseline - 1) * 100; negative is faster",
+  "remaining_risks": [
+    "n3 is sufficient for the hard rejection gate; n5 was intentionally skipped after repeatable failures.",
+    "The allocator-free btree regression is link-layout sensitive; the conservative product decision counts that sensitivity as a failed whole-suite control.",
+    "The targeted steady harness covers one-thread allocate/free reuse and cannot establish application-level RSS behavior; std_bench plus existing cap/RSS regression tests remain the broader evidence."
+  ],
+  "schema_version": 1,
+  "source": {
+    "baseline_commit": "e8fcc378c14442fe8993d29578f38eeb5df5acc9",
+    "candidate_commit": "afe6a9118fa9c73162b681e1071497e7c703af1f",
+    "changed_files": [
+      "unialloc/src/cache/thread_cache.rs"
+    ],
+    "diff_stat": {
+      "deletions": 85,
+      "insertions": 323
+    },
+    "mechanism": [
+      "Warm allocations preserve cached_object_bytes and active-class state as conservative upper bounds.",
+      "Cold refills account only the retained batch tail, and deallocations saturating-increase the bound.",
+      "Threshold crossings, snapshots, failures, and teardown exact-resynchronize before policy or reporting.",
+      "No TLS fields, per-class counters, dependencies, or retention budgets were added."
+    ]
+  },
+  "std_bench_n3": {
+    "benchmarks": {
+      "btree::map::iter_100": {
+        "baseline_ns_per_iter": {
+          "max": 110128.41,
+          "median": 109800.73,
+          "min": 109777.61,
+          "samples": [
+            110128.41,
+            109777.61,
+            109800.73
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 134761.26,
+          "median": 134597.14,
+          "min": 134507.12,
+          "samples": [
+            134507.12,
+            134597.14,
+            134761.26
+          ]
+        },
+        "candidate_runtime_delta_percent": 22.583101,
+        "kind": "layout_control",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": false
+      },
+      "linked_list::bench_collect_into": {
+        "baseline_ns_per_iter": {
+          "max": 920.84,
+          "median": 841.6,
+          "min": 840.6,
+          "samples": [
+            840.6,
+            920.84,
+            841.6
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 714.14,
+          "median": 713.58,
+          "min": 712.02,
+          "samples": [
+            712.02,
+            714.14,
+            713.58
+          ]
+        },
+        "candidate_runtime_delta_percent": -15.211502,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "linked_list::bench_iter": {
+        "baseline_ns_per_iter": {
+          "max": 93.63,
+          "median": 93.38,
+          "min": 93.25,
+          "samples": [
+            93.63,
+            93.38,
+            93.25
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 93.62,
+          "median": 93.49,
+          "min": 93.25,
+          "samples": [
+            93.49,
+            93.62,
+            93.25
+          ]
+        },
+        "candidate_runtime_delta_percent": 0.117798,
+        "kind": "layout_control",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "linked_list::bench_push_front_pop_front": {
+        "baseline_ns_per_iter": {
+          "max": 12.39,
+          "median": 12.18,
+          "min": 12.17,
+          "samples": [
+            12.17,
+            12.18,
+            12.39
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 11.92,
+          "median": 11.53,
+          "min": 11.48,
+          "samples": [
+            11.53,
+            11.92,
+            11.48
+          ]
+        },
+        "candidate_runtime_delta_percent": -5.336617,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "slice::contains_last_element": {
+        "baseline_ns_per_iter": {
+          "max": 4.95,
+          "median": 4.92,
+          "min": 4.84,
+          "samples": [
+            4.95,
+            4.92,
+            4.84
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 5.06,
+          "median": 4.89,
+          "min": 4.85,
+          "samples": [
+            5.06,
+            4.89,
+            4.85
+          ]
+        },
+        "candidate_runtime_delta_percent": -0.609756,
+        "kind": "layout_control",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "string::bench_from_str": {
+        "baseline_ns_per_iter": {
+          "max": 13.35,
+          "median": 13.34,
+          "min": 13.3,
+          "samples": [
+            13.34,
+            13.3,
+            13.35
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 14.13,
+          "median": 14.1,
+          "min": 14.08,
+          "samples": [
+            14.1,
+            14.08,
+            14.13
+          ]
+        },
+        "candidate_runtime_delta_percent": 5.697151,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": false
+      },
+      "string::bench_with_capacity": {
+        "baseline_ns_per_iter": {
+          "max": 12.04,
+          "median": 12.04,
+          "min": 12.03,
+          "samples": [
+            12.04,
+            12.04,
+            12.03
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 11.95,
+          "median": 11.95,
+          "min": 11.93,
+          "samples": [
+            11.95,
+            11.95,
+            11.93
+          ]
+        },
+        "candidate_runtime_delta_percent": -0.747508,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "vec::bench_extend_from_slice_1000_1000": {
+        "baseline_ns_per_iter": {
+          "max": 345.53,
+          "median": 342.08,
+          "min": 340.95,
+          "samples": [
+            345.53,
+            340.95,
+            342.08
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 341.44,
+          "median": 337.6,
+          "min": 336.84,
+          "samples": [
+            336.84,
+            337.6,
+            341.44
+          ]
+        },
+        "candidate_runtime_delta_percent": -1.309635,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "vec::bench_with_capacity_0010": {
+        "baseline_ns_per_iter": {
+          "max": 12.54,
+          "median": 12.5,
+          "min": 12.47,
+          "samples": [
+            12.54,
+            12.47,
+            12.5
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 11.67,
+          "median": 11.66,
+          "min": 11.63,
+          "samples": [
+            11.66,
+            11.67,
+            11.63
+          ]
+        },
+        "candidate_runtime_delta_percent": -6.72,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "vec::bench_with_capacity_0100": {
+        "baseline_ns_per_iter": {
+          "max": 12.55,
+          "median": 12.54,
+          "min": 12.44,
+          "samples": [
+            12.55,
+            12.54,
+            12.44
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 11.73,
+          "median": 11.68,
+          "min": 11.54,
+          "samples": [
+            11.54,
+            11.73,
+            11.68
+          ]
+        },
+        "candidate_runtime_delta_percent": -6.858054,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      },
+      "vec::bench_with_capacity_1000": {
+        "baseline_ns_per_iter": {
+          "max": 13.09,
+          "median": 13.07,
+          "min": 13.04,
+          "samples": [
+            13.09,
+            13.04,
+            13.07
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 11.81,
+          "median": 11.81,
+          "min": 11.8,
+          "samples": [
+            11.81,
+            11.8,
+            11.81
+          ]
+        },
+        "candidate_runtime_delta_percent": -9.640398,
+        "kind": "allocation_heavy",
+        "per_leaf_gate_max_regression_percent": 1.0,
+        "per_leaf_gate_pass": true
+      }
+    },
+    "gate": {
+      "allocation_geomean_pass": true,
+      "allocation_geomean_ratio": 0.948010879,
+      "allocation_geomean_required_improvement_percent": 3.0,
+      "allocation_geomean_runtime_delta_percent": -5.198912,
+      "allocation_leaf_gate_pass": false,
+      "allocation_leaf_max_regression_percent": 1.0,
+      "control_gate_pass": false,
+      "control_max_regression_percent": 1.0,
+      "failures": [
+        "string::bench_from_str: +5.697151%",
+        "btree::map::iter_100: +22.583101%"
+      ],
+      "overall_pass": false
+    }
+  },
+  "steady_size_probe_n3": {
+    "purpose": "Quantify the possible exact-scan cost at small classes and the 28,032-byte threshold-sensitive class after the std_bench gate had already rejected the candidate.",
+    "result": "All three sizes improved, peak RSS stayed at 2,048 KiB for every sample, and no major faults occurred. This targeted win does not override the complete-suite guardrail.",
+    "sizes_bytes": {
+      "16": {
+        "baseline_ns_per_iter": {
+          "max": 16.327782,
+          "median": 16.298935,
+          "min": 16.253252,
+          "samples": [
+            16.327782,
+            16.253252,
+            16.298935
+          ]
+        },
+        "baseline_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 14.939218,
+          "median": 14.867973,
+          "min": 14.85418,
+          "samples": [
+            14.85418,
+            14.867973,
+            14.939218
+          ]
+        },
+        "candidate_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_runtime_delta_percent": -8.779482,
+        "faults": {
+          "baseline": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              122,
+              122,
+              121
+            ]
+          },
+          "candidate": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              121,
+              122,
+              122
+            ]
+          }
+        },
+        "iterations_per_sample": 10000000
+      },
+      "28032": {
+        "baseline_ns_per_iter": {
+          "max": 20.096166,
+          "median": 20.083477,
+          "min": 20.081509,
+          "samples": [
+            20.081509,
+            20.083477,
+            20.096166
+          ]
+        },
+        "baseline_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 18.325637,
+          "median": 18.163006,
+          "min": 17.914223,
+          "samples": [
+            18.325637,
+            18.163006,
+            17.914223
+          ]
+        },
+        "candidate_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_runtime_delta_percent": -9.562443,
+        "faults": {
+          "baseline": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              123,
+              121,
+              120
+            ]
+          },
+          "candidate": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              120,
+              121,
+              120
+            ]
+          }
+        },
+        "iterations_per_sample": 2000000
+      },
+      "8": {
+        "baseline_ns_per_iter": {
+          "max": 16.535262,
+          "median": 16.333965,
+          "min": 16.276252,
+          "samples": [
+            16.535262,
+            16.333965,
+            16.276252
+          ]
+        },
+        "baseline_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_ns_per_iter": {
+          "max": 15.091919,
+          "median": 14.982572,
+          "min": 14.862334,
+          "samples": [
+            14.982572,
+            15.091919,
+            14.862334
+          ]
+        },
+        "candidate_peak_rss_kib": {
+          "max": 2048,
+          "median": 2048,
+          "min": 2048,
+          "samples": [
+            2048,
+            2048,
+            2048
+          ]
+        },
+        "candidate_runtime_delta_percent": -8.273515,
+        "faults": {
+          "baseline": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              121,
+              122,
+              119
+            ]
+          },
+          "candidate": {
+            "major_faults": [
+              0,
+              0,
+              0
+            ],
+            "minor_faults": [
+              120,
+              122,
+              119
+            ]
+          }
+        },
+        "iterations_per_sample": 10000000
+      }
+    }
+  }
+}
