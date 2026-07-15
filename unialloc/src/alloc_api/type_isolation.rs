@@ -3205,8 +3205,7 @@ pub fn semantic_runtime_slow_path_enabled() -> bool {
         return true;
     }
     let global_flags = SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed);
-    if global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
-    {
+    if scoped_metadata_slow_path_enabled(global_flags) {
         return true;
     }
     if FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed) != 0
@@ -3260,8 +3259,7 @@ fn mark_auto_compiler_stream_exhausted() {
 #[inline]
 pub fn semantic_allocation_slow_path_enabled() -> bool {
     let global_flags = SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed);
-    if global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
-    {
+    if scoped_metadata_slow_path_enabled(global_flags) {
         return true;
     }
     let mut allocation_flags =
@@ -3290,6 +3288,11 @@ fn scoped_metadata_is_active(metadata: AllocationMetadata) -> bool {
 #[inline]
 fn current_thread_scoped_metadata_active() -> bool {
     unsafe { scoped_metadata_is_active(ACTIVE_METADATA) }
+}
+
+#[inline]
+fn scoped_metadata_slow_path_enabled(global_flags: usize) -> bool {
+    global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
 }
 
 #[inline]
@@ -21812,7 +21815,11 @@ mod tests {
             restore_active_metadata(AllocationMetadata::unknown());
             clear_scoped_metadata_gate_for_test();
         }
-        assert!(!semantic_runtime_slow_path_enabled());
+        assert!(!semantic_stats_recording_enabled());
+        assert!(!semantic_auto_metadata_enabled());
+        assert!(!scoped_metadata_slow_path_enabled(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+        ));
 
         scoped_metadata_activate();
         scoped_metadata_activate();
@@ -21821,8 +21828,10 @@ mod tests {
             SLOW_PATH_SCOPED_METADATA_UNIT
         );
         assert!(
-            !semantic_runtime_slow_path_enabled(),
-            "a sticky global scope gate should not slow unrelated threads without local scoped metadata"
+            !scoped_metadata_slow_path_enabled(
+                SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+            ),
+            "a sticky global scope gate must remain separate from this thread's local scoped metadata"
         );
 
         semantic_stats_recording_enable();
@@ -21837,7 +21846,9 @@ mod tests {
 
         semantic_stats_recording_disable();
         assert!(!semantic_stats_recording_enabled());
-        assert!(!semantic_runtime_slow_path_enabled());
+        assert!(!scoped_metadata_slow_path_enabled(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+        ));
         unsafe {
             clear_scoped_metadata_gate_for_test();
         }
@@ -21892,7 +21903,9 @@ mod tests {
             "restoring the unknown base scope leaves the sticky global gate armed"
         );
         assert!(
-            !current_thread_scoped_metadata_active(),
+            !scoped_metadata_slow_path_enabled(
+                SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+            ),
             "restoring the unknown base scope must clear this thread's scoped metadata even while the process-wide sticky gate remains armed"
         );
         unsafe {
@@ -21932,7 +21945,9 @@ mod tests {
             SLOW_PATH_SCOPED_METADATA_UNIT
         );
         assert!(
-            !current_thread_scoped_metadata_active(),
+            !scoped_metadata_slow_path_enabled(
+                SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+            ),
             "popping the last compiler scope must clear this thread's scoped metadata even while the global gate remains armed"
         );
         unsafe {
@@ -22799,7 +22814,9 @@ mod tests {
             restore_active_metadata(AllocationMetadata::unknown());
             clear_scoped_metadata_gate_for_test();
         }
-        assert!(!semantic_runtime_slow_path_enabled());
+        assert!(!scoped_metadata_slow_path_enabled(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+        ));
         assert!(!semantic_allocation_slow_path_enabled());
 
         let metadata = AllocationMetadata::for_type(0xC002_7101)
@@ -22807,13 +22824,18 @@ mod tests {
             .with_callsite(0xA110_7101)
             .with_flags(FLAG_TYPE_ISOLATED);
         let previous = unsafe { set_active_metadata(metadata) };
+        assert!(scoped_metadata_slow_path_enabled(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+        ));
         assert!(semantic_runtime_slow_path_enabled());
         assert!(semantic_allocation_slow_path_enabled());
 
         let worker = thread::spawn(|| {
             assert_eq!(active_allocation_metadata(), None);
             assert!(
-                !semantic_runtime_slow_path_enabled(),
+                !scoped_metadata_slow_path_enabled(
+                    SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+                ),
                 "another thread should not pay semantic slow-path overhead only because this thread has scoped metadata"
             );
             assert!(!semantic_allocation_slow_path_enabled());
@@ -22824,7 +22846,9 @@ mod tests {
             restore_active_metadata(previous);
         }
         assert_eq!(active_allocation_metadata(), None);
-        assert!(!semantic_runtime_slow_path_enabled());
+        assert!(!scoped_metadata_slow_path_enabled(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed)
+        ));
         assert!(!semantic_allocation_slow_path_enabled());
     }
 
