@@ -1,0 +1,272 @@
+{
+  "audit_id": "actix-async-service-direct-adaptive-rss-20260714",
+  "comparison_ratios": {
+    "compiler_route_execution_cost": 53.90792291220558,
+    "end_to_end_execution_cost": 52.951281707153406,
+    "end_to_end_peak_rss_process_observed": 0.10650887573964497,
+    "policy_increment_execution_cost": 0.9859226572732938
+  },
+  "criterion_protocol": {
+    "measurement_time_seconds": 0.3,
+    "sample_size": 10,
+    "sampling_mode": "Linear",
+    "warmup_time_seconds": 0.1
+  },
+  "harness_id": "async_service_direct",
+  "implementation_revision": "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2",
+  "implementation_sha256": "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01",
+  "interpretation": {
+    "equal_work_rss_eligible": false,
+    "execution_claim": "The large cost is reproducible for this exact microbenchmark and belongs to the common typed compiler/runtime route.",
+    "rss_claim": "Criterion adapts measured iteration counts to variant speed; peak RSS is a process-volume observation and cannot support an equal-work memory-efficiency claim."
+  },
+  "iteration_rss_linear_fit": {
+    "intercept_mib": 16.787037615422832,
+    "r_squared": 0.9999550268892888,
+    "slope_bytes_per_measured_iteration": 3445.639516610564
+  },
+  "observations": [
+    {
+      "measured_iteration_count": 199815,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/unialloc/measurement.json",
+      "measurement_sha256": "1a792ed035004aa2d58072befd9cbebbec197d0f984ef1dbcfdf6a2d9a1356de",
+      "peak_rss_mib": 679.0390625,
+      "performance_seconds": 1.5035999999999999e-06,
+      "phase": "warmup",
+      "round": 0,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "48a85ee769611628fe1e6453d9fb7e4bf7b3912926088b1cd5ac502a5ae03537",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 16940,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/typed_plain/measurement.json",
+      "measurement_sha256": "c0733a04be7c994ae3ea3c6f071c7325d80ef85fda65915a6050e90cf64bb1cf",
+      "peak_rss_mib": 70.6484375,
+      "performance_seconds": 8.2195e-05,
+      "phase": "warmup",
+      "round": 0,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "62f0100ebed46c2b024a81493c90234ecf7bad2b082610b5fb901e014eef9e36",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 16665,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/typeiso_perf/measurement.json",
+      "measurement_sha256": "93e3c1aaca1a051e47c51117f8604447cc29d65f6bb2b4d34b6f15f4f8924e00",
+      "peak_rss_mib": 71.0,
+      "performance_seconds": 7.872700000000001e-05,
+      "phase": "warmup",
+      "round": 0,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/warmup/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "1023cb9336c126133725f41c74bcfbef815b3c9f065258cd08602a7253b464f9",
+      "variant": "typeiso_perf"
+    },
+    {
+      "measured_iteration_count": 202840,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/unialloc/measurement.json",
+      "measurement_sha256": "5bbb0a9222636b8e6d43be28025c08d61f4b22e6cf52795df89be55f146a2a6d",
+      "peak_rss_mib": 680.0,
+      "performance_seconds": 1.4812000000000001e-06,
+      "phase": "measurement",
+      "round": 1,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "2967789abbf4f350bdf9bb119da1561d44d2c38b18733f3a63dd98d70ff3c0b9",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 17050,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/typed_plain/measurement.json",
+      "measurement_sha256": "8196aef212c8d4edc960b50533d232b87d99d99318f51245d758ca35c6f496d6",
+      "peak_rss_mib": 73.0,
+      "performance_seconds": 8.0452e-05,
+      "phase": "measurement",
+      "round": 1,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "3280b2d32e6b47e4a0c7b6293644798f3387329762bda73cbb6a47fd64d8aa2d",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 16720,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/typeiso_perf/measurement.json",
+      "measurement_sha256": "8d3c0f2b5f56e190a1a9c266899edac14a170476604b2b09a0ae3b355a3fa014",
+      "peak_rss_mib": 72.0,
+      "performance_seconds": 8.131399999999999e-05,
+      "phase": "measurement",
+      "round": 1,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-01/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "66cf26623799e0b418e46dc6196a6f0d469048a623ee8a0570497b14b261b65d",
+      "variant": "typeiso_perf"
+    },
+    {
+      "measured_iteration_count": 202125,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/unialloc/measurement.json",
+      "measurement_sha256": "0c0ced52d3c3c28621fb0a13ad9a6dd5952071347be0c5603a000d1a70c10c9d",
+      "peak_rss_mib": 679.0,
+      "performance_seconds": 1.4902e-06,
+      "phase": "measurement",
+      "round": 2,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "a0e5c8360f9cd3ae4ff4d9ee66cd84ae00b9a10c5f570222a5b5babe6b69b5cb",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 17050,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/typed_plain/measurement.json",
+      "measurement_sha256": "e8e60c52523aa1443f04220beee7c4fb3df6408aec725827d68d8a5e16e9dea3",
+      "peak_rss_mib": 73.88671875,
+      "performance_seconds": 8.1726e-05,
+      "phase": "measurement",
+      "round": 2,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "da9151b2a402d0b54f05217c055c514ec0e396df84e6e934f8b977e8c73ad305",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 17050,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/typeiso_perf/measurement.json",
+      "measurement_sha256": "f1d5bc3ac089f26bb2e624986e20703f092eae65513ffce00b8b83b710608090",
+      "peak_rss_mib": 72.0,
+      "performance_seconds": 7.8908e-05,
+      "phase": "measurement",
+      "round": 2,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-02/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "9af59ee47c07b49feb66171ab90dfe56e024dc1fe5dbd9f59c56224c30559960",
+      "variant": "typeiso_perf"
+    },
+    {
+      "measured_iteration_count": 200805,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/unialloc/measurement.json",
+      "measurement_sha256": "228b9d6419ba53e2a16fe7c748fbbbfdede615dd8e1872380ae3d6831f352993",
+      "peak_rss_mib": 677.0,
+      "performance_seconds": 1.5016e-06,
+      "phase": "measurement",
+      "round": 3,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "e1f941abb5d5bcf5dd923335948e133e1687942e9dcf7b21ba12b6c22fc220d2",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 16610,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/typed_plain/measurement.json",
+      "measurement_sha256": "2fab6accfe8ba3e324199a69d1b3a045f9fa2196f62bf505b2080a24d009607b",
+      "peak_rss_mib": 71.67578125,
+      "performance_seconds": 7.8637e-05,
+      "phase": "measurement",
+      "round": 3,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "a1c9faf6584e472bf8914974941042b831a0a552210bec20babdd1bd8bf53659",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 16720,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/typeiso_perf/measurement.json",
+      "measurement_sha256": "9d3e71d25652bf8b26ba6f37470ca694e5b5c532e896ddedd89cf2af8dc5db69",
+      "peak_rss_mib": 73.0,
+      "performance_seconds": 7.753e-05,
+      "phase": "measurement",
+      "round": 3,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-03/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "017ef22a06065aa39d8aa551f71573a69cf53071a7149dc642ab5198b818e63c",
+      "variant": "typeiso_perf"
+    },
+    {
+      "measured_iteration_count": 200530,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/unialloc/measurement.json",
+      "measurement_sha256": "d70109d93c470f8f7b0d229eb0b1a0b25a22b056e608eb0ae65c6164db30dea8",
+      "peak_rss_mib": 676.0,
+      "performance_seconds": 1.5073e-06,
+      "phase": "measurement",
+      "round": 4,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "78efb53dc47a4e5c71a9829b87942ad2109e75ee4cb2b8a37818e5cb90b99a1a",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 16995,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/typed_plain/measurement.json",
+      "measurement_sha256": "f06a2d9514d2652093d980bd0a2a00e116586b2e4ec88d5357c3428700bdf635",
+      "peak_rss_mib": 70.87109375,
+      "performance_seconds": 7.8897e-05,
+      "phase": "measurement",
+      "round": 4,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "b8fabf21bb73af0144b9526912bd718f97a26708d1458a9e6fa5cc7c0af812b1",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 16830,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/typeiso_perf/measurement.json",
+      "measurement_sha256": "7091626974159336aa599485153efa9f22b10fb450cbd57b0b8c5c440aadd616",
+      "peak_rss_mib": 72.0,
+      "performance_seconds": 8.0205e-05,
+      "phase": "measurement",
+      "round": 4,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-04/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "895896f120eaac5d8337a5b4df3af3337ca29233fd00f92e3120cd61b7efcc20",
+      "variant": "typeiso_perf"
+    },
+    {
+      "measured_iteration_count": 200585,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/unialloc/measurement.json",
+      "measurement_sha256": "b92a28f4f75d2a9ad4e792656d38f9f19c3594aef56a5036b5a4f8d5abab7a0b",
+      "peak_rss_mib": 675.0,
+      "performance_seconds": 1.4943999999999998e-06,
+      "phase": "measurement",
+      "round": 5,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/unialloc/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "e76faaf10e33aecdcea5e63ffd6ad6c1fc1eef2f01a06a2e755aba6351262445",
+      "variant": "unialloc"
+    },
+    {
+      "measured_iteration_count": 17050,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/typed_plain/measurement.json",
+      "measurement_sha256": "fa4ae4d32361eeeed5ff280d916bd4975fe9edf338356bf9a32ee49e0f716fae",
+      "peak_rss_mib": 72.0,
+      "performance_seconds": 8.056e-05,
+      "phase": "measurement",
+      "round": 5,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/typed_plain/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "8b8f1d88a531e3484e6c894f39cbf85e6a4787e62a7d72e9e214d568b998dadb",
+      "variant": "typed_plain"
+    },
+    {
+      "measured_iteration_count": 17215,
+      "measurement_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/typeiso_perf/measurement.json",
+      "measurement_sha256": "f0e9b1ec1674ddff08c12405fae44d752e71c783a0a76cb90948e87c79ff1d9f",
+      "peak_rss_mib": 76.0,
+      "performance_seconds": 7.8263e-05,
+      "phase": "measurement",
+      "round": 5,
+      "sample_path": "evaluation/raw/type-isolation-redb-actix-f5d0c19/runs/actix_web/async_service_direct/round-05/typeiso_perf/work/target/criterion/async_service_direct/base/sample.json",
+      "sample_sha256": "fc4084ba7c0da63ca670c7bbedd511e55063cc7301fe95666ada28630a66d936",
+      "variant": "typeiso_perf"
+    }
+  ],
+  "schema_version": 1,
+  "source_commit": "696b1fed9c5b0147c37c70e0808cae5f63a5a4a0",
+  "target_id": "actix_web",
+  "variant_summaries": {
+    "typed_plain": {
+      "measured_iteration_count_max": 17050,
+      "measured_iteration_count_median": 17050.0,
+      "measured_iteration_count_min": 16610,
+      "peak_rss_mib_median": 72.0,
+      "performance_seconds_median": 8.0452e-05
+    },
+    "typeiso_perf": {
+      "measured_iteration_count_max": 17215,
+      "measured_iteration_count_median": 16830.0,
+      "measured_iteration_count_min": 16720,
+      "peak_rss_mib_median": 72.0,
+      "performance_seconds_median": 7.8908e-05
+    },
+    "unialloc": {
+      "measured_iteration_count_max": 202840,
+      "measured_iteration_count_median": 200805.0,
+      "measured_iteration_count_min": 200530,
+      "peak_rss_mib_median": 677.0,
+      "performance_seconds_median": 1.4943999999999998e-06
+    }
+  }
+}

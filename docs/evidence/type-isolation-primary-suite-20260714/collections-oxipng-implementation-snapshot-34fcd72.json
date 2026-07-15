@@ -1,0 +1,710 @@
+{
+  "applies_to_targets": [
+    "collections",
+    "oxipng"
+  ],
+  "campaign": "collections-oxipng-current-primary",
+  "claim_boundary": "This digest identifies the frozen implementation used only by the Collections and Oxipng campaign. Treat it as suite-wide only after every other campaign recomputes the same canonical stream and obtains the same digest.",
+  "component_audit": {
+    "alloc_macros_tree_sha256": "b745ab1f75115d390f7908c1b862f06c181769f9e628538d8724f1c653ba1f85",
+    "campaign_provenance_sha256": "602b625c23ba0858f8f22b40e7bf7b222f8504dbf9ab7777e1d20e0333c33bef",
+    "pass_source_sha256": "393a92bd15a808b655084b58bc162fd7e4b8298d16073f1563a9920f48ff844b",
+    "repository_head_at_freeze": "34fcd722467948d8d69df47750a8ee9929dee7e3",
+    "snapshot_json_sha256": "2d5ef87bcc3f8caa838811edebd6c47840e89c3e78eddaa5ca15dff2def5f18a",
+    "unialloc_tree_sha256": "d9f02bd5e6dc7a80a1e8641df3972029622ad49b1aedb928b2f013d067adff78"
+  },
+  "file_scope": {
+    "explicit_files": [
+      "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+    ],
+    "file_count": 131,
+    "root_exclusions": [
+      "files outside the two roots except the explicit pass source",
+      "any path with a target component",
+      "Cargo.lock and every other extension",
+      "snapshot.json"
+    ],
+    "root_inclusions": [
+      "*.rs",
+      "*.toml",
+      "build.rs"
+    ],
+    "roots": [
+      "unialloc",
+      "alloc_macros"
+    ],
+    "total_size_bytes": 4458435
+  },
+  "files": [
+    {
+      "path": "alloc_macros/Cargo.toml",
+      "sha256": "d5c9f6f32f23e0392759bc1219f71d3ce204a2914cd1764ce813cedd1d0c9c99",
+      "size_bytes": 92
+    },
+    {
+      "path": "alloc_macros/src/allocator.rs",
+      "sha256": "f227bd97c6dfcdc5900d5040bd5789357410d026e96f99c382e03408209de243",
+      "size_bytes": 19488
+    },
+    {
+      "path": "alloc_macros/src/lib.rs",
+      "sha256": "fa1c0d02ce7d01e6406080179f565b209ebfeff4f47e23dc43d2431e2d75751b",
+      "size_bytes": 364
+    },
+    {
+      "path": "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+      "sha256": "393a92bd15a808b655084b58bc162fd7e4b8298d16073f1563a9920f48ff844b",
+      "size_bytes": 495524
+    },
+    {
+      "path": "unialloc/Cargo.toml",
+      "sha256": "45d5d3294c00c7cadfa1e4b0b38fea1360d0a1244a1124914217416d8f21d80a",
+      "size_bytes": 5213
+    },
+    {
+      "path": "unialloc/benches/binary_heap.rs",
+      "sha256": "dfe76dfde9d42306a29c308c34b47da8bfaa68202651f9a0ced8e622b2adf20c",
+      "size_bytes": 2342
+    },
+    {
+      "path": "unialloc/benches/btree/map.rs",
+      "sha256": "059486290084fa340ecf32480fbb292122d8a7d423e0221dba8eab8cf483cb5a",
+      "size_bytes": 14926
+    },
+    {
+      "path": "unialloc/benches/btree/mod.rs",
+      "sha256": "6c4680638ae3d303fc6db35886952ec4c47e2c037e9a7052e748baff1bf0a752",
+      "size_bytes": 18
+    },
+    {
+      "path": "unialloc/benches/btree/set.rs",
+      "sha256": "611a858e43c6599c0d63f5008b08d7aba073212a5e8cade2bde57245165d71c3",
+      "size_bytes": 7250
+    },
+    {
+      "path": "unialloc/benches/homemade/mod.rs",
+      "sha256": "d2e7b5a47396b2f075bef9ee65790f1bbe37420060696668860f7fde0d7f6830",
+      "size_bytes": 49
+    },
+    {
+      "path": "unialloc/benches/homemade/stress_collect.rs",
+      "sha256": "6f973d1678898fa5181dc90770bd6e554bd0dc7b21cfe0bd05ece0bb39f9d03b",
+      "size_bytes": 1338
+    },
+    {
+      "path": "unialloc/benches/homemade/stress_push_pop.rs",
+      "sha256": "d1d1f697b679dd01dbabb8ef83d78a3ddfdbe36211879aa72406ce64d2fed75f",
+      "size_bytes": 2343
+    },
+    {
+      "path": "unialloc/benches/lib.rs",
+      "sha256": "5cd350caaca504e7b584aa3f5e0aabae1166354eccbd2b87a7d9d27489ee34c2",
+      "size_bytes": 68790
+    },
+    {
+      "path": "unialloc/benches/linked_list.rs",
+      "sha256": "b52483bc530b5b92f2553af3789050d46d2714806b75f55152447887ad5694c5",
+      "size_bytes": 1998
+    },
+    {
+      "path": "unialloc/benches/multi1.rs",
+      "sha256": "770f293ee11d9d1d5deec18d6a61dcfe00b6bde428a877f14abf3807d4f836fb",
+      "size_bytes": 2264
+    },
+    {
+      "path": "unialloc/benches/multi2.rs",
+      "sha256": "73d9f6ec507366608382f4daf1efc61ae29085420d35020baef9dcd3d382a0af",
+      "size_bytes": 4315
+    },
+    {
+      "path": "unialloc/benches/scudo_runtime.rs",
+      "sha256": "759792e339037e31dec8001b18345b61bca054b5f934a36996d1d7f5d4a1c09d",
+      "size_bytes": 4334
+    },
+    {
+      "path": "unialloc/benches/semantic_std.rs",
+      "sha256": "f08089376afbad5af88f0914df918b3c12c4754a7c3ef5bea2b94ff433bf555b",
+      "size_bytes": 9483
+    },
+    {
+      "path": "unialloc/benches/slice.rs",
+      "sha256": "6a74320199d1802e44db3f7c59d8b555aeaba1b743fe28782c7e68cc1d49697d",
+      "size_bytes": 12624
+    },
+    {
+      "path": "unialloc/benches/std_bench_compiler_exact_dynamic_generated.rs",
+      "sha256": "fe296c73010675df3087593c4f8b9b3b08e2be15bd0310358aeb7e7ef98f0c41",
+      "size_bytes": 6856
+    },
+    {
+      "path": "unialloc/benches/std_bench_compiler_proto_generated.rs",
+      "sha256": "aaba5aeb7830183956987216be9c338d0cf0e199d6f7fba6ffa4b4cf9737eeb2",
+      "size_bytes": 5217
+    },
+    {
+      "path": "unialloc/benches/str.rs",
+      "sha256": "70e9f0dffa419cff656b6635118847e1bb8697167802196806740977f95390a5",
+      "size_bytes": 13590
+    },
+    {
+      "path": "unialloc/benches/string.rs",
+      "sha256": "e2617c0fa44136c438ee33e71cb4a824220a26e3d14f775c9ceb1d2c1db78a1a",
+      "size_bytes": 4198
+    },
+    {
+      "path": "unialloc/benches/vec.rs",
+      "sha256": "f68040cc3a129c889567c772d677d7720e05cd2f2cd14aefb7d9667b52733165",
+      "size_bytes": 17603
+    },
+    {
+      "path": "unialloc/benches/vec_deque.rs",
+      "sha256": "76f6b57c39abeeecd3ef4444101912974879fe9bc4baba384512f55d61e956b6",
+      "size_bytes": 6609
+    },
+    {
+      "path": "unialloc/benches/vec_deque_append.rs",
+      "sha256": "1ed3169ca77e436ca899304fd74bbd2cff1b45211a984e776e4c1f167a7c424b",
+      "size_bytes": 2517
+    },
+    {
+      "path": "unialloc/build.rs",
+      "sha256": "c04c40a0cbde267c0f1a199ae725f6250c98b93beace5a77585744f00879baa9",
+      "size_bytes": 11733
+    },
+    {
+      "path": "unialloc/examples/binary_heap.rs",
+      "sha256": "05b4ad82da4dda7c2587c43a0a0f98669cf62abf8d6668dd16d7329aa05b77eb",
+      "size_bytes": 4414
+    },
+    {
+      "path": "unialloc/examples/build_script_test.rs",
+      "sha256": "f70bc66fb4500dedc558cef3e388f82999d81c787ebaa6b635adb738abb075f0",
+      "size_bytes": 105
+    },
+    {
+      "path": "unialloc/examples/compiler_abi_coverage.rs",
+      "sha256": "90facaca93c7b2dda96e7f467b3349d3993aea43f51c2f83a435bba7a0dc5092",
+      "size_bytes": 8386
+    },
+    {
+      "path": "unialloc/examples/compiler_exact_dynamic_probe.rs",
+      "sha256": "cff774fb1198769c8fd4c671d4e080e6978fcb0a104eebe70df501a45567e30e",
+      "size_bytes": 11312
+    },
+    {
+      "path": "unialloc/examples/hosted_page_run_backend_bench.rs",
+      "sha256": "a93308949fca90bdca95f189d94fab57e1d7152809619d1b1b26c3cb880808db",
+      "size_bytes": 9782
+    },
+    {
+      "path": "unialloc/examples/hosted_page_run_memory_probe.rs",
+      "sha256": "e89c1bd9e4a37c858fea629e3b9405a309a02c6a2c77c80aa03d30c750e4ebab",
+      "size_bytes": 14422
+    },
+    {
+      "path": "unialloc/examples/hugepage_metadata_probe.rs",
+      "sha256": "61964cd39b2d842cb5ff500879f3c11db6c891d88c93d1899aaf131fe477bb90",
+      "size_bytes": 11457
+    },
+    {
+      "path": "unialloc/examples/lifetime_epoch_cohort_probe.rs",
+      "sha256": "afc9d64b7a8d3d3098efea8382db511fb9c04fa3aae8a12b5e2b36fe4a0c479c",
+      "size_bytes": 41967
+    },
+    {
+      "path": "unialloc/examples/lifetime_hugepage_allocator_probe.rs",
+      "sha256": "6fc125abc613176058b4ab947b813c39555d823c48991e1337ac435326d7b896",
+      "size_bytes": 70122
+    },
+    {
+      "path": "unialloc/examples/lifetime_hugepage_probe.rs",
+      "sha256": "10fa74fd31dbe0556715a7ad1803e2c9d0eca01c5218880a8c5e2f8d22287923",
+      "size_bytes": 30487
+    },
+    {
+      "path": "unialloc/examples/linked_list_auto_probe.rs",
+      "sha256": "a22df857afa3828702caf349262252cc2eb160a7a5cd955a21de7679232aca84",
+      "size_bytes": 1551
+    },
+    {
+      "path": "unialloc/examples/many_threads.rs",
+      "sha256": "fb72ed16b43917462664671386d0cb0b04e1c58144d8ab62169e7e5813a8ec26",
+      "size_bytes": 899
+    },
+    {
+      "path": "unialloc/examples/multithread.rs",
+      "sha256": "dd28e3504a76dee6672a0008a2deaad7e4ce1e468e2d703857eee8c44d994e5f",
+      "size_bytes": 1098
+    },
+    {
+      "path": "unialloc/examples/pac_metadata_probe.rs",
+      "sha256": "2b194b4789ef3d43f2bd2c003d0cc4613c08e1e57d68de22efd4cd1bf59e5d7d",
+      "size_bytes": 11820
+    },
+    {
+      "path": "unialloc/examples/pac_metadata_probe_nostd.rs",
+      "sha256": "e40ef13a0f91ac7139d4ca0093abad33f02b94d5823d15342d89f51fb8e5baae",
+      "size_bytes": 14750
+    },
+    {
+      "path": "unialloc/examples/page_run_backend_bench.rs",
+      "sha256": "d7ee7749dd96163fe966cd07cb63ad0bc04160ba3437310cc266f8f6a73e9a75",
+      "size_bytes": 6977
+    },
+    {
+      "path": "unialloc/examples/platform_allocator_workload.rs",
+      "sha256": "7d20fea790aea93d733d9d397f0b79cb089d3d3c95cb84a65e642655f696228a",
+      "size_bytes": 19000
+    },
+    {
+      "path": "unialloc/examples/rustc_driver_direct_allocator_abi_probe_generated.rs",
+      "sha256": "8cc90d00c82cfcfd81c7144ff7354171ed138735bc5c7cc6f4cd26c549f94a45",
+      "size_bytes": 7004
+    },
+    {
+      "path": "unialloc/examples/rustc_driver_lowering_fixture_generated.rs",
+      "sha256": "87affb5f0c2816832230c419f340f7d563e76106ecbfbe0ec6609f8917c0d766",
+      "size_bytes": 6458
+    },
+    {
+      "path": "unialloc/examples/scoped_std_coverage.rs",
+      "sha256": "f07f8c595aa726b1170b435e95aa09d73d7343a07abf56d85094416e17bdd73f",
+      "size_bytes": 4415
+    },
+    {
+      "path": "unialloc/examples/segment_tree_page_allocator_bench.rs",
+      "sha256": "a88b177f5337b3069001cf8dfe26026a9dae6a1911b799abd16056c6f30a2004",
+      "size_bytes": 8687
+    },
+    {
+      "path": "unialloc/examples/semantic_coverage.rs",
+      "sha256": "65cb573f4aaba2d28b77290908f3363512bb56c02a37437d618d0949157822c4",
+      "size_bytes": 3083
+    },
+    {
+      "path": "unialloc/examples/semantic_fallback_attribution_probe.rs",
+      "sha256": "af5e336ec974977f52916c6a71a26847b00ccb4fc73af11285efa25ed65f1140",
+      "size_bytes": 4806
+    },
+    {
+      "path": "unialloc/examples/semantic_metadata_validation_probe.rs",
+      "sha256": "d8d0f065a734a45b45ffd7b2f3f0006a4dd6a04c37aa8f885174e8ffcb67f153",
+      "size_bytes": 6131
+    },
+    {
+      "path": "unialloc/examples/small_heap.rs",
+      "sha256": "0e0cfbb2e8cdee7b66fb3fe7ca76dd5e22c3cb76102d336c3b8f5af647407842",
+      "size_bytes": 21086
+    },
+    {
+      "path": "unialloc/examples/std_map_bench.rs",
+      "sha256": "b9fdc2ff4b77892cc57876d0c711148c2a599d12a7f60cbcbbd69c9365460df9",
+      "size_bytes": 2253
+    },
+    {
+      "path": "unialloc/examples/std_vec_bench.rs",
+      "sha256": "19a7bd02215f2287e32b5c9c8742eeb1272887586b3faf19c6983411b8533e01",
+      "size_bytes": 2250
+    },
+    {
+      "path": "unialloc/examples/tls-single-thread.rs",
+      "sha256": "44a9c5f75024621ad011a99937ed81d990919f3986123a5fe05a98e3464bdbd6",
+      "size_bytes": 1154
+    },
+    {
+      "path": "unialloc/examples/vec_push_auto_probe.rs",
+      "sha256": "4c32681fdfc32b22267dd6146a38ca38274ec6d0e21803e3f08c7e314b6bb4d0",
+      "size_bytes": 1193
+    },
+    {
+      "path": "unialloc/src/adaptive_bitmap_alloc.rs",
+      "sha256": "c1681cd1d00b0d8c2a08f0ec10b7b4a5111c4b55a9cb3e8dc593e0702d37c394",
+      "size_bytes": 16134
+    },
+    {
+      "path": "unialloc/src/alloc_api/lifetime_hugepage.rs",
+      "sha256": "dd1e5bc621ec331ec20fd366143444e3929cab7ec6192b531e3c499f2c3f96b7",
+      "size_bytes": 75634
+    },
+    {
+      "path": "unialloc/src/alloc_api/mod.rs",
+      "sha256": "db376f108ba2f5c0c8bce02d136dc5e25a42b0424b327901785372e09dacfaa0",
+      "size_bytes": 6426
+    },
+    {
+      "path": "unialloc/src/alloc_api/type_aware.rs",
+      "sha256": "654465e50984a8d6a9c6301ff9ab92f3f11b7e8059598582c5f056a24cdc6004",
+      "size_bytes": 10286
+    },
+    {
+      "path": "unialloc/src/alloc_api/type_isolation.rs",
+      "sha256": "e5d48f70a2a67b182efe903cf17a6401fbe7e0e7fa85f9d9c5fa847d7870a057",
+      "size_bytes": 1603453
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_direct_allocator_mir_probe.rs",
+      "sha256": "911523d991c0d85878bfa758fc732a96c2be445e3e56cf5bc7d5a5e6a0db6a58",
+      "size_bytes": 33723
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_ambiguous_clone_fallback_probe.rs",
+      "sha256": "77ef9a9c000c846a81afaae58c3083d37b8390e42730975f7fca3d2349247241",
+      "size_bytes": 30271
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs",
+      "sha256": "42e4359d049fe551217644dd3aaef6fec179b02332af6979d64dd3b64d2746ea",
+      "size_bytes": 21607
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_layout_fallback_provenance_probe.rs",
+      "sha256": "9920ac5a8a9b2024a87bda2d562daead12c16a9c0793413e58fa9f08083f6bdd",
+      "size_bytes": 6639
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_semantic_scope_probe.rs",
+      "sha256": "12a113eb8188a6c0321493289fd258a99f58d744404b7255d948b4a86e517fbe",
+      "size_bytes": 28172
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_semantic_scope_unwind_probe.rs",
+      "sha256": "181c218ace5551709671c15eb28ce978c71804ce8a57932605f9a249009bddc1",
+      "size_bytes": 10309
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_type_isolation_security_probe.rs",
+      "sha256": "529a4c6277feff8129d085f5b8db6bcbb4bfecff9fa8276428a46f219ffd7f6d",
+      "size_bytes": 15921
+    },
+    {
+      "path": "unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs",
+      "sha256": "edf7ed1d5ab6b6f51a71cfa3fa9f7bd571a13ac1ec656203f17bc6d7b546bd2c",
+      "size_bytes": 20921
+    },
+    {
+      "path": "unialloc/src/bin_support/fixed_heap_probe_global.rs",
+      "sha256": "7846f5ed67a9a00d6a7ceaeeb6a2e0b20c96d00f99a8880c86d43dcb83e4e610",
+      "size_bytes": 2215
+    },
+    {
+      "path": "unialloc/src/bitmap_alloc.rs",
+      "sha256": "d26c9feadc77d130a799e3f6654a0f6dc7017707d008357120e65e1011e928b8",
+      "size_bytes": 44469
+    },
+    {
+      "path": "unialloc/src/cache/mod.rs",
+      "sha256": "f916661c1de58ae981dcd3e2b5e6b9aa1f882bf2aceed074becc672334abd0d3",
+      "size_bytes": 147616
+    },
+    {
+      "path": "unialloc/src/cache/thread_cache.rs",
+      "sha256": "823cd7ecb207c9190d26e0bfa7dfcedc1c30a83d4f060f210fb70744705f54dc",
+      "size_bytes": 211698
+    },
+    {
+      "path": "unialloc/src/collections/linklist.rs",
+      "sha256": "6394917a30d89d36b11ab2039983ee7f4b8b6fef2aff7605f280d622d97c27b3",
+      "size_bytes": 8654
+    },
+    {
+      "path": "unialloc/src/collections/mod.rs",
+      "sha256": "c97a07cbe5294e5faacf7124bd00217b75c026933fac3119bef72e1171e0c7f2",
+      "size_bytes": 38
+    },
+    {
+      "path": "unialloc/src/collections/radix_tree.rs",
+      "sha256": "f351b8251d8b93e7cc6235190a70d3c11a12340cc227d6d40466e14a6dfb6c34",
+      "size_bytes": 29777
+    },
+    {
+      "path": "unialloc/src/error.rs",
+      "sha256": "c95041dd9001ff23fc87de016c97ccf7ca793b1703fd79d3c1ee3966160937ed",
+      "size_bytes": 750
+    },
+    {
+      "path": "unialloc/src/freelist/bump.rs",
+      "sha256": "ab743381ef293a5f8599c37ec5c9c0726597395b457170a84d64ddea8189016e",
+      "size_bytes": 19294
+    },
+    {
+      "path": "unialloc/src/freelist/mod.rs",
+      "sha256": "d2f965aac17f9ca8cea8a1a180b87ba88eae3cf6210f3fb076ab9555f766e198",
+      "size_bytes": 146549
+    },
+    {
+      "path": "unialloc/src/hosted_bitmap_alloc.rs",
+      "sha256": "149a0047a1df07bb603db4383f2679f31dcd6112df3d1f7f476af46f36560177",
+      "size_bytes": 76712
+    },
+    {
+      "path": "unialloc/src/lib.rs",
+      "sha256": "b1d7cc9569eaba29306ce8c13cdfba96162e118ef4326deec328caccb2c271ab",
+      "size_bytes": 25524
+    },
+    {
+      "path": "unialloc/src/mm/linklist.rs",
+      "sha256": "f671a1a39a0cfc0e33a4d189feadc54ef8033ce4fecd14e989fa2392bb7e1adc",
+      "size_bytes": 11160
+    },
+    {
+      "path": "unialloc/src/mm/mod.rs",
+      "sha256": "1e348fa90fcf79e2820ef6b7b430d2f7376c27cd522026aeab4a7b3262e25e05",
+      "size_bytes": 305
+    },
+    {
+      "path": "unialloc/src/page/efficient_page.rs",
+      "sha256": "6cb5dfbcbb2dd6a7549f2b6ee09a29d5df9f3b7041ede2554b24aeeea8481ecd",
+      "size_bytes": 61641
+    },
+    {
+      "path": "unialloc/src/page/mod.rs",
+      "sha256": "4cc4a59779944b9efceb02549dac7cb5412802bd10c740ef2e4da43ffd3fe8e6",
+      "size_bytes": 12482
+    },
+    {
+      "path": "unialloc/src/page/separate_page.rs",
+      "sha256": "98493d0bbc37077d49d780a462e78829b48eb13e3f113702a2c8922077cac668",
+      "size_bytes": 41979
+    },
+    {
+      "path": "unialloc/src/pal/arch/aarch64.rs",
+      "sha256": "8e1e7e501ccacf47d92f469e1e46a268fa41fa29dcc70b3928987907af4cfe30",
+      "size_bytes": 1161
+    },
+    {
+      "path": "unialloc/src/pal/arch/mod.rs",
+      "sha256": "2d7b6f4f75164a1578ceae1c08729dbd412dc78b90dca7e24fb0bae5b2855648",
+      "size_bytes": 283
+    },
+    {
+      "path": "unialloc/src/pal/arch/pac.rs",
+      "sha256": "8cfbd71c335501ade58bff047665e0e5d0220cc9e25b0b0ad66e5dc4635042f0",
+      "size_bytes": 21254
+    },
+    {
+      "path": "unialloc/src/pal/arch/print.rs",
+      "sha256": "1383ff4c43ce9bc1785415f010a705614f84a6be02284f451a603ee6617695d6",
+      "size_bytes": 2645
+    },
+    {
+      "path": "unialloc/src/pal/arch/syscall.rs",
+      "sha256": "042372e58d32cbe06d48686e12edd69ca63ea3e5570f3b4cf277b4e02d1bbc55",
+      "size_bytes": 937
+    },
+    {
+      "path": "unialloc/src/pal/arch/x86_64.rs",
+      "sha256": "5fc2b709bf3c34701833f82b505c90fe34dfada3934da971b644067aff6bef46",
+      "size_bytes": 1503
+    },
+    {
+      "path": "unialloc/src/pal/mod.rs",
+      "sha256": "af941de5c1201a64e0ef9570c5f62e20515aa1b365d8d35ccdef9064728d47fe",
+      "size_bytes": 654
+    },
+    {
+      "path": "unialloc/src/pal/os/linux_rseq.rs",
+      "sha256": "e3dec8b7edf16f6ef72d0fa42b48d02abe26e5f351d563f59d960d9813e6691a",
+      "size_bytes": 8240
+    },
+    {
+      "path": "unialloc/src/pal/os/mod.rs",
+      "sha256": "a5f6dcb3a4e9a3bbf793238ddda8230d0a8fa4ac37baa7de798cff88dd4f424c",
+      "size_bytes": 590
+    },
+    {
+      "path": "unialloc/src/pal/os/rseq_fallback.rs",
+      "sha256": "9ac418c928f8a4876003d95e9571f4f80537efbd0ade51cf57bdb2c2e5b761d7",
+      "size_bytes": 1150
+    },
+    {
+      "path": "unialloc/src/pal/sync.rs",
+      "sha256": "4575d86517fbcdd403074d81d3c3e572687ead75e75c3747d8a8420d4324f02d",
+      "size_bytes": 12806
+    },
+    {
+      "path": "unialloc/src/pal/sys_alloc.rs",
+      "sha256": "39973865e8b58262373f2ba232bba6653dada217be828b0918e0c86dbcf5e362",
+      "size_bytes": 59926
+    },
+    {
+      "path": "unialloc/src/pal/thread.rs",
+      "sha256": "3da3f20c2c75f1e3157c00bad82bc27dd4fd1672a7e34519886cc51907a665c7",
+      "size_bytes": 386
+    },
+    {
+      "path": "unialloc/src/prelude.rs",
+      "sha256": "87c2cf66577677406e33329c3fa9cdb71f93772754ded17b54d07c0baccd021c",
+      "size_bytes": 384
+    },
+    {
+      "path": "unialloc/src/sc/backend.rs",
+      "sha256": "85fc157d0b1dd678e4f33f16b78dba0c7e91d2e95e8d15bee43f657fb23955b7",
+      "size_bytes": 31970
+    },
+    {
+      "path": "unialloc/src/sc/efficient_sc.rs",
+      "sha256": "07f5f630a41cd25d407a99a09c69e6337089dd47c842fd5181757a1b9a9c2f81",
+      "size_bytes": 83380
+    },
+    {
+      "path": "unialloc/src/sc/mod.rs",
+      "sha256": "4a5d7a11d639bc26b271cf2f2d6d329cf55e65b66a53e6c9ba07f38d4888fc11",
+      "size_bytes": 52853
+    },
+    {
+      "path": "unialloc/src/sc/separate_sc.rs",
+      "sha256": "61e3df63127ff3c4ad648db3bcb66f201f0a07133ebe210768c3443a081ed36b",
+      "size_bytes": 132794
+    },
+    {
+      "path": "unialloc/src/size_class/mi_size_class.rs",
+      "sha256": "78fe3677ffb5a89730c8ad8c9a3cb7c1b1862a6bd423948ea7a424e0daefb5d3",
+      "size_bytes": 5918
+    },
+    {
+      "path": "unialloc/src/size_class/mod.rs",
+      "sha256": "ba12e209051b404f449852e1a9822f785a47685e24110720f2389b77b02b0d4c",
+      "size_bytes": 1519
+    },
+    {
+      "path": "unialloc/src/size_class/small_size_class.rs",
+      "sha256": "8d91e31ba1ba213addb6dc38719a9bc44048ee033d355c9a6e5a2aa56ea68e09",
+      "size_bytes": 4170
+    },
+    {
+      "path": "unialloc/src/size_class/tc_size_class.rs",
+      "sha256": "5b4050fd5f655b2d9fb2383e02a3020ed8ddc56940290109450db19ed01eb467",
+      "size_bytes": 10990
+    },
+    {
+      "path": "unialloc/src/sync.rs",
+      "sha256": "1d4cc86f0d2b883e840adb55acdb9de4eb4f78ba3aff5fb0d715a361ba6a2e27",
+      "size_bytes": 4752
+    },
+    {
+      "path": "unialloc/src/zone.rs",
+      "sha256": "ccb803ea7f9410b46d66666392c86dbbe18c8cffa51e9884a5b8df231cb67151",
+      "size_bytes": 54582
+    },
+    {
+      "path": "unialloc/tests/allocator.rs",
+      "sha256": "f85dda29199efd2b2e24d5d3dec199f1fbebbb45cf3c7ea0a1ad2c9da74f0e9b",
+      "size_bytes": 1355
+    },
+    {
+      "path": "unialloc/tests/binary_heap.rs",
+      "sha256": "56d27252cc5456e9d6a57308a8e9846fae906b83bdfc4dc59f91565af4a1b333",
+      "size_bytes": 13518
+    },
+    {
+      "path": "unialloc/tests/boxed.rs",
+      "sha256": "dbd6ccbcda0c849b7cdc5c75b60ae376def1cdbe9b1e9f038630479f1562a7eb",
+      "size_bytes": 1865
+    },
+    {
+      "path": "unialloc/tests/boxed_str_into_string_rebind.rs",
+      "sha256": "4b5f4defe81ff4920871545248e4e324740c902f118f071ef35118133520851a",
+      "size_bytes": 7034
+    },
+    {
+      "path": "unialloc/tests/concurrent_global_allocator.rs",
+      "sha256": "0f3bf63dae9c6b92efe54f237e20d52cc369c725c6dbc0b85724d8714749c85a",
+      "size_bytes": 4020
+    },
+    {
+      "path": "unialloc/tests/cstring_into_bytes_with_nul_rebind.rs",
+      "sha256": "5abb16179e18abcd2061c8b4a243bb0a1913892ef5c51a6014be8ab2376e892e",
+      "size_bytes": 6986
+    },
+    {
+      "path": "unialloc/tests/heap.rs",
+      "sha256": "45a5658e861bf25170c4264311d246127b569792860ffca781d828968b474b0c",
+      "size_bytes": 1700
+    },
+    {
+      "path": "unialloc/tests/lifetime_hugepage_allocator.rs",
+      "sha256": "4368a49ffdf840c333cf22cd13017831d4b0196d28319f4525a4b5c8257c5438",
+      "size_bytes": 30292
+    },
+    {
+      "path": "unialloc/tests/lifetime_hugepage_policy.rs",
+      "sha256": "549afc49256bf2c4cabc81a1a58fc9a1e4237063515cade2d3c87a86d871fc75",
+      "size_bytes": 809
+    },
+    {
+      "path": "unialloc/tests/linked_list.rs",
+      "sha256": "961a4c1f5c6418eae449873d84a57bf3f043ae52731a20e5736aeb7ceedb9cee",
+      "size_bytes": 18326
+    },
+    {
+      "path": "unialloc/tests/ownership_transfer_cross_thread.rs",
+      "sha256": "3d045820ce81287cbb88f89053224e4c3b96a6c9ffd4b3f478fcdf0cff29002e",
+      "size_bytes": 4067
+    },
+    {
+      "path": "unialloc/tests/sanity-check.rs",
+      "sha256": "b9861585bee609ace26e6a1d3f5fad873c94aea7f2b9cf34f48a740d50c1b106",
+      "size_bytes": 608
+    },
+    {
+      "path": "unialloc/tests/slice.rs",
+      "sha256": "b676bfb23b6ba2477ba646fa8c9a4feccd57c80b7973e90a5bad7fe3f7b22dad",
+      "size_bytes": 55061
+    },
+    {
+      "path": "unialloc/tests/string_into_boxed_str_rebind.rs",
+      "sha256": "4cd25864c9d004083b752253b9d6e786285ddad62aa558beab720c39fd2c29bc",
+      "size_bytes": 11186
+    },
+    {
+      "path": "unialloc/tests/string_into_bytes_rebind.rs",
+      "sha256": "9ffcd02ccd0e3eb993792d987776d80db139994449419bc17abbd8b2b1608b61",
+      "size_bytes": 6354
+    },
+    {
+      "path": "unialloc/tests/type_isolation_feature_contract.rs",
+      "sha256": "651c63b5b42dd22c36d52d0e9ad0cbf737b4d29012a68c730d5415a56d32667c",
+      "size_bytes": 902
+    },
+    {
+      "path": "unialloc/tests/type_isolation_hugepage_pac_policy.rs",
+      "sha256": "d7f2266208eccaba584d88ee07b5288073ab45f2bc66520b9b77723491ce08a2",
+      "size_bytes": 5451
+    },
+    {
+      "path": "unialloc/tests/type_isolation_lifetime_hint.rs",
+      "sha256": "81d3bfa403e07f93dd1e108e465263c52d84a34ef245f41b9a1f24e31070218d",
+      "size_bytes": 2768
+    },
+    {
+      "path": "unialloc/tests/type_isolation_placement_hint.rs",
+      "sha256": "455a48a177d4c6e859e2735935635d375038dfc43114d287a4b1a4174da19737",
+      "size_bytes": 2811
+    },
+    {
+      "path": "unialloc/tests/vec.rs",
+      "sha256": "a3c3e45de28e2ffe38bb95b1fe4ba6653e58d105ddba11f701ddcb36d95d6287",
+      "size_bytes": 17958
+    },
+    {
+      "path": "unialloc/tests/vec_deque.rs",
+      "sha256": "0e763a9710972ae1263327e608c6c37f4fb0eba5eaf667358ef452f036cd9150",
+      "size_bytes": 2011
+    }
+  ],
+  "implementation_digest": {
+    "algorithm": "SHA-256",
+    "canonical_stream": "For each unique included file in lexicographic snapshot-relative path order: UTF-8 POSIX path, one NUL byte, exact file bytes, one NUL byte.",
+    "path_encoding": "UTF-8",
+    "path_order": "lexicographic snapshot-relative POSIX paths",
+    "recomputed_value": "05e86e5067f4a171298c0f7cc44a9a6cee3b673c4fd3dbaf15b7e5a78c4a546c",
+    "record_separator_hex": "00",
+    "value": "05e86e5067f4a171298c0f7cc44a9a6cee3b673c4fd3dbaf15b7e5a78c4a546c"
+  },
+  "schema_version": 1,
+  "status": "superseded_campaign_source",
+  "superseded_by": {
+    "canonical_sha256": "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01",
+    "git_revision": "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2"
+  }
+}

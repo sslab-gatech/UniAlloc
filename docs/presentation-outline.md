@@ -5,6 +5,8 @@
 > Recommended version: **45-minute rehearsal target, 48-minute hard ceiling, plus 12--15 minutes for questions; 31 main slides plus 19 backup slides**.
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
+>
+> Current Type Isolation figure boundary: use `docs/figures/type-isolation-primary-suite/type-isolation-primary-suite.svg` as the lead figure. The title-free figure contains 14 horizontal harness rows across Collections, Oxipng, redb, Polars, SWC, RustPython, and Actix Web, with aligned execution-cost and peak-RSS panels. The 2026-07-14 readiness audit records `7/7` eligible targets, `34` harnesses, `102` warmups, and `510` measured processes. Policy-only execution cost is `1.0036x` (`+0.36%`) across all harnesses; fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`) across 14 harnesses. Compiler-route equivalence passes `13/34`, so dagger-marked end-to-end rows retain explicit attribution limits. fd remains a compiler-path diagnostic.
 
 ## 1. One-Sentence Conclusion
 
@@ -284,7 +286,7 @@ Key implementation evidence:
 
 | # | Suggested English title | Purpose of this slide | Figure | Time / likely question |
 |---:|---|---|---|---|
-| 25 | **The evaluation asks feasibility, cost, coverage, and retargeting as separate questions.** | Present RQ→metric→baseline→threat before presenting results | Four-row evaluation matrix | 1:30; label the historical methodology |
+| 25 | **The evaluation asks feasibility, cost, coverage, and retargeting as separate questions.** | Present RQ→metric→baseline→threat before presenting results; show the same three actual-MIR variants across eligible Rust harnesses | Lead with the complete title-free seven-target SVG; keep the 34-harness table in backup | 1:30; distinguish the exact current-version suite, adaptive-RSS diagnostics, and historical paper methodology |
 | 26 | **The paper reported less than 2% average performance difference in its tested aggregate, with workload-dependent memory retention.** | Historical result 1: specify the tested baselines, workloads, and aggregation; most memory results were comparable, while Collections/Rust-Redis had higher peaks | Two takeaways; put the exact comparison table in B14/B16 | 1:30; footer says paper-reported historical |
 | 27 | **The paper reported 5--14% type-isolation slowdown and 72.17% object coverage under its original setup.** | Address only H2 cost and coverage; move metadata segregation, hugepage, and PAC to backup | Two number tiles plus the coverage boundary; keep other features separate | 1:30; do not describe this as a current reproduction |
 | 28 | **Current functional evidence is source-bound; full paper-performance reproduction is intentionally deferred.** | Show the four-tier evidence ladder and G001→G002 status; this is the credibility slide | Four steps: Historical / Current probe / Historical partial record / Deferred claim | 1:30; the committee may examine the methodology here |

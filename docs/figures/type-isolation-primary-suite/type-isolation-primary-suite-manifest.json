@@ -1,0 +1,296 @@
+{
+  "analysis_amendments": [
+    {
+      "adaptive_rss_comparison_eligibility": "diagnostic_only",
+      "benchmark_definitions_changed": false,
+      "core_comparable_rss_work_model": "fixed_work",
+      "id": "rss-work-interpretation-20260714",
+      "interpretation": "Benchmark definitions and the one-warmup plus five-round sampling budget stayed fixed; fixed-work RSS alone is core-comparable.",
+      "kind": "post_preregistration_interpretation_amendment",
+      "original_campaign_manifest_sha256": "96fa64009550d52f89549dd2124e3b1a402a42b7f1fd1750888600dd67bb8a6f",
+      "original_manifest_snapshot": "docs/evidence/type-isolation-primary-suite-20260714/pre-amendment-suite-manifest-96fa640.json",
+      "sampling_budget_changed": false,
+      "scope": "RSS interpretation, aggregate eligibility, and presentation markers",
+      "status": "active",
+      "unchanged_contract": [
+        "target_membership",
+        "source_pins",
+        "harnesses",
+        "variants"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "path": "type-isolation-primary-suite.svg",
+      "sha256": "b7b156c4560067a7e6ee7695d5247097dd6836f25686679de3865821b08f7b89"
+    },
+    {
+      "path": "type-isolation-primary-suite.png",
+      "sha256": "b5e12ab59e6b889e91a45b071184a9ca5a8f404834c49b5c7e5ca5265537ef3d"
+    },
+    {
+      "path": "type-isolation-primary-suite-data.csv",
+      "sha256": "39fa4b2199d0a0eb59981895fc772d74c49e2ecd229c554551806a84a6738b52"
+    }
+  ],
+  "attribution_limited": true,
+  "axis_encoding": {
+    "annotation": "paired-median percent change",
+    "center_ratio": 1.0,
+    "tick_unit": "multiplicative ratio",
+    "transform": "log2"
+  },
+  "canvas_text": {
+    "footer": false,
+    "panel_title": false,
+    "subtitle": false,
+    "title": false
+  },
+  "clipping": {
+    "clipped_observation_count": 50,
+    "clipped_summary_count": 10,
+    "display_log2_cap": 2.0,
+    "panels": {
+      "peak_rss_mib": {
+        "clipped_observation_count": 10,
+        "clipped_summary_count": 2,
+        "display_log2_bound": 2.0,
+        "display_ratio_interval": [
+          0.25,
+          4.0
+        ],
+        "raw_ratio_max": 1.0769230769230769,
+        "raw_ratio_min": 0.10483889607988166
+      },
+      "performance": {
+        "clipped_observation_count": 40,
+        "clipped_summary_count": 8,
+        "display_log2_bound": 2.0,
+        "display_ratio_interval": [
+          0.25,
+          4.0
+        ],
+        "raw_ratio_max": 57.455282403736014,
+        "raw_ratio_min": 1.001922869131822
+      }
+    },
+    "rule": "Clamp plotted log2 ratios to each symmetric panel bound; edge chevrons mark clipped medians, while CSV ratios remain uncapped."
+  },
+  "compiler_route_attribution": {
+    "accepted_interval": [
+      0.85,
+      1.15
+    ],
+    "classification": "attribution_limits_present",
+    "fail_count": 21,
+    "metric": "paired_execution_cost_ratio",
+    "pass_count": 13,
+    "total_count": 34
+  },
+  "encoding": "grouped horizontal median bars on centered log2 ratio axes",
+  "implementation": {
+    "canonical_sha256": "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01",
+    "git_revision": "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2"
+  },
+  "original_campaign_manifest_sha256": "96fa64009550d52f89549dd2124e3b1a402a42b7f1fd1750888600dd67bb8a6f",
+  "panel_log2_bounds": {
+    "peak_rss_mib": 2.0,
+    "performance": 2.0
+  },
+  "presentation_eligible": true,
+  "results_status": "complete_with_attribution_limits",
+  "rss_interpretation": {
+    "adaptive_iterations_target_count": 4,
+    "adaptive_legend": "\u2021 adaptive iterations; RSS is process-volume, not equal-work",
+    "adaptive_marker": "\u2021",
+    "adaptive_selected_harness_count": 8,
+    "fixed_work_selected_harness_count": 6,
+    "fixed_work_target_count": 3,
+    "target_comparison_eligibility": {
+      "actix_web": "diagnostic_only",
+      "collections": "diagnostic_only",
+      "oxipng": "core",
+      "polars": "core",
+      "redb": "core",
+      "rustpython": "diagnostic_only",
+      "swc": "diagnostic_only"
+    },
+    "target_work_models": {
+      "actix_web": "workload_native_adaptive_iterations",
+      "collections": "workload_native_adaptive_iterations",
+      "oxipng": "fixed_work",
+      "polars": "fixed_work",
+      "redb": "fixed_work",
+      "rustpython": "workload_native_adaptive_iterations",
+      "swc": "workload_native_adaptive_iterations"
+    },
+    "uncapped_observations_preserved": true
+  },
+  "schema_version": 1,
+  "selected_harness_count": 14,
+  "selected_harnesses": [
+    {
+      "compiler_route_equivalent": true,
+      "harness": "binary_heap_push",
+      "performance_source": "rust-libtest-benchmark-estimate",
+      "performance_unit": "ns_per_iter",
+      "rank": 1,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "collections"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "vec_in_place_collect_droppable",
+      "performance_source": "rust-libtest-benchmark-estimate",
+      "performance_unit": "ns_per_iter",
+      "rank": 2,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "collections"
+    },
+    {
+      "compiler_route_equivalent": true,
+      "harness": "cli_issue_141_t1",
+      "performance_source": "process-wall-seconds",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "oxipng"
+    },
+    {
+      "compiler_route_equivalent": true,
+      "harness": "cli_issue_141_t4",
+      "performance_source": "process-wall-seconds",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "oxipng"
+    },
+    {
+      "compiler_route_equivalent": true,
+      "harness": "bulk_small",
+      "performance_source": "benchmark-owned-operation-seconds",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "redb"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "transaction_churn",
+      "performance_source": "benchmark-owned-operation-seconds",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "redb"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "groupby_low_cardinality",
+      "performance_source": "benchmark-owned-operation-seconds",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "polars"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "groupby_multikey",
+      "performance_source": "benchmark-owned-operation-seconds",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "core",
+      "rss_work_model": "fixed_work",
+      "target": "polars"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "large_parser",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "swc"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "large_all_es2020",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "swc"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "parse_mandelbrot",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "rustpython"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "execute_nbody",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "rustpython"
+    },
+    {
+      "compiler_route_equivalent": false,
+      "harness": "async_service_direct",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 1,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "actix_web"
+    },
+    {
+      "compiler_route_equivalent": true,
+      "harness": "compression_gzip",
+      "performance_source": "criterion-median-seconds-per-iteration",
+      "performance_unit": "seconds",
+      "rank": 2,
+      "rss_comparison_eligibility": "diagnostic_only",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "target": "actix_web"
+    }
+  ],
+  "source": "type-isolation-primary-suite",
+  "source_artifacts": {
+    "results": {
+      "sha256": "3e252a0f8ed1f6ca18c5b63f30acd48dcf5ed0280f29e8ecb1327b659333e8a5"
+    },
+    "suite": {
+      "sha256": "ba386a779e45e0884e02cf8825c69985d1b5cf68d57366af78e7f77cfa8f6ccb"
+    }
+  },
+  "target_order": [
+    "collections",
+    "oxipng",
+    "redb",
+    "polars",
+    "swc",
+    "rustpython",
+    "actix_web"
+  ],
+  "variant_order": [
+    "typed_plain",
+    "typeiso_perf"
+  ]
+}

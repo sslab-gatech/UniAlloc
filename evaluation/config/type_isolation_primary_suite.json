@@ -1,0 +1,559 @@
+{
+  "schema_version": 1,
+  "suite_id": "type-isolation-primary-v1",
+  "status": "analysis_contract_frozen",
+  "membership_rule": "result-blind predeclared targets and harnesses",
+  "version_policy": "resolve the newest stable upstream source at campaign freeze, then pin the full commit, Cargo.lock, and wrapper toolchain for every run",
+  "implementation": {
+    "git_revision": "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2",
+    "canonical_sha256": "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01",
+    "canonical_stream": "For each included file in lexicographic POSIX-path order: UTF-8 path, NUL, exact Git blob, NUL.",
+    "canonical_roots": [
+      "unialloc",
+      "alloc_macros"
+    ],
+    "canonical_root_patterns": [
+      "*.rs",
+      "*.toml",
+      "build.rs"
+    ],
+    "canonical_explicit_files": [
+      "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+    ],
+    "canonical_file_count": 131,
+    "canonical_size_bytes": 4426670,
+    "freeze_reason": "This revision includes the bounded hosted large-run reuse optimization and is materialized from Git for every target campaign."
+  },
+  "variant_order": [
+    "unialloc",
+    "typed_plain",
+    "typeiso_perf"
+  ],
+  "comparison_families": [
+    {
+      "id": "compiler_route",
+      "reference": "unialloc",
+      "subject": "typed_plain"
+    },
+    {
+      "id": "policy_increment",
+      "reference": "typed_plain",
+      "subject": "typeiso_perf"
+    },
+    {
+      "id": "end_to_end",
+      "reference": "unialloc",
+      "subject": "typeiso_perf"
+    }
+  ],
+  "figure_contract": {
+    "overview": {
+      "figure_unit": "suite",
+      "harness_axis": "rows",
+      "encoding": "grouped horizontal median bars",
+      "selected_harnesses_per_target": 2,
+      "canvas_text": {
+        "title": false,
+        "subtitle": false,
+        "panel_title": false,
+        "footer": false
+      },
+      "performance_panel": "same-round execution-cost ratio to UniAlloc",
+      "rss_panel": "same-round peak-RSS ratio to UniAlloc",
+      "raw_observations": "same-round paired ratio points",
+      "summary_marker": "harness median",
+      "ratio_axis": "log2 cost ratio centered at 1x"
+    },
+    "target_detail": {
+      "figure_unit": "one target",
+      "harness_axis": "rows",
+      "performance_panel": "native execution metric and paired delta",
+      "rss_panel": "absolute peak MiB and paired delta MiB",
+      "raw_observations": "same-round measured points",
+      "summary_marker": "harness median and target aggregate diamond"
+    }
+  },
+  "aggregation": {
+    "cost_ratio": {
+      "lower_is_better": "subject / reference",
+      "higher_is_better": "reference / subject",
+      "interpretation": "values above 1 mean higher execution cost"
+    },
+    "harness": "median of complete same-round ratios",
+    "target": "equal-weight geometric mean of eligible harness medians",
+    "suite": "equal-weight geometric mean of eligible target aggregates",
+    "paper_reproduction": "six runs, discard the first, geometric mean of the last five",
+    "weighting_prohibitions": [
+      "run count",
+      "wall time",
+      "operation count",
+      "harness count",
+      "allocator column count"
+    ]
+  },
+  "compiler_route_equivalence_gate": {
+    "metric": "paired_execution_cost_ratio",
+    "subject": "typed_plain",
+    "reference": "unialloc",
+    "minimum_ratio": 0.85,
+    "maximum_ratio": 1.15,
+    "failure_scope": "harness",
+    "decision_rule": "The median of complete same-round execution-cost ratios is classified against the closed interval; a miss limits compiler-route attribution while core-eligible measurements remain in the result.",
+    "role": "attribution_classification",
+    "on_failure": "retain_measurements"
+  },
+  "diagnostic_exclusions": [
+    {
+      "target": "fd",
+      "cohort": "compiler_path_diagnostic",
+      "reason": "the typed negative control does not preserve the uninstrumented UniAlloc route on the pinned directory-walk workload"
+    }
+  ],
+  "targets": [
+    {
+      "id": "collections",
+      "label": "Collections",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "paper_alignment": "paper primary",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "current stable Rust source",
+        "ref": "1.97.0",
+        "commit": "2d8144b7880597b6e6d3dfd63a9a9efae3f533d3",
+        "wrapper_toolchain": "nightly-2026-06-11"
+      },
+      "runner": "evaluation/scripts/type_isolation_primary_collections_oxipng.py",
+      "harnesses": [
+        {
+          "id": "binary_heap_push",
+          "overview_rank": 1,
+          "overview_label": "Binary heap push",
+          "selector": "binary_heap::bench_push",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "btree_set_clone_remove",
+          "selector": "btree::set::clone_10k_and_remove_half",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "slice_random_inserts",
+          "selector": "slice::random_inserts",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "vec_in_place_collect_droppable",
+          "overview_rank": 2,
+          "overview_label": "Vec in-place collect",
+          "selector": "vec::bench_in_place_collect_droppable",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "vec_deque_grow_1025",
+          "selector": "vec_deque::bench_grow_1025",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "oxipng",
+      "label": "Oxipng",
+      "rss_work_model": "fixed_work",
+      "paper_alignment": "paper primary",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "current stable release",
+        "ref": "v10.1.1",
+        "commit": "628e241e23f368097883807fa6e985ccf7c00357",
+        "rust_version": "1.85.1"
+      },
+      "runner": "evaluation/scripts/type_isolation_primary_collections_oxipng.py",
+      "harnesses": [
+        {
+          "id": "cli_issue_141_t1",
+          "overview_rank": 1,
+          "overview_label": "CLI image, 1 thread",
+          "selector": "issue-141.png, opt=2, threads=1",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "process-wall-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "cli_issue_141_t4",
+          "overview_rank": 2,
+          "overview_label": "CLI image, 4 threads",
+          "selector": "issue-141.png, opt=2, threads=4",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "process-wall-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "filters_8bit_filter_0",
+          "selector": "filters_8_bits_filter_0",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "filters_entropy",
+          "selector": "filters_entropy",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "reductions_rgba_to_palette_8",
+          "selector": "reductions_rgba_to_palette_8",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "ns_per_iter",
+          "performance_source": "rust-libtest-benchmark-estimate",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "redb",
+      "label": "redb",
+      "rss_work_model": "fixed_work",
+      "paper_alignment": "current storage primary replacing dormant Rsedis",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "current stable release",
+        "ref": "v4.1.0",
+        "commit": "6ed1f981ba4deab0b2adbdd7bccb46ec409b2191",
+        "rust_version": "1.89"
+      },
+      "runner": "evaluation/scripts/type_isolation_redb_actix_campaign.py",
+      "harnesses": [
+        {
+          "id": "bulk_small",
+          "overview_rank": 1,
+          "overview_label": "Bulk small values",
+          "selector": "200,000 u64 to 128-byte inserts in one non-durable transaction",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "transaction_churn",
+          "overview_rank": 2,
+          "overview_label": "Transaction churn",
+          "selector": "2,000 non-durable transactions with 64 inserts each",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "delete_reinsert",
+          "selector": "preload 200,000 entries, remove 100,000, then insert 100,000",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "large_values",
+          "selector": "64 inserts with 512 KiB values",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "polars",
+      "label": "Polars",
+      "rss_work_model": "fixed_work",
+      "paper_alignment": "current primary corresponding to the paper target class",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "current stable monorepo snapshot",
+        "ref": "py-1.42.1",
+        "commit": "0df0c25d4db895ec8cad773bedc4e98400e3135e",
+        "rust_workspace_version": "0.54.4",
+        "upstream_toolchain": "nightly-2026-04-01"
+      },
+      "runner": "evaluation/scripts/polars_swc_rustpython_primary_campaign.py",
+      "harnesses": [
+        {
+          "id": "groupby_low_cardinality",
+          "overview_rank": 1,
+          "overview_label": "Group-by, low cardinality",
+          "selector": "H2Oai groupby q1 on 1,000,000 deterministic rows",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "groupby_high_cardinality",
+          "selector": "H2Oai groupby q3 on 1,000,000 deterministic rows",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "groupby_multikey",
+          "overview_rank": 2,
+          "overview_label": "Group-by, multiple keys",
+          "selector": "H2Oai groupby q10 on 1,000,000 deterministic rows",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "filter_retain",
+          "selector": "filter2 semantics on 1,000,000 deterministic rows",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "csv_scan",
+          "selector": "fixed local CSV scan with 1,000,000 deterministic rows",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "benchmark-owned-operation-seconds",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "swc",
+      "label": "SWC",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "paper_alignment": "maintained primary with paper-exact legacy appendix",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "maintained immutable pin",
+        "ref": "v1.15.43",
+        "commit": "73f0f386da64fe432975183f9ccf28429b52638a",
+        "paper_ref": "v1.2.51",
+        "paper_commit": "8eae00900f88b09cf04dc1a991f815124a07d08f"
+      },
+      "runner": "evaluation/scripts/polars_swc_rustpython_primary_campaign.py",
+      "harnesses": [
+        {
+          "id": "large_parser",
+          "overview_rank": 1,
+          "overview_label": "Parse large input",
+          "selector": "es/large/parser",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "large_fixer",
+          "selector": "es/large/base/fixer",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "large_codegen_es2020",
+          "selector": "es/large/codegen/es2020",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "large_all_es2020",
+          "overview_rank": 2,
+          "overview_label": "Parse, transform, and codegen",
+          "selector": "es/large/all/es2020",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "large_all_es5",
+          "selector": "es/large/all/es5",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "rustpython",
+      "label": "RustPython",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "paper_alignment": "maintained primary with unavailable paper tag documented",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "current-source immutable snapshot",
+        "ref": "main@2026-07-13",
+        "commit": "a9c2c529b14199a7ae7893b9d82c8bebe6b17418",
+        "workspace_version": "0.5.0",
+        "rust_version": "1.95.0",
+        "paper_ref": "v0.1.2 (unavailable upstream)"
+      },
+      "runner": "evaluation/scripts/polars_swc_rustpython_primary_campaign.py",
+      "harnesses": [
+        {
+          "id": "parse_mandelbrot",
+          "overview_rank": 1,
+          "overview_label": "Parse Mandelbrot",
+          "selector": "parse_to_ast/rustpython/mandelbrot.py",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "execute_mandelbrot",
+          "selector": "execution/mandelbrot.py/rustpython",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "execute_nbody",
+          "overview_rank": 2,
+          "overview_label": "Execute n-body",
+          "selector": "execution/nbody.py/rustpython",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "execute_fannkuch",
+          "selector": "execution/fannkuch.py/rustpython",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "pystone_30000",
+          "selector": "pystone/rustpython/30000",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        }
+      ]
+    },
+    {
+      "id": "actix_web",
+      "label": "Actix Web",
+      "rss_work_model": "workload_native_adaptive_iterations",
+      "paper_alignment": "maintained service supplement",
+      "readiness": "exact_f5d0c19_campaign_frozen",
+      "source": {
+        "track": "maintained immutable pin",
+        "ref": "web-v4.14.0",
+        "commit": "696b1fed9c5b0147c37c70e0808cae5f63a5a4a0"
+      },
+      "runner": "evaluation/scripts/type_isolation_redb_actix_campaign.py",
+      "harnesses": [
+        {
+          "id": "async_service_direct",
+          "overview_rank": 1,
+          "overview_label": "Direct async service",
+          "selector": "async_service_direct",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "async_web_service_direct",
+          "selector": "async_web_service_direct",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "get_body_async_burst",
+          "selector": "get_body_async_burst",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "compression_gzip",
+          "overview_rank": 2,
+          "overview_label": "Gzip compression",
+          "selector": "compression responses/gzip",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        },
+        {
+          "id": "router_actix",
+          "selector": "Compare Routers/actix",
+          "metric_direction": "lower_is_better",
+          "performance_unit": "seconds",
+          "performance_source": "criterion-median-seconds-per-iteration",
+          "aggregate_role": "primary"
+        }
+      ]
+    }
+  ],
+  "data_eligibility_gates": [
+    "source commit, input, command, work amount, and variants are fixed before measurement",
+    "exit status and workload-native correctness oracle pass",
+    "allocator activation and actual-MIR provenance are verified",
+    "performance statistics are disabled",
+    "at least one warmup and five complete paired measured rounds exist",
+    "typed_plain and typeiso_perf differ only in the policy flag",
+    "raw evidence and source audit digests are retained"
+  ],
+  "analysis_amendments": [
+    {
+      "id": "rss-work-interpretation-20260714",
+      "status": "active",
+      "kind": "post_preregistration_interpretation_amendment",
+      "original_campaign_manifest_sha256": "96fa64009550d52f89549dd2124e3b1a402a42b7f1fd1750888600dd67bb8a6f",
+      "original_manifest_snapshot": "docs/evidence/type-isolation-primary-suite-20260714/pre-amendment-suite-manifest-96fa640.json",
+      "scope": "RSS interpretation, aggregate eligibility, and presentation markers",
+      "unchanged_contract": [
+        "target_membership",
+        "source_pins",
+        "harnesses",
+        "variants"
+      ],
+      "benchmark_definitions_changed": false,
+      "sampling_budget_changed": false,
+      "core_comparable_rss_work_model": "fixed_work",
+      "adaptive_rss_comparison_eligibility": "diagnostic_only",
+      "interpretation": "Benchmark definitions and the one-warmup plus five-round sampling budget stayed fixed; fixed-work RSS alone is core-comparable."
+    }
+  ]
+}
