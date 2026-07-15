@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-15T15:42:14Z",
+  "source": "proven_local_abi_real_application_coverage",
+  "verdict": {
+    "decision": "reject_enablement",
+    "production_change": false,
+    "reason": "The current compiler selected zero direct-local ABI rows across 487 Oxipng semantic allocation/Drop rewrites and 3820 Polars semantic allocation/Drop rewrites.",
+    "recommendation": "Keep the direct-local ABI behind its existing conservative gate. Improve exact-owner proof coverage before spending another external-workload timing slot."
+  },
+  "implementation": {
+    "production_base_commit": "e8fcc378c14442fe8993d29578f38eeb5df5acc9",
+    "evaluation_revision": "9e8f32c45d98901cd71099e0f028e41846f965d0",
+    "crosscrate_contract_repair_commit": "2ce1469070990dc77084a03c7bb13f56d8aaaaa8",
+    "unialloc_implementation_sha256": "0d79d91ba1ee033f564e24e78b40576e6fa52ef74e5d0b6e36442deadecc9952",
+    "mir_pass_sha256": "8bc7897d710ce2929abbd938b6f3b9ce0c96c2b47da7ac1f7473a8e3ddc14bc7",
+    "production_and_pass_match_base": true,
+    "boundary": "The evaluation revision differs from the production base only by a detached-probe lockfile repair. The later cross-crate commit changes test fixtures only."
+  },
+  "coverage_metric": {
+    "denominator": "semantic_scope_rewrite_applied_count + semantic_scope_drop_rewrite_applied_count",
+    "numerator": "direct_local_size_align_semantic_drop_scope_count, corroborated by applied audit rows whose replacement or contract contains _local or local_no_recovery",
+    "ownership_transfer_treatment": "Reported separately because the direct-local allocation/Drop ABI does not apply to ownership-transfer rewrites.",
+    "interpretation": "Zero compiler-selected local rows means these binaries cannot exercise the direct-local fast ABI, so an external runtime A/B would measure build-layout noise rather than this optimization."
+  },
+  "workloads": {
+    "oxipng": {
+      "source_commit": "628e241e23f368097883807fa6e985ccf7c00357",
+      "variant": "typeiso_perf",
+      "direct_local_flags_enabled": {
+        "audit_file_count": 6,
+        "direct_local_metadata_abi_requested_files": 6,
+        "direct_local_size_align_requested_files": 6,
+        "rewrite_candidate_count": 2670,
+        "applied": {
+          "semantic_allocation_scopes": 72,
+          "semantic_drop_scopes": 415,
+          "semantic_ownership_transfers": 0,
+          "coverage_denominator": 487,
+          "total_compiler_rewrites": 487
+        },
+        "local": {
+          "selected_scopes": 0,
+          "applied_local_marker_rows": 0,
+          "pairing_gaps": 0,
+          "metadata_contract_violations": 0,
+          "coverage_ratio": 0.0
+        },
+        "hashes": {
+          "derived_source_sha256": "70f45ea06c2dcc9725953dda2b8857210d60ccc490aaf3386bcbfe830c36d075",
+          "cargo_lock_sha256": "0d928d30386fa54b4d9ff89c886336123c6d3593aa9c6d8ff5fafc873f684bd4",
+          "audit_sha256": "529cff850385f311900799abf6e06a61866097df076d14dff0a036afb0cd405a",
+          "build_record_binary_sha256": "6fdb05d6c5a10ad3aed99895c7d0892af4d373f97117f4b690afc12b7f87e3c3",
+          "retained_binary_sha256_after_section_inspection": "7b8322702320dda2fc8a57333bf9f46e078cbb45ea7aa843694b0da7d3da5856"
+        },
+        "build": {
+          "wall_seconds": 30.55898588,
+          "commands": [
+            {
+              "command": "cargo +nightly-2026-06-11 build --release --locked --bin oxipng --jobs 8",
+              "wall_seconds": 17.461840251
+            },
+            {
+              "command": "cargo +nightly-2026-06-11 bench --no-run --locked --bench filters --bench strategies --bench reductions --jobs 8",
+              "wall_seconds": 13.097145629
+            }
+          ],
+          "record": "/home/hanqing/alloc/UniAlloc-proven-local-direct-oxipng-20260715/builds/oxipng/typeiso_perf/build.json"
+        }
+      },
+      "conservative_control": {
+        "audit_file_count": 6,
+        "direct_local_metadata_abi_requested_files": 0,
+        "direct_local_size_align_requested_files": 0,
+        "rewrite_candidate_count": 2670,
+        "applied": {
+          "semantic_allocation_scopes": 72,
+          "semantic_drop_scopes": 415,
+          "semantic_ownership_transfers": 0,
+          "coverage_denominator": 487,
+          "total_compiler_rewrites": 487
+        },
+        "local": {
+          "selected_scopes": 0,
+          "applied_local_marker_rows": 0,
+          "pairing_gaps": 0,
+          "metadata_contract_violations": 0,
+          "coverage_ratio": 0.0
+        },
+        "hashes": {
+          "derived_source_sha256": "b9855c80b2d667f020e91d1f5cb802ceeaa609b0b27f1e5fc297e1e014cfd4d1",
+          "cargo_lock_sha256": "0d928d30386fa54b4d9ff89c886336123c6d3593aa9c6d8ff5fafc873f684bd4",
+          "audit_sha256": "39962cdd32716005532aa82828d6182cf7c2e64ce0059ade62d0463d60997a17",
+          "build_record_binary_sha256": "3ba71e85753a1f355a20a4c747b2e5f075d34c02d6b46459d7c67a0e3058c373",
+          "retained_binary_sha256_after_section_inspection": "c5619d9fff89d4a212009da5f2145e3fe2b84e80e90e001866834fa0b6a431f4"
+        },
+        "build": {
+          "wall_seconds": 30.673440753,
+          "record": "/home/hanqing/alloc/UniAlloc-proven-local-conservative-oxipng-20260715/builds/oxipng/typeiso_perf/build.json"
+        }
+      },
+      "comparison": {
+        "selected_rewrite_counts_equal": true,
+        "build_record_whole_elf_sha256_equal": false,
+        "hash_boundary": "The build-record SHA values were captured immediately after each build. Later objcopy section inspection rewrote the retained ELF containers, whose post-inspection hashes are recorded separately. The isolated builds already had different original hashes, so this evaluation makes no binary-identity or performance claim from them."
+      }
+    },
+    "polars": {
+      "source_commit": "0df0c25d4db895ec8cad773bedc4e98400e3135e",
+      "source_ref": "py-1.42.1",
+      "variant": "typeiso_perf",
+      "audit_file_count": 10,
+      "direct_local_metadata_abi_requested_files": 10,
+      "direct_local_size_align_requested_files": 10,
+      "rewrite_candidate_count": 75415,
+      "applied": {
+        "semantic_allocation_scopes": 1885,
+        "semantic_drop_scopes": 1935,
+        "semantic_ownership_transfers": 19,
+        "coverage_denominator": 3820,
+        "total_compiler_rewrites": 3839
+      },
+      "local": {
+        "selected_scopes": 0,
+        "applied_local_marker_rows": 0,
+        "pairing_gaps": 0,
+        "metadata_contract_violations": 0,
+        "coverage_ratio": 0.0
+      },
+      "hashes": {
+        "cargo_lock_sha256": "ef6b05dce3f9a2a03c41d689ff70e21335c677507a1cfcfaf0894343aa2ef984",
+        "campaign_snapshot_sha256": "07676ddd583d917c021dfc97bf18943749f4d81f53b7e1474ba156c352f2e6f0",
+        "audit_sha256": "0aa75fb0137c9e7d065e9958af24844a8ac4e8f37c0177f8adc00bf7c7f90375",
+        "binary_sha256": "9b5bc76da20a47acca6deb694d724337aeb97c365ebed59bd73fa0c279d104a8"
+      },
+      "build": {
+        "command": "cargo +nightly-2026-06-11 build --release --package polars-unialloc-primary --message-format=json-render-diagnostics --jobs 16",
+        "wall_seconds": 764.052042991,
+        "record": "/home/hanqing/alloc/UniAlloc-proven-local-direct-primary-20260715/builds/polars/typeiso_perf/build.json"
+      },
+      "campaign_boundary": "The build-only campaign stopped immediately after the completed Polars result. A SWC build had already begun while the Polars completion was being reported; it was interrupted and its partial output is excluded. RustPython and conservative Polars were not started because Oxipng and Polars both selected zero local rows."
+    }
+  },
+  "functional_micro_probes": {
+    "direct_local_ownership_pairing": {
+      "status": "pass",
+      "current_exact_owner_fixture_selects_local_abi": true,
+      "runtime": {
+        "typed_allocations": 4,
+        "typed_deallocations": 4,
+        "fallback_allocations": 0,
+        "fallback_deallocations": 0,
+        "raw_dealloc_no_metadata": 0
+      },
+      "boundary": "This is a synthetic functional ownership proof. It establishes mechanism reachability, not runtime speed or real-application coverage."
+    },
+    "generic_box_monomorphized_identity": {
+      "status": "pass",
+      "runtime": {
+        "typed_allocations": 4,
+        "typed_deallocations": 4,
+        "minimum_typed_cache_hits": 2,
+        "fallback_allocations": 0,
+        "fallback_deallocations": 0
+      },
+      "boundary": "This adjacent generic runtime-type probe validates exact identity and recovery behavior; it is not a direct-local performance benchmark."
+    },
+    "conclusion": "The local mechanism works in bounded synthetic fixtures, while current realistic-app compiler reach is zero."
+  },
+  "crosscrate_contract_repairs": {
+    "generic_probe_lockfile_commit": "9e8f32c45d98901cd71099e0f028e41846f965d0",
+    "current_contract_commit": "2ce1469070990dc77084a03c7bb13f56d8aaaaa8",
+    "plain_pathbuf": {
+      "status": "pass",
+      "typed_allocations": 0,
+      "raw_fallback_allocations": 4,
+      "raw_fallback_deallocations": 4,
+      "side_cache_occupied_entries": 0,
+      "side_cache_retained_bytes": 0
+    },
+    "cleanup_unwind_pathbuf": {
+      "status": "pass",
+      "typed_allocations": 0,
+      "raw_fallback_allocations": 2,
+      "raw_fallback_deallocations": 2,
+      "side_cache_occupied_entries": 0,
+      "side_cache_retained_bytes": 0
+    },
+    "returned_string": {
+      "status": "pass",
+      "typed_allocations": 4,
+      "typed_deallocations": 4,
+      "typed_cache_hits": 2,
+      "recovery_identity_matches": 2,
+      "recovery_identity_mismatches": 0,
+      "authenticated_recovery_drop_rows": 4
+    },
+    "boundary": "These commits repair detached offline harnesses and stale test expectations. They do not widen compiler proof or change allocator behavior."
+  },
+  "timing": {
+    "performed": false,
+    "reason": "Both completed realistic workloads selected zero direct-local rows. Timing separate build roots would not measure the direct-local ABI.",
+    "performance_claim": null
+  },
+  "verification": [
+    "uv run python -m py_compile tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_recovery.py tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_unwind_recovery.py tools/unialloc-rustc-pass/test_mir_crosscrate_returned_string_recovery.py",
+    "uv run python tools/unialloc-rustc-pass/test_mir_direct_local_ownership_pairing.py",
+    "uv run python tools/unialloc-rustc-pass/test_mir_generic_box_monomorphized_identity.py",
+    "uv run python tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_recovery.py",
+    "uv run python tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_unwind_recovery.py",
+    "uv run python tools/unialloc-rustc-pass/test_mir_crosscrate_returned_string_recovery.py"
+  ],
+  "remaining_risks": [
+    "Other applications may contain exact zero-alias owner shapes that the two completed workloads do not exercise.",
+    "The direct-local fast ABI still lacks a current performance measurement from a realistic workload with nonzero compiler-selected coverage.",
+    "These current-working-tree audits are diagnostic and report claim_grade_file_count zero; the rejection uses a conservative coverage gate and makes no publication-grade performance claim.",
+    "Oxipng direct and conservative builds used separate roots and produced different ELF layouts, so their binary hashes cannot establish code-generation identity.",
+    "Complete SWC and RustPython coverage remain unmeasured in this bounded stop-after-zero campaign."
+  ]
+}
