@@ -1,4 +1,5 @@
-//! Feature-gated payload arenas driven by exact lifetime metadata.
+//! Feature-gated payload arenas driven by exact lifetime metadata or runtime
+//! allocation-site survival.
 //!
 //! Classified objects carry one of the stable ABI values Unknown/Ephemeral/
 //! LongLived. A process-wide logical epoch records whether each routed object
@@ -7,7 +8,8 @@
 //! matrices. Regions reused across epochs by a non-cohort policy are excluded
 //! when individual object epochs cannot be recovered without side metadata. The
 //! epoch-cohort policy also keeps different birth epochs out of the same 2 MiB
-//! extent so runtime truth can guide reclaim-oriented placement experiments.
+//! extent. The adaptive policy learns site survival from later allocation
+//! pressure and uses static lifetime metadata only as a weak prior.
 //!
 //! The implementation deliberately owns all bookkeeping in fixed process
 //! tables. Mapping or releasing an extent therefore cannot recurse through the
@@ -45,6 +47,34 @@ const TOMBSTONE: usize = usize::MAX - 1;
 // experiment. It is an evaluation parameter, not a claimed universal optimum.
 const THP_PROMOTION_MIN_LIVE_BYTES: usize = LIFETIME_HUGEPAGE_EXTENT_BYTES / 2;
 
+// Marker-free lifetime learning uses allocation pressure instead of attempting
+// to infer application-specific semantic phases. One epoch is one 2 MiB THP's
+// worth of eligible exact-site payload capacity. Both tracked allocations and
+// model-directed base-allocator bypasses advance pressure. Objects released
+// before 2 MiB of later pressure are short, objects surviving at least 8 MiB
+// are long, and the interval between those thresholds is deliberately censored.
+const ADAPTIVE_EPOCH_BYTES: u64 = LIFETIME_HUGEPAGE_EXTENT_BYTES as u64;
+const ADAPTIVE_LONG_AGE_BYTES: u64 = 4 * ADAPTIVE_EPOCH_BYTES;
+const ADAPTIVE_SITE_SLOTS: usize = 4096;
+const ADAPTIVE_SITE_PROBE_LIMIT: usize = 16;
+const ADAPTIVE_MIN_DECISIVE_SAMPLES: u32 = 8;
+const ADAPTIVE_MIN_SAMPLES_AFTER_TRANSITION: u32 = 4;
+const ADAPTIVE_COUNTER_DECAY_INTERVAL: u32 = 256;
+const ADAPTIVE_COLD_MAX_INFLIGHT: u32 = 8;
+const ADAPTIVE_SHORT_SAMPLE_INTERVAL: u32 = 256;
+const ADAPTIVE_TRAILER_ACTIVE: u16 = 1;
+
+#[inline]
+fn adaptive_lifetime_outcome(age_bytes: u64) -> Option<bool> {
+    if age_bytes < ADAPTIVE_EPOCH_BYTES {
+        Some(false)
+    } else if age_bytes >= ADAPTIVE_LONG_AGE_BYTES {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// Physical page backend used for placements selected by the lifetime policy.
 ///
 /// Placement policy and backing mechanism are configured independently so the
@@ -77,6 +107,11 @@ pub enum LifetimeHugepagePolicy {
     /// different runtime epochs out of the same 2 MiB extent. Static
     /// confidence abstention happens before this ABI and arrives as Unknown.
     EpochCohortHugepage = 4,
+    /// Learn allocation-site survival from allocator-observed byte pressure.
+    /// Tracked Cold and sampled Short allocations use ordinary
+    /// `MADV_NOHUGEPAGE` extents, model-directed bypasses use the base allocator,
+    /// and learned-Long sites use eager anonymous `MADV_HUGEPAGE` extents.
+    AdaptiveRuntimeHugepage = 5,
 }
 
 impl LifetimeHugepagePolicy {
@@ -87,6 +122,7 @@ impl LifetimeHugepagePolicy {
             2 => Self::LongLivedHugepage,
             3 => Self::SegregatedHugepage,
             4 => Self::EpochCohortHugepage,
+            5 => Self::AdaptiveRuntimeHugepage,
             _ => Self::Disabled,
         }
     }
@@ -101,11 +137,11 @@ impl LifetimeHugepagePolicy {
             (Self::Disabled, _) | (_, LifetimePlacementClass::Unknown) => None,
             (Self::SegregatedOrdinary, _) => Some(RequestedBacking::Ordinary),
             (
-                Self::LongLivedHugepage | Self::EpochCohortHugepage,
+                Self::LongLivedHugepage | Self::EpochCohortHugepage | Self::AdaptiveRuntimeHugepage,
                 LifetimePlacementClass::Ephemeral,
             ) => Some(RequestedBacking::Ordinary),
             (
-                Self::LongLivedHugepage | Self::EpochCohortHugepage,
+                Self::LongLivedHugepage | Self::EpochCohortHugepage | Self::AdaptiveRuntimeHugepage,
                 LifetimePlacementClass::LongLived,
             )
             | (Self::SegregatedHugepage, _) => Some(RequestedBacking::LargePage),
@@ -317,13 +353,66 @@ pub struct LifetimeHugepageStatsSnapshot {
     /// Compatibility alias for `retained_slack_bytes`.
     pub stranded_bytes: usize,
     pub all_mappings_released: bool,
+    /// Marker-free classifier input and model telemetry. Pressure counts
+    /// eligible exact-site payload capacity for tracked allocations and
+    /// model-directed bypasses; slot trailers are excluded.
+    pub adaptive_pressure_bytes: u64,
+    pub adaptive_pressure_epoch: usize,
+    pub adaptive_epoch_advances: usize,
+    pub adaptive_site_count: usize,
+    pub adaptive_cold_sites: usize,
+    pub adaptive_short_sites: usize,
+    pub adaptive_long_sites: usize,
+    pub adaptive_eligible_allocations: usize,
+    pub adaptive_training_allocations: usize,
+    pub adaptive_cold_bypassed_allocations: usize,
+    pub adaptive_short_routed_allocations: usize,
+    pub adaptive_short_bypassed_allocations: usize,
+    pub adaptive_long_routed_allocations: usize,
+    pub adaptive_missing_identity_bypasses: usize,
+    pub adaptive_site_table_bypasses: usize,
+    pub adaptive_prior_conflicts: usize,
+    pub adaptive_live_trailers: usize,
+    pub adaptive_trailer_corruptions: usize,
+    pub adaptive_short_observations: usize,
+    pub adaptive_long_observations: usize,
+    pub adaptive_censored_observations: usize,
+    pub adaptive_decisive_observation_bytes: usize,
+    pub adaptive_promotions: usize,
+    pub adaptive_demotions: usize,
+    pub adaptive_prior_corrections: usize,
+    /// Prequential learned-prediction matrix. Cold abstentions are excluded;
+    /// byte fields use payload capacity and exclude the hidden trailer.
+    pub adaptive_predictor_true_positive_objects: usize,
+    pub adaptive_predictor_true_positive_bytes: usize,
+    pub adaptive_predictor_true_negative_objects: usize,
+    pub adaptive_predictor_true_negative_bytes: usize,
+    pub adaptive_predictor_false_positive_objects: usize,
+    pub adaptive_predictor_false_positive_bytes: usize,
+    pub adaptive_predictor_false_negative_objects: usize,
+    pub adaptive_predictor_false_negative_bytes: usize,
+    /// Allocation-time compiler/static-hint matrix against allocator pressure
+    /// truth. Unknown hints are counted separately as abstentions; byte fields
+    /// use payload capacity and exclude the hidden trailer.
+    pub adaptive_static_hint_true_positive_objects: usize,
+    pub adaptive_static_hint_true_positive_bytes: usize,
+    pub adaptive_static_hint_true_negative_objects: usize,
+    pub adaptive_static_hint_true_negative_bytes: usize,
+    pub adaptive_static_hint_false_positive_objects: usize,
+    pub adaptive_static_hint_false_positive_bytes: usize,
+    pub adaptive_static_hint_false_negative_objects: usize,
+    pub adaptive_static_hint_false_negative_bytes: usize,
+    pub adaptive_static_hint_abstained_objects: usize,
+    pub adaptive_static_hint_abstained_bytes: usize,
 }
 
 #[derive(Clone, Copy)]
 struct SlotGeometry {
     slot_size: usize,
+    payload_capacity: usize,
     region_capacity: usize,
     bucket: usize,
+    adaptive_trailer: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -374,6 +463,391 @@ impl ConfusionCounters {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum AdaptivePrediction {
+    Cold = 0,
+    Short = 1,
+    Long = 2,
+}
+
+impl AdaptivePrediction {
+    #[inline]
+    fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Cold),
+            1 => Some(Self::Short),
+            2 => Some(Self::Long),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn placement_class(self) -> LifetimePlacementClass {
+        match self {
+            Self::Long => LifetimePlacementClass::LongLived,
+            Self::Cold | Self::Short => LifetimePlacementClass::Ephemeral,
+        }
+    }
+}
+
+#[inline]
+fn lifetime_class_from_u8(value: u8) -> Option<LifetimePlacementClass> {
+    match value {
+        0 => Some(LifetimePlacementClass::Unknown),
+        1 => Some(LifetimePlacementClass::Ephemeral),
+        2 => Some(LifetimePlacementClass::LongLived),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AdaptiveSiteKey {
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+    flags: u32,
+    placement_hint: u16,
+    payload_capacity: usize,
+    align: usize,
+}
+
+impl AdaptiveSiteKey {
+    const fn empty() -> Self {
+        Self {
+            callsite: 0,
+            type_id: 0,
+            module_id: 0,
+            flags: 0,
+            placement_hint: 0,
+            payload_capacity: 0,
+            align: 0,
+        }
+    }
+
+    #[inline]
+    fn from_metadata(
+        metadata: AllocationMetadata,
+        payload_capacity: usize,
+        align: usize,
+    ) -> Option<Self> {
+        if metadata.callsite == 0 || !metadata.has_type() || metadata.requests(FLAG_DELAYED_FREE) {
+            return None;
+        }
+        Some(Self {
+            callsite: metadata.callsite,
+            type_id: metadata.type_id,
+            module_id: metadata.module_id,
+            flags: metadata.flags,
+            placement_hint: metadata.placement_hint,
+            payload_capacity,
+            align,
+        })
+    }
+
+    #[inline]
+    fn fingerprint(self) -> u64 {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for value in [
+            self.callsite,
+            self.type_id,
+            self.module_id,
+            self.flags as u64,
+            self.placement_hint as u64,
+            self.payload_capacity as u64,
+            self.align as u64,
+        ] {
+            hash ^= value;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        if hash == 0 {
+            1
+        } else {
+            hash
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AdaptiveSiteState {
+    key: AdaptiveSiteKey,
+    fingerprint: u64,
+    short_votes: u32,
+    long_votes: u32,
+    decisive_samples: u32,
+    censored_samples: u32,
+    samples_since_transition: u32,
+    allocations_since_sample: u32,
+    tracked_inflight: u32,
+    prediction: AdaptivePrediction,
+    static_prior: LifetimePlacementClass,
+    prior_conflict: bool,
+}
+
+impl AdaptiveSiteState {
+    const fn empty() -> Self {
+        Self {
+            key: AdaptiveSiteKey::empty(),
+            fingerprint: 0,
+            short_votes: 0,
+            long_votes: 0,
+            decisive_samples: 0,
+            censored_samples: 0,
+            samples_since_transition: 0,
+            allocations_since_sample: 0,
+            tracked_inflight: 0,
+            prediction: AdaptivePrediction::Cold,
+            static_prior: LifetimePlacementClass::Unknown,
+            prior_conflict: false,
+        }
+    }
+
+    fn new(key: AdaptiveSiteKey, static_prior: LifetimePlacementClass) -> Self {
+        let (short_votes, long_votes) = match static_prior {
+            LifetimePlacementClass::Unknown => (1, 1),
+            LifetimePlacementClass::Ephemeral => (3, 1),
+            LifetimePlacementClass::LongLived => (1, 3),
+        };
+        Self {
+            key,
+            fingerprint: key.fingerprint(),
+            short_votes,
+            long_votes,
+            decisive_samples: 0,
+            censored_samples: 0,
+            samples_since_transition: 0,
+            allocations_since_sample: 0,
+            tracked_inflight: 0,
+            prediction: AdaptivePrediction::Cold,
+            static_prior,
+            prior_conflict: false,
+        }
+    }
+
+    #[inline]
+    fn is_empty(self) -> bool {
+        self.fingerprint == 0
+    }
+
+    #[inline]
+    fn note_prior(&mut self, incoming: LifetimePlacementClass) -> bool {
+        if incoming == LifetimePlacementClass::Unknown || self.prior_conflict {
+            return false;
+        }
+        if self.static_prior == LifetimePlacementClass::Unknown {
+            self.static_prior = incoming;
+            match incoming {
+                LifetimePlacementClass::Ephemeral => {
+                    self.short_votes = self.short_votes.saturating_add(2)
+                }
+                LifetimePlacementClass::LongLived => {
+                    self.long_votes = self.long_votes.saturating_add(2)
+                }
+                LifetimePlacementClass::Unknown => unreachable!(),
+            }
+            return false;
+        }
+        if self.static_prior != incoming && !self.prior_conflict {
+            self.prior_conflict = true;
+            self.static_prior = LifetimePlacementClass::Unknown;
+            self.short_votes = 1;
+            self.long_votes = 1;
+            self.decisive_samples = 0;
+            self.censored_samples = 0;
+            self.prediction = AdaptivePrediction::Cold;
+            self.samples_since_transition = 0;
+            self.allocations_since_sample = 0;
+            return true;
+        }
+        false
+    }
+
+    #[inline]
+    fn effective_prediction(self) -> AdaptivePrediction {
+        self.prediction
+    }
+
+    #[inline]
+    fn should_track_allocation(&mut self) -> bool {
+        match self.effective_prediction() {
+            AdaptivePrediction::Cold => {
+                if self.tracked_inflight >= ADAPTIVE_COLD_MAX_INFLIGHT {
+                    return false;
+                }
+                let observed_samples = self.decisive_samples.saturating_add(self.censored_samples);
+                if observed_samples < ADAPTIVE_MIN_DECISIVE_SAMPLES {
+                    self.allocations_since_sample = 0;
+                    return true;
+                }
+            }
+            AdaptivePrediction::Long => {
+                self.allocations_since_sample = 0;
+                return true;
+            }
+            AdaptivePrediction::Short => {}
+        }
+        self.allocations_since_sample = self.allocations_since_sample.saturating_add(1);
+        if self.allocations_since_sample < ADAPTIVE_SHORT_SAMPLE_INTERVAL {
+            return false;
+        }
+        self.allocations_since_sample = 0;
+        true
+    }
+
+    #[inline]
+    fn note_tracked_allocation(&mut self) {
+        self.tracked_inflight = self.tracked_inflight.saturating_add(1);
+    }
+
+    #[inline]
+    fn note_tracked_deallocation(&mut self) {
+        self.tracked_inflight = self.tracked_inflight.saturating_sub(1);
+    }
+
+    fn observe(&mut self, actual_long: Option<bool>) -> AdaptiveTransition {
+        let Some(actual_long) = actual_long else {
+            self.censored_samples = self.censored_samples.saturating_add(1);
+            return AdaptiveTransition::None;
+        };
+        if actual_long {
+            self.long_votes = self.long_votes.saturating_add(1);
+        } else {
+            self.short_votes = self.short_votes.saturating_add(1);
+        }
+        self.decisive_samples = self.decisive_samples.saturating_add(1);
+        self.samples_since_transition = self.samples_since_transition.saturating_add(1);
+
+        if self.decisive_samples % ADAPTIVE_COUNTER_DECAY_INTERVAL == 0 {
+            self.short_votes = core::cmp::max(1, self.short_votes / 2);
+            self.long_votes = core::cmp::max(1, self.long_votes / 2);
+        }
+        if self.decisive_samples < ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            return AdaptiveTransition::None;
+        }
+
+        let total = self.short_votes.saturating_add(self.long_votes) as u64;
+        let long_percent = (self.long_votes as u64).saturating_mul(100) / total;
+        match self.prediction {
+            AdaptivePrediction::Cold if long_percent >= 80 => {
+                self.prediction = AdaptivePrediction::Long;
+                self.samples_since_transition = 0;
+                AdaptiveTransition::PromotedLong
+            }
+            AdaptivePrediction::Cold if long_percent <= 20 => {
+                self.prediction = AdaptivePrediction::Short;
+                self.samples_since_transition = 0;
+                AdaptiveTransition::PromotedShort
+            }
+            AdaptivePrediction::Long
+                if self.samples_since_transition >= ADAPTIVE_MIN_SAMPLES_AFTER_TRANSITION
+                    && long_percent < 60 =>
+            {
+                self.prediction = AdaptivePrediction::Cold;
+                self.samples_since_transition = 0;
+                AdaptiveTransition::Demoted
+            }
+            AdaptivePrediction::Short
+                if self.samples_since_transition >= ADAPTIVE_MIN_SAMPLES_AFTER_TRANSITION
+                    && long_percent > 40 =>
+            {
+                self.prediction = AdaptivePrediction::Cold;
+                self.samples_since_transition = 0;
+                AdaptiveTransition::Demoted
+            }
+            _ => AdaptiveTransition::None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdaptiveTransition {
+    None,
+    PromotedShort,
+    PromotedLong,
+    Demoted,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct AdaptiveSlotTrailer {
+    birth_pressure: u64,
+    site_fingerprint: u64,
+    site_index: u32,
+    requested_size: u32,
+    prediction: u8,
+    static_hint: u8,
+    flags: u16,
+    checksum: u32,
+}
+
+#[derive(Clone, Copy)]
+struct AdaptiveAllocationRecord {
+    birth_pressure: u64,
+    site_fingerprint: u64,
+    site_index: usize,
+    requested_size: usize,
+    prediction: AdaptivePrediction,
+    static_hint: LifetimePlacementClass,
+}
+
+impl AdaptiveSlotTrailer {
+    fn new(
+        ptr: *mut u8,
+        birth_pressure: u64,
+        site_fingerprint: u64,
+        site_index: usize,
+        requested_size: usize,
+        prediction: AdaptivePrediction,
+        static_hint: LifetimePlacementClass,
+    ) -> Self {
+        let mut trailer = Self {
+            birth_pressure,
+            site_fingerprint,
+            site_index: site_index as u32,
+            requested_size: requested_size as u32,
+            prediction: prediction as u8,
+            static_hint: static_hint as u8,
+            flags: ADAPTIVE_TRAILER_ACTIVE,
+            checksum: 0,
+        };
+        trailer.checksum = trailer.expected_checksum(ptr);
+        trailer
+    }
+
+    #[inline]
+    fn expected_checksum(self, ptr: *mut u8) -> u32 {
+        let mut hash = 0x811c_9dc5u32;
+        for value in [
+            self.birth_pressure,
+            self.site_fingerprint,
+            self.site_index as u64,
+            self.requested_size as u64,
+            self.prediction as u64,
+            self.static_hint as u64,
+            self.flags as u64,
+            ptr as usize as u64,
+        ] {
+            hash ^= value as u32;
+            hash = hash.wrapping_mul(0x0100_0193);
+            hash ^= (value >> 32) as u32;
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+        hash
+    }
+
+    #[inline]
+    fn is_valid(self, ptr: *mut u8, payload_capacity: usize) -> bool {
+        self.flags == ADAPTIVE_TRAILER_ACTIVE
+            && self.requested_size as usize <= payload_capacity
+            && (self.site_index as usize) < ADAPTIVE_SITE_SLOTS
+            && AdaptivePrediction::from_u8(self.prediction).is_some()
+            && lifetime_class_from_u8(self.static_hint).is_some()
+            && self.checksum == self.expected_checksum(ptr)
+    }
+}
+
+const _: () = assert!(size_of::<AdaptiveSlotTrailer>() == 32);
 
 /// Match the semantic cache's exact reuse boundary. Callsite stays
 /// diagnostic-only because allocation and matching Drop sites are distinct.
@@ -445,6 +919,7 @@ impl IdentityRegion {
 struct Extent {
     base: usize,
     slot_size: usize,
+    payload_capacity: usize,
     region_capacity: usize,
     live: usize,
     bucket: usize,
@@ -453,6 +928,7 @@ struct Extent {
     /// Nonzero only when policy forbids cross-epoch extent mixing.
     cohort_epoch: usize,
     backing: ActualBacking,
+    adaptive_trailer: bool,
     available_prev: usize,
     available_next: usize,
     on_available_list: bool,
@@ -464,6 +940,7 @@ impl Extent {
         Self {
             base: 0,
             slot_size: 0,
+            payload_capacity: 0,
             region_capacity: 0,
             live: 0,
             bucket: 0,
@@ -471,6 +948,7 @@ impl Extent {
             lifetime_class: LifetimePlacementClass::Unknown,
             cohort_epoch: 0,
             backing: ActualBacking::Unmapped,
+            adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
@@ -599,6 +1077,32 @@ struct LifetimeArenaState {
     placement_confusion: ConfusionCounters,
     current_identity_regions: usize,
     peak_identity_regions: usize,
+    adaptive_sites: [AdaptiveSiteState; ADAPTIVE_SITE_SLOTS],
+    adaptive_pressure_bytes: u64,
+    adaptive_epoch_advances: usize,
+    adaptive_site_count: usize,
+    adaptive_eligible_allocations: usize,
+    adaptive_training_allocations: usize,
+    adaptive_cold_bypassed_allocations: usize,
+    adaptive_short_routed_allocations: usize,
+    adaptive_short_bypassed_allocations: usize,
+    adaptive_long_routed_allocations: usize,
+    adaptive_missing_identity_bypasses: usize,
+    adaptive_site_table_bypasses: usize,
+    adaptive_prior_conflicts: usize,
+    adaptive_live_trailers: usize,
+    adaptive_trailer_corruptions: usize,
+    adaptive_short_observations: usize,
+    adaptive_long_observations: usize,
+    adaptive_censored_observations: usize,
+    adaptive_decisive_observation_bytes: usize,
+    adaptive_promotions: usize,
+    adaptive_demotions: usize,
+    adaptive_prior_corrections: usize,
+    adaptive_predictor_confusion: ConfusionCounters,
+    adaptive_static_hint_confusion: ConfusionCounters,
+    adaptive_static_hint_abstained_objects: usize,
+    adaptive_static_hint_abstained_bytes: usize,
 }
 
 impl LifetimeArenaState {
@@ -666,11 +1170,37 @@ impl LifetimeArenaState {
             placement_confusion: ConfusionCounters::new(),
             current_identity_regions: 0,
             peak_identity_regions: 0,
+            adaptive_sites: [AdaptiveSiteState::empty(); ADAPTIVE_SITE_SLOTS],
+            adaptive_pressure_bytes: 0,
+            adaptive_epoch_advances: 0,
+            adaptive_site_count: 0,
+            adaptive_eligible_allocations: 0,
+            adaptive_training_allocations: 0,
+            adaptive_cold_bypassed_allocations: 0,
+            adaptive_short_routed_allocations: 0,
+            adaptive_short_bypassed_allocations: 0,
+            adaptive_long_routed_allocations: 0,
+            adaptive_missing_identity_bypasses: 0,
+            adaptive_site_table_bypasses: 0,
+            adaptive_prior_conflicts: 0,
+            adaptive_live_trailers: 0,
+            adaptive_trailer_corruptions: 0,
+            adaptive_short_observations: 0,
+            adaptive_long_observations: 0,
+            adaptive_censored_observations: 0,
+            adaptive_decisive_observation_bytes: 0,
+            adaptive_promotions: 0,
+            adaptive_demotions: 0,
+            adaptive_prior_corrections: 0,
+            adaptive_predictor_confusion: ConfusionCounters::new(),
+            adaptive_static_hint_confusion: ConfusionCounters::new(),
+            adaptive_static_hint_abstained_objects: 0,
+            adaptive_static_hint_abstained_bytes: 0,
         }
     }
 
     #[inline]
-    fn reset_counters(&mut self) {
+    fn reset_counters(&mut self, preserve_adaptive_model: bool) {
         self.current_epoch = 1;
         self.phase_advances = 0;
         self.epoch_cohort_extent_mappings = 0;
@@ -712,6 +1242,42 @@ impl LifetimeArenaState {
         self.runtime_mixed_epoch_excluded_bytes = 0;
         self.predictor_confusion = ConfusionCounters::new();
         self.placement_confusion = ConfusionCounters::new();
+        if !preserve_adaptive_model {
+            self.adaptive_sites = [AdaptiveSiteState::empty(); ADAPTIVE_SITE_SLOTS];
+            self.adaptive_site_count = 0;
+        } else {
+            for site in self
+                .adaptive_sites
+                .iter_mut()
+                .filter(|site| !site.is_empty())
+            {
+                site.tracked_inflight = 0;
+            }
+        }
+        self.adaptive_pressure_bytes = 0;
+        self.adaptive_epoch_advances = 0;
+        self.adaptive_eligible_allocations = 0;
+        self.adaptive_training_allocations = 0;
+        self.adaptive_cold_bypassed_allocations = 0;
+        self.adaptive_short_routed_allocations = 0;
+        self.adaptive_short_bypassed_allocations = 0;
+        self.adaptive_long_routed_allocations = 0;
+        self.adaptive_missing_identity_bypasses = 0;
+        self.adaptive_site_table_bypasses = 0;
+        self.adaptive_prior_conflicts = 0;
+        self.adaptive_live_trailers = 0;
+        self.adaptive_trailer_corruptions = 0;
+        self.adaptive_short_observations = 0;
+        self.adaptive_long_observations = 0;
+        self.adaptive_censored_observations = 0;
+        self.adaptive_decisive_observation_bytes = 0;
+        self.adaptive_promotions = 0;
+        self.adaptive_demotions = 0;
+        self.adaptive_prior_corrections = 0;
+        self.adaptive_predictor_confusion = ConfusionCounters::new();
+        self.adaptive_static_hint_confusion = ConfusionCounters::new();
+        self.adaptive_static_hint_abstained_objects = 0;
+        self.adaptive_static_hint_abstained_bytes = 0;
         self.peak_extents = self.current_extents;
         self.peak_ordinary_extents = self.current_ordinary_extents;
         self.peak_hugetlb_extents = self.current_hugetlb_extents;
@@ -751,6 +1317,16 @@ impl LifetimeArenaState {
         let assigned_region_slack_bytes =
             assigned_region_bytes.saturating_sub(self.live_slot_bytes);
         let retained_slack_bytes = retained_bytes.saturating_sub(self.live_slot_bytes);
+        let mut adaptive_cold_sites = 0usize;
+        let mut adaptive_short_sites = 0usize;
+        let mut adaptive_long_sites = 0usize;
+        for site in self.adaptive_sites.iter().filter(|site| !site.is_empty()) {
+            match site.effective_prediction() {
+                AdaptivePrediction::Cold => adaptive_cold_sites += 1,
+                AdaptivePrediction::Short => adaptive_short_sites += 1,
+                AdaptivePrediction::Long => adaptive_long_sites += 1,
+            }
+        }
         LifetimeHugepageStatsSnapshot {
             policy: lifetime_hugepage_policy(),
             backend: lifetime_hugepage_backend(),
@@ -833,6 +1409,279 @@ impl LifetimeArenaState {
             retained_slack_bytes,
             stranded_bytes: retained_slack_bytes,
             all_mappings_released: self.current_extents == 0 && self.live_objects == 0,
+            adaptive_pressure_bytes: self.adaptive_pressure_bytes,
+            adaptive_pressure_epoch: (self.adaptive_pressure_bytes / ADAPTIVE_EPOCH_BYTES) as usize,
+            adaptive_epoch_advances: self.adaptive_epoch_advances,
+            adaptive_site_count: self.adaptive_site_count,
+            adaptive_cold_sites,
+            adaptive_short_sites,
+            adaptive_long_sites,
+            adaptive_eligible_allocations: self.adaptive_eligible_allocations,
+            adaptive_training_allocations: self.adaptive_training_allocations,
+            adaptive_cold_bypassed_allocations: self.adaptive_cold_bypassed_allocations,
+            adaptive_short_routed_allocations: self.adaptive_short_routed_allocations,
+            adaptive_short_bypassed_allocations: self.adaptive_short_bypassed_allocations,
+            adaptive_long_routed_allocations: self.adaptive_long_routed_allocations,
+            adaptive_missing_identity_bypasses: self.adaptive_missing_identity_bypasses,
+            adaptive_site_table_bypasses: self.adaptive_site_table_bypasses,
+            adaptive_prior_conflicts: self.adaptive_prior_conflicts,
+            adaptive_live_trailers: self.adaptive_live_trailers,
+            adaptive_trailer_corruptions: self.adaptive_trailer_corruptions,
+            adaptive_short_observations: self.adaptive_short_observations,
+            adaptive_long_observations: self.adaptive_long_observations,
+            adaptive_censored_observations: self.adaptive_censored_observations,
+            adaptive_decisive_observation_bytes: self.adaptive_decisive_observation_bytes,
+            adaptive_promotions: self.adaptive_promotions,
+            adaptive_demotions: self.adaptive_demotions,
+            adaptive_prior_corrections: self.adaptive_prior_corrections,
+            adaptive_predictor_true_positive_objects: self
+                .adaptive_predictor_confusion
+                .true_positive_objects,
+            adaptive_predictor_true_positive_bytes: self
+                .adaptive_predictor_confusion
+                .true_positive_bytes,
+            adaptive_predictor_true_negative_objects: self
+                .adaptive_predictor_confusion
+                .true_negative_objects,
+            adaptive_predictor_true_negative_bytes: self
+                .adaptive_predictor_confusion
+                .true_negative_bytes,
+            adaptive_predictor_false_positive_objects: self
+                .adaptive_predictor_confusion
+                .false_positive_objects,
+            adaptive_predictor_false_positive_bytes: self
+                .adaptive_predictor_confusion
+                .false_positive_bytes,
+            adaptive_predictor_false_negative_objects: self
+                .adaptive_predictor_confusion
+                .false_negative_objects,
+            adaptive_predictor_false_negative_bytes: self
+                .adaptive_predictor_confusion
+                .false_negative_bytes,
+            adaptive_static_hint_true_positive_objects: self
+                .adaptive_static_hint_confusion
+                .true_positive_objects,
+            adaptive_static_hint_true_positive_bytes: self
+                .adaptive_static_hint_confusion
+                .true_positive_bytes,
+            adaptive_static_hint_true_negative_objects: self
+                .adaptive_static_hint_confusion
+                .true_negative_objects,
+            adaptive_static_hint_true_negative_bytes: self
+                .adaptive_static_hint_confusion
+                .true_negative_bytes,
+            adaptive_static_hint_false_positive_objects: self
+                .adaptive_static_hint_confusion
+                .false_positive_objects,
+            adaptive_static_hint_false_positive_bytes: self
+                .adaptive_static_hint_confusion
+                .false_positive_bytes,
+            adaptive_static_hint_false_negative_objects: self
+                .adaptive_static_hint_confusion
+                .false_negative_objects,
+            adaptive_static_hint_false_negative_bytes: self
+                .adaptive_static_hint_confusion
+                .false_negative_bytes,
+            adaptive_static_hint_abstained_objects: self.adaptive_static_hint_abstained_objects,
+            adaptive_static_hint_abstained_bytes: self.adaptive_static_hint_abstained_bytes,
+        }
+    }
+
+    fn adaptive_site_slot(
+        &mut self,
+        key: AdaptiveSiteKey,
+        static_prior: LifetimePlacementClass,
+    ) -> Option<usize> {
+        let fingerprint = key.fingerprint();
+        let start = fingerprint as usize & (ADAPTIVE_SITE_SLOTS - 1);
+        for offset in 0..ADAPTIVE_SITE_PROBE_LIMIT {
+            let idx = (start + offset) & (ADAPTIVE_SITE_SLOTS - 1);
+            if self.adaptive_sites[idx].is_empty() {
+                self.adaptive_sites[idx] = AdaptiveSiteState::new(key, static_prior);
+                self.adaptive_site_count = self.adaptive_site_count.saturating_add(1);
+                return Some(idx);
+            }
+            if self.adaptive_sites[idx].fingerprint == fingerprint
+                && self.adaptive_sites[idx].key == key
+            {
+                if self.adaptive_sites[idx].note_prior(static_prior) {
+                    self.adaptive_prior_conflicts = self.adaptive_prior_conflicts.saturating_add(1);
+                }
+                return Some(idx);
+            }
+        }
+        self.adaptive_site_table_bypasses = self.adaptive_site_table_bypasses.saturating_add(1);
+        None
+    }
+
+    #[inline]
+    fn adaptive_note_pressure(&mut self, payload_capacity: usize) -> u64 {
+        let old_epoch = self.adaptive_pressure_bytes / ADAPTIVE_EPOCH_BYTES;
+        self.adaptive_pressure_bytes = self
+            .adaptive_pressure_bytes
+            .saturating_add(payload_capacity as u64);
+        let new_epoch = self.adaptive_pressure_bytes / ADAPTIVE_EPOCH_BYTES;
+        self.adaptive_epoch_advances = self
+            .adaptive_epoch_advances
+            .saturating_add(new_epoch.saturating_sub(old_epoch) as usize);
+        self.adaptive_pressure_bytes
+    }
+
+    #[inline]
+    fn adaptive_note_bypass(&mut self, payload_capacity: usize, prediction: AdaptivePrediction) {
+        self.adaptive_note_pressure(payload_capacity);
+        self.adaptive_eligible_allocations = self.adaptive_eligible_allocations.saturating_add(1);
+        match prediction {
+            AdaptivePrediction::Cold => {
+                self.adaptive_cold_bypassed_allocations =
+                    self.adaptive_cold_bypassed_allocations.saturating_add(1)
+            }
+            AdaptivePrediction::Short => {
+                self.adaptive_short_bypassed_allocations =
+                    self.adaptive_short_bypassed_allocations.saturating_add(1)
+            }
+            AdaptivePrediction::Long => unreachable!("learned-long allocation bypassed tracking"),
+        }
+    }
+
+    #[inline]
+    fn adaptive_note_allocation(
+        &mut self,
+        site_idx: usize,
+        payload_capacity: usize,
+        prediction: AdaptivePrediction,
+    ) -> u64 {
+        let birth_pressure = self.adaptive_note_pressure(payload_capacity);
+        self.adaptive_sites[site_idx].note_tracked_allocation();
+        self.adaptive_eligible_allocations = self.adaptive_eligible_allocations.saturating_add(1);
+        self.adaptive_live_trailers = self.adaptive_live_trailers.saturating_add(1);
+        match prediction {
+            AdaptivePrediction::Cold => {
+                self.adaptive_training_allocations =
+                    self.adaptive_training_allocations.saturating_add(1)
+            }
+            AdaptivePrediction::Short => {
+                self.adaptive_short_routed_allocations =
+                    self.adaptive_short_routed_allocations.saturating_add(1)
+            }
+            AdaptivePrediction::Long => {
+                self.adaptive_long_routed_allocations =
+                    self.adaptive_long_routed_allocations.saturating_add(1)
+            }
+        }
+        birth_pressure
+    }
+
+    fn adaptive_note_deallocation(
+        &mut self,
+        ptr: *mut u8,
+        payload_capacity: usize,
+        slot_size: usize,
+        backing: ActualBacking,
+        trailer: AdaptiveSlotTrailer,
+    ) {
+        self.adaptive_live_trailers = self.adaptive_live_trailers.saturating_sub(1);
+        if !trailer.is_valid(ptr, payload_capacity) {
+            self.adaptive_trailer_corruptions = self.adaptive_trailer_corruptions.saturating_add(1);
+            return;
+        }
+        let site_idx = trailer.site_index as usize;
+        if self.adaptive_sites[site_idx].is_empty()
+            || self.adaptive_sites[site_idx].fingerprint != trailer.site_fingerprint
+        {
+            self.adaptive_trailer_corruptions = self.adaptive_trailer_corruptions.saturating_add(1);
+            return;
+        }
+        self.adaptive_sites[site_idx].note_tracked_deallocation();
+
+        let age_bytes = self
+            .adaptive_pressure_bytes
+            .saturating_sub(trailer.birth_pressure);
+        let actual_long = adaptive_lifetime_outcome(age_bytes);
+        match actual_long {
+            Some(false) => {
+                self.adaptive_short_observations =
+                    self.adaptive_short_observations.saturating_add(1)
+            }
+            Some(true) => {
+                self.adaptive_long_observations = self.adaptive_long_observations.saturating_add(1)
+            }
+            None => {
+                self.adaptive_censored_observations =
+                    self.adaptive_censored_observations.saturating_add(1)
+            }
+        }
+
+        if let Some(actual_long) = actual_long {
+            self.adaptive_decisive_observation_bytes = self
+                .adaptive_decisive_observation_bytes
+                .saturating_add(payload_capacity);
+            self.runtime_validated_objects = self.runtime_validated_objects.saturating_add(1);
+            self.runtime_validated_bytes = self.runtime_validated_bytes.saturating_add(slot_size);
+            let prediction = AdaptivePrediction::from_u8(trailer.prediction)
+                .expect("validated adaptive trailer has an invalid prediction");
+            let predicted_long = prediction == AdaptivePrediction::Long;
+            // Generic runtime validation describes the placement decision for
+            // every decisive object. Cold is an explicit ordinary-placement
+            // abstention and therefore counts as predicted short here. The
+            // adaptive matrix below remains prediction-only and excludes Cold.
+            self.predictor_confusion
+                .record(predicted_long, actual_long, slot_size);
+            if prediction != AdaptivePrediction::Cold {
+                self.adaptive_predictor_confusion.record(
+                    predicted_long,
+                    actual_long,
+                    payload_capacity,
+                );
+            }
+            match lifetime_class_from_u8(trailer.static_hint)
+                .expect("validated adaptive trailer has an invalid static hint")
+            {
+                LifetimePlacementClass::Unknown => {
+                    self.adaptive_static_hint_abstained_objects = self
+                        .adaptive_static_hint_abstained_objects
+                        .saturating_add(1);
+                    self.adaptive_static_hint_abstained_bytes = self
+                        .adaptive_static_hint_abstained_bytes
+                        .saturating_add(payload_capacity);
+                }
+                LifetimePlacementClass::Ephemeral => {
+                    self.adaptive_static_hint_confusion
+                        .record(false, actual_long, payload_capacity)
+                }
+                LifetimePlacementClass::LongLived => {
+                    self.adaptive_static_hint_confusion
+                        .record(true, actual_long, payload_capacity)
+                }
+            }
+            self.placement_confusion.record(
+                backing.is_large_page_confirmed(),
+                actual_long,
+                slot_size,
+            );
+        }
+
+        let prior = self.adaptive_sites[site_idx].static_prior;
+        let transition = self.adaptive_sites[site_idx].observe(actual_long);
+        match transition {
+            AdaptiveTransition::None => {}
+            AdaptiveTransition::PromotedShort => {
+                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
+                if prior == LifetimePlacementClass::LongLived {
+                    self.adaptive_prior_corrections =
+                        self.adaptive_prior_corrections.saturating_add(1);
+                }
+            }
+            AdaptiveTransition::PromotedLong => {
+                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
+                if prior == LifetimePlacementClass::Ephemeral {
+                    self.adaptive_prior_corrections =
+                        self.adaptive_prior_corrections.saturating_add(1);
+                }
+            }
+            AdaptiveTransition::Demoted => {
+                self.adaptive_demotions = self.adaptive_demotions.saturating_add(1)
+            }
         }
     }
 
@@ -1200,6 +2049,7 @@ impl LifetimeArenaState {
         self.extents[idx] = Extent {
             base: mapping.base as usize,
             slot_size: geometry.slot_size,
+            payload_capacity: geometry.payload_capacity,
             region_capacity: geometry.region_capacity,
             live: 0,
             bucket: geometry.bucket,
@@ -1207,6 +2057,7 @@ impl LifetimeArenaState {
             lifetime_class: class,
             cohort_epoch: if epoch_cohort { birth_epoch } else { 0 },
             backing: mapping.backing,
+            adaptive_trailer: geometry.adaptive_trailer,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
@@ -1233,6 +2084,7 @@ impl LifetimeArenaState {
         class: LifetimePlacementClass,
         birth_epoch: usize,
         require_epoch_match: bool,
+        adaptive_record: Option<AdaptiveAllocationRecord>,
     ) -> *mut u8 {
         debug_assert!(self.extents[idx].has_available_slot());
         let region_idx = match self.extents[idx].matching_region_with_space(
@@ -1298,7 +2150,23 @@ impl LifetimeArenaState {
             }
             LifetimePlacementClass::Unknown => unreachable!(),
         }
-        (region_base + slot_index * slot_size) as *mut u8
+        let ptr = (region_base + slot_index * slot_size) as *mut u8;
+        if let Some(record) = adaptive_record {
+            debug_assert!(self.extents[idx].adaptive_trailer);
+            let trailer = AdaptiveSlotTrailer::new(
+                ptr,
+                record.birth_pressure,
+                record.site_fingerprint,
+                record.site_index,
+                record.requested_size,
+                record.prediction,
+                record.static_hint,
+            );
+            ptr.add(self.extents[idx].payload_capacity)
+                .cast::<AdaptiveSlotTrailer>()
+                .write(trailer);
+        }
+        ptr
     }
 
     #[inline]
@@ -1361,6 +2229,8 @@ impl LifetimeArenaState {
         let lifetime_class = self.extents[idx].lifetime_class;
         let cohort_epoch = self.extents[idx].cohort_epoch;
         let slot_size = self.extents[idx].slot_size;
+        let payload_capacity = self.extents[idx].payload_capacity;
+        let adaptive_trailer = self.extents[idx].adaptive_trailer;
         let offset = (ptr as usize).saturating_sub(extent_base);
         if offset >= LIFETIME_HUGEPAGE_EXTENT_BYTES || self.extents[idx].live == 0 {
             panic!("invalid lifetime-arena pointer release");
@@ -1375,14 +2245,28 @@ impl LifetimeArenaState {
         {
             panic!("invalid lifetime-arena identity-region pointer release");
         }
-        self.note_runtime_validation(
-            lifetime_class,
-            extent_backing,
-            region.identity,
-            region.birth_epoch,
-            region.epoch_mixed,
-            slot_size,
-        );
+        if adaptive_trailer {
+            let trailer = ptr
+                .add(payload_capacity)
+                .cast::<AdaptiveSlotTrailer>()
+                .read();
+            self.adaptive_note_deallocation(
+                ptr,
+                payload_capacity,
+                slot_size,
+                extent_backing,
+                trailer,
+            );
+        } else {
+            self.note_runtime_validation(
+                lifetime_class,
+                extent_backing,
+                region.identity,
+                region.birth_epoch,
+                region.epoch_mixed,
+                slot_size,
+            );
+        }
         let was_full = !self.extents[idx].has_available_slot();
         let slot_index = region_offset / slot_size;
         (ptr as *mut usize).write(region.free_head);
@@ -1477,7 +2361,11 @@ fn checked_align_up(value: usize, align: usize) -> Option<usize> {
         .map(|rounded| rounded & !(align - 1))
 }
 
-fn slot_geometry(layout: Layout, class: LifetimePlacementClass) -> Option<SlotGeometry> {
+fn slot_geometry(
+    layout: Layout,
+    class: LifetimePlacementClass,
+    adaptive_trailer: bool,
+) -> Option<SlotGeometry> {
     if layout.size() == 0 || layout.align() > MAX_SLOT_ALIGN {
         return None;
     }
@@ -1487,7 +2375,19 @@ fn slot_geometry(layout: Layout, class: LifetimePlacementClass) -> Option<SlotGe
         SizeClass::Base(idx) => idx,
         SizeClass::Large(_) => return None,
     };
-    let slot_size = checked_align_up(rounded_size, layout.align())?;
+    let (payload_capacity, slot_size) = if adaptive_trailer {
+        let payload_capacity =
+            checked_align_up(rounded_size, core::mem::align_of::<AdaptiveSlotTrailer>())?;
+        let stride_align =
+            core::cmp::max(layout.align(), core::mem::align_of::<AdaptiveSlotTrailer>());
+        let slot_size = payload_capacity
+            .checked_add(size_of::<AdaptiveSlotTrailer>())
+            .and_then(|bytes| checked_align_up(bytes, stride_align))?;
+        (payload_capacity, slot_size)
+    } else {
+        let slot_size = checked_align_up(rounded_size, layout.align())?;
+        (slot_size, slot_size)
+    };
     if slot_size == 0 || slot_size > MAX_SLOT_BYTES {
         return None;
     }
@@ -1504,8 +2404,10 @@ fn slot_geometry(layout: Layout, class: LifetimePlacementClass) -> Option<SlotGe
         (lifetime_idx * TOTAL_SIZE_CLASS + size_class_idx) * ALIGN_CLASS_COUNT + align_class;
     Some(SlotGeometry {
         slot_size,
+        payload_capacity,
         region_capacity,
         bucket,
+        adaptive_trailer,
     })
 }
 
@@ -1649,7 +2551,12 @@ pub fn lifetime_hugepage_backend() -> LifetimePageBackend {
 /// Select the placement policy before the process creates routed objects.
 /// Changing policy while arena mappings remain live is rejected.
 pub fn lifetime_hugepage_configure(policy: LifetimeHugepagePolicy) -> bool {
-    lifetime_hugepage_configure_with_backend(policy, LifetimePageBackend::ExplicitHugeTLB)
+    let backend = if policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage {
+        LifetimePageBackend::TransparentHugepage
+    } else {
+        LifetimePageBackend::ExplicitHugeTLB
+    };
+    lifetime_hugepage_configure_with_backend(policy, backend)
 }
 
 /// Select placement policy and physical page backend as orthogonal controls.
@@ -1658,6 +2565,11 @@ pub fn lifetime_hugepage_configure_with_backend(
     policy: LifetimeHugepagePolicy,
     backend: LifetimePageBackend,
 ) -> bool {
+    if policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        && backend != LifetimePageBackend::TransparentHugepage
+    {
+        return false;
+    }
     let state = ARENA.lock();
     if state.live_objects != 0 || state.current_extents != 0 {
         return false;
@@ -1712,12 +2624,17 @@ pub fn lifetime_hugepage_phase_flush_current_thread() -> usize {
 }
 
 /// Reset diagnostics only after every arena-owned mapping has been released.
+/// An active adaptive policy preserves learned site states while starting a
+/// fresh pressure/telemetry window. Configure `Disabled` before reset when an
+/// experiment explicitly needs to discard the learned classifier model.
 pub fn lifetime_hugepage_stats_reset() -> bool {
     let mut state = ARENA.lock();
     if state.live_objects != 0 || state.current_extents != 0 {
         return false;
     }
-    state.reset_counters();
+    let preserve_adaptive_model =
+        lifetime_hugepage_policy() == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage;
+    state.reset_counters(preserve_adaptive_model);
     true
 }
 
@@ -1727,10 +2644,65 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
     if POLICY.load(Ordering::Acquire) == LifetimeHugepagePolicy::Disabled as usize {
         return None;
     }
-    let class = lifetime_placement_class(metadata.lifetime_hint);
+    let static_class = lifetime_placement_class(metadata.lifetime_hint);
     let mut state = ARENA.lock();
     let policy = lifetime_hugepage_policy();
     let backend = lifetime_hugepage_backend();
+    let adaptive = policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage;
+    let (class, geometry, adaptive_site) = if adaptive {
+        let cold_geometry = match slot_geometry(layout, LifetimePlacementClass::Ephemeral, true) {
+            Some(geometry) => geometry,
+            None => {
+                state.unsupported_layout_bypasses =
+                    state.unsupported_layout_bypasses.saturating_add(1);
+                return None;
+            }
+        };
+        let key = match AdaptiveSiteKey::from_metadata(
+            metadata,
+            cold_geometry.payload_capacity,
+            layout.align(),
+        ) {
+            Some(key) => key,
+            None => {
+                state.adaptive_missing_identity_bypasses =
+                    state.adaptive_missing_identity_bypasses.saturating_add(1);
+                return None;
+            }
+        };
+        let site_idx = state.adaptive_site_slot(key, static_class)?;
+        let prediction = state.adaptive_sites[site_idx].effective_prediction();
+        if !state.adaptive_sites[site_idx].should_track_allocation() {
+            state.adaptive_note_bypass(cold_geometry.payload_capacity, prediction);
+            return None;
+        }
+        let class = prediction.placement_class();
+        let geometry = if class == LifetimePlacementClass::Ephemeral {
+            cold_geometry
+        } else {
+            slot_geometry(layout, class, true).expect("adaptive geometry changed across class")
+        };
+        (class, geometry, Some((site_idx, prediction)))
+    } else {
+        if static_class == LifetimePlacementClass::Unknown {
+            state.unknown_bypasses = state.unknown_bypasses.saturating_add(1);
+            state.unknown_bypass_requested_bytes = state
+                .unknown_bypass_requested_bytes
+                .saturating_add(layout.size());
+            return None;
+        }
+        let geometry = match slot_geometry(layout, static_class, false) {
+            Some(geometry) => geometry,
+            None => {
+                if static_class != LifetimePlacementClass::Unknown {
+                    state.unsupported_layout_bypasses =
+                        state.unsupported_layout_bypasses.saturating_add(1);
+                }
+                return None;
+            }
+        };
+        (static_class, geometry, None)
+    };
     let requested_backing = match policy.requested_backing(class, backend) {
         Some(backing) => backing,
         None => {
@@ -1740,13 +2712,6 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
                     .unknown_bypass_requested_bytes
                     .saturating_add(layout.size());
             }
-            return None;
-        }
-    };
-    let geometry = match slot_geometry(layout, class) {
-        Some(geometry) => geometry,
-        None => {
-            state.unsupported_layout_bypasses = state.unsupported_layout_bypasses.saturating_add(1);
             return None;
         }
     };
@@ -1773,7 +2738,26 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             }
         }
     };
-    Some(state.allocate_from_extent(idx, identity, class, birth_epoch, epoch_cohort))
+    let adaptive_record = adaptive_site.map(|(site_idx, prediction)| {
+        let birth_pressure =
+            state.adaptive_note_allocation(site_idx, geometry.payload_capacity, prediction);
+        AdaptiveAllocationRecord {
+            birth_pressure,
+            site_fingerprint: state.adaptive_sites[site_idx].fingerprint,
+            site_index: site_idx,
+            requested_size: layout.size(),
+            prediction,
+            static_hint: static_class,
+        }
+    });
+    Some(state.allocate_from_extent(
+        idx,
+        identity,
+        class,
+        birth_epoch,
+        epoch_cohort,
+        adaptive_record,
+    ))
 }
 
 #[inline]
@@ -1803,7 +2787,7 @@ pub(crate) fn realloc_in_place_supported(ptr: *mut u8, new_layout: Layout) -> Op
             && region.assigned
             && region_offset % extent.slot_size == 0
             && region_offset / extent.slot_size < region.next_unused
-            && new_layout.size() <= extent.slot_size
+            && new_layout.size() <= extent.payload_capacity
             && (ptr as usize) % new_layout.align() == 0,
     )
 }
@@ -1883,6 +2867,7 @@ mod tests {
         let extent = Extent {
             base: LIFETIME_HUGEPAGE_EXTENT_BYTES,
             slot_size: size_of::<usize>(),
+            payload_capacity: size_of::<usize>(),
             region_capacity: LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / size_of::<usize>(),
             live: 1,
             bucket: 0,
@@ -1890,6 +2875,7 @@ mod tests {
             lifetime_class: LifetimePlacementClass::LongLived,
             cohort_epoch: 1,
             backing: ActualBacking::ThpCandidateNoHugepage,
+            adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
@@ -1912,5 +2898,183 @@ mod tests {
             thp_promotion_eligibility(&dense_survivor, 2),
             ThpPromotionEligibility::Ineligible
         );
+    }
+
+    fn adaptive_test_key(callsite: u64, type_id: u64) -> AdaptiveSiteKey {
+        AdaptiveSiteKey {
+            callsite,
+            type_id,
+            module_id: 7,
+            flags: 1,
+            placement_hint: 0,
+            payload_capacity: 64,
+            align: 8,
+        }
+    }
+
+    #[test]
+    fn adaptive_policy_maps_cold_short_ordinary_and_long_thp() {
+        assert_eq!(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage.requested_backing(
+                AdaptivePrediction::Cold.placement_class(),
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::Ordinary)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage.requested_backing(
+                AdaptivePrediction::Short.placement_class(),
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::Ordinary)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage.requested_backing(
+                AdaptivePrediction::Long.placement_class(),
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::LargePage)
+        );
+    }
+
+    #[test]
+    fn adaptive_age_thresholds_are_exact_and_marker_free() {
+        assert_eq!(adaptive_lifetime_outcome(0), Some(false));
+        assert_eq!(
+            adaptive_lifetime_outcome(ADAPTIVE_EPOCH_BYTES - 1),
+            Some(false)
+        );
+        assert_eq!(adaptive_lifetime_outcome(ADAPTIVE_EPOCH_BYTES), None);
+        assert_eq!(adaptive_lifetime_outcome(ADAPTIVE_LONG_AGE_BYTES - 1), None);
+        assert_eq!(
+            adaptive_lifetime_outcome(ADAPTIVE_LONG_AGE_BYTES),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn adaptive_site_requires_runtime_evidence_and_learns_both_classes() {
+        let key = adaptive_test_key(11, 21);
+        let mut long = AdaptiveSiteState::new(key, LifetimePlacementClass::Unknown);
+        for _ in 0..(ADAPTIVE_MIN_DECISIVE_SAMPLES - 1) {
+            assert_eq!(long.observe(Some(true)), AdaptiveTransition::None);
+            assert_eq!(long.prediction, AdaptivePrediction::Cold);
+        }
+        assert_eq!(long.observe(Some(true)), AdaptiveTransition::PromotedLong);
+        assert_eq!(long.prediction, AdaptivePrediction::Long);
+
+        let mut short = AdaptiveSiteState::new(key, LifetimePlacementClass::Unknown);
+        for _ in 0..(ADAPTIVE_MIN_DECISIVE_SAMPLES - 1) {
+            assert_eq!(short.observe(Some(false)), AdaptiveTransition::None);
+        }
+        assert_eq!(
+            short.observe(Some(false)),
+            AdaptiveTransition::PromotedShort
+        );
+        assert_eq!(short.prediction, AdaptivePrediction::Short);
+    }
+
+    #[test]
+    fn adaptive_censored_samples_do_not_vote_and_hysteresis_delays_demotion() {
+        let mut site =
+            AdaptiveSiteState::new(adaptive_test_key(12, 22), LifetimePlacementClass::Unknown);
+        for _ in 0..32 {
+            assert_eq!(site.observe(None), AdaptiveTransition::None);
+        }
+        assert_eq!(site.decisive_samples, 0);
+        assert_eq!(site.censored_samples, 32);
+        for _ in 0..ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            let _ = site.observe(Some(true));
+        }
+        assert_eq!(site.prediction, AdaptivePrediction::Long);
+        for _ in 0..5 {
+            assert_eq!(site.observe(Some(false)), AdaptiveTransition::None);
+            assert_eq!(site.prediction, AdaptivePrediction::Long);
+        }
+        assert_eq!(site.observe(Some(false)), AdaptiveTransition::Demoted);
+        assert_eq!(site.prediction, AdaptivePrediction::Cold);
+    }
+
+    #[test]
+    fn adaptive_runtime_corrects_a_wrong_static_prior() {
+        let mut site =
+            AdaptiveSiteState::new(adaptive_test_key(13, 23), LifetimePlacementClass::LongLived);
+        for _ in 0..10 {
+            assert_eq!(site.observe(Some(false)), AdaptiveTransition::None);
+        }
+        assert_eq!(site.observe(Some(false)), AdaptiveTransition::PromotedShort);
+        assert_eq!(site.prediction, AdaptivePrediction::Short);
+        assert_eq!(site.static_prior, LifetimePlacementClass::LongLived);
+    }
+
+    #[test]
+    fn adaptive_conflicting_priors_are_neutralized_before_runtime_learning() {
+        let mut site =
+            AdaptiveSiteState::new(adaptive_test_key(14, 24), LifetimePlacementClass::LongLived);
+        assert!(site.note_prior(LifetimePlacementClass::Ephemeral));
+        assert!(site.prior_conflict);
+        assert_eq!(site.static_prior, LifetimePlacementClass::Unknown);
+        assert_eq!((site.short_votes, site.long_votes), (1, 1));
+        assert_eq!(site.effective_prediction(), AdaptivePrediction::Cold);
+
+        // Once compiler priors disagree, later hints stay advisory-only and
+        // eight fresh decisive runtime outcomes retain final authority.
+        assert!(!site.note_prior(LifetimePlacementClass::LongLived));
+        for _ in 0..(ADAPTIVE_MIN_DECISIVE_SAMPLES - 1) {
+            assert_eq!(site.observe(Some(true)), AdaptiveTransition::None);
+        }
+        assert_eq!(site.observe(Some(true)), AdaptiveTransition::PromotedLong);
+        assert_eq!(site.effective_prediction(), AdaptivePrediction::Long);
+    }
+
+    #[test]
+    fn adaptive_late_concrete_prior_contributes_weak_votes_once() {
+        let mut site =
+            AdaptiveSiteState::new(adaptive_test_key(15, 25), LifetimePlacementClass::Unknown);
+        let _ = site.observe(Some(false));
+        assert_eq!((site.short_votes, site.long_votes), (2, 1));
+
+        assert!(!site.note_prior(LifetimePlacementClass::LongLived));
+        assert_eq!(site.static_prior, LifetimePlacementClass::LongLived);
+        assert_eq!((site.short_votes, site.long_votes), (2, 3));
+        assert!(!site.note_prior(LifetimePlacementClass::LongLived));
+        assert_eq!((site.short_votes, site.long_votes), (2, 3));
+    }
+
+    #[test]
+    fn adaptive_geometry_keeps_trailer_outside_payload_and_checksums_identity() {
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let geometry = slot_geometry(layout, LifetimePlacementClass::Ephemeral, true).unwrap();
+        assert_eq!(geometry.payload_capacity, 4096);
+        assert!(geometry.slot_size >= geometry.payload_capacity + size_of::<AdaptiveSlotTrailer>());
+        assert_eq!(geometry.slot_size % layout.align(), 0);
+
+        let mut storage = [0u8; 8192];
+        let ptr = storage.as_mut_ptr();
+        let trailer = AdaptiveSlotTrailer::new(
+            ptr,
+            99,
+            101,
+            3,
+            layout.size(),
+            AdaptivePrediction::Long,
+            LifetimePlacementClass::Ephemeral,
+        );
+        assert!(trailer.is_valid(ptr, geometry.payload_capacity));
+        assert!(!trailer.is_valid(unsafe { ptr.add(1) }, geometry.payload_capacity));
+    }
+
+    #[test]
+    fn adaptive_site_key_uses_full_allocation_identity() {
+        let first = adaptive_test_key(17, 27);
+        let mut second = first;
+        second.type_id += 1;
+        assert_ne!(first, second);
+        second = first;
+        second.payload_capacity *= 2;
+        assert_ne!(first, second);
+        second = first;
+        second.align *= 2;
+        assert_ne!(first, second);
     }
 }

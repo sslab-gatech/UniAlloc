@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="#F7F9FC"/>
+<rect x="48" y="40" width="1504" height="820" rx="28" fill="#FFFFFF" stroke="#DCE3EE"/>
+<text x="96" y="112" font-family="Inter,Arial,sans-serif" font-size="40" font-weight="700" fill="#172033">Marker-free lifetime learning in real Rust applications</text>
+<text x="96" y="152" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="400" fill="#526078">Feature-parity classifier off/on; pinned quick workloads; 15 measured runs per mode</text>
+<text x="96" y="218" font-family="Inter,Arial,sans-serif" font-size="27" font-weight="700" fill="#172033">Runtime overhead</text>
+<text x="96" y="249" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="400" fill="#68758A">Median wall-time delta; lower is better</text>
+<line x1="293.6363636363636" y1="278" x2="293.6363636363636" y2="574" stroke="#9AA7BA" stroke-width="2"/>
+<line x1="293.6363636363636" y1="278" x2="293.6363636363636" y2="574" stroke="#E7ECF3"/>
+<text x="285.6363636363636" y="602" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="400" fill="#68758A">0%</text>
+<line x1="402.72727272727275" y1="278" x2="402.72727272727275" y2="574" stroke="#E7ECF3"/>
+<text x="394.72727272727275" y="602" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="400" fill="#68758A">5%</text>
+<line x1="511.8181818181818" y1="278" x2="511.8181818181818" y2="574" stroke="#E7ECF3"/>
+<text x="503.8181818181818" y="602" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="400" fill="#68758A">10%</text>
+<line x1="620.9090909090909" y1="278" x2="620.9090909090909" y2="574" stroke="#E7ECF3"/>
+<text x="612.9090909090909" y="602" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="400" fill="#68758A">15%</text>
+<line x1="730.0" y1="278" x2="730.0" y2="574" stroke="#E7ECF3"/>
+<text x="722.0" y="602" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="400" fill="#68758A">20%</text>
+<text x="96" y="343" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="600" fill="#172033">fd</text>
+<rect x="293.6363636363636" y="315" width="159.0563136774773" height="38" rx="8" fill="#F58518"/>
+<line x1="350.5487773905797" y1="334" x2="660.1377801729523" y2="334" stroke="#172033" stroke-width="3"/>
+<line x1="350.5487773905797" y1="326" x2="350.5487773905797" y2="342" stroke="#172033" stroke-width="3"/>
+<line x1="660.1377801729523" y1="326" x2="660.1377801729523" y2="342" stroke="#172033" stroke-width="3"/>
+<text x="672.1377801729523" y="343" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">7.29%</text>
+<text x="96" y="435" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="600" fill="#172033">oxipng</text>
+<rect x="290.55465976067455" y="407" width="3.0817038756890724" height="38" rx="8" fill="#54A24B"/>
+<line x1="287.3452807123575" y1="426" x2="293.28253836746126" y2="426" stroke="#172033" stroke-width="3"/>
+<line x1="287.3452807123575" y1="418" x2="287.3452807123575" y2="434" stroke="#172033" stroke-width="3"/>
+<line x1="293.28253836746126" y1="418" x2="293.28253836746126" y2="434" stroke="#172033" stroke-width="3"/>
+<text x="305.28253836746126" y="435" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">-0.14%</text>
+<text x="96" y="527" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="600" fill="#172033">ripgrep</text>
+<rect x="293.6363636363636" y="499" width="113.38244934119228" height="38" rx="8" fill="#4C78A8"/>
+<line x1="350.0100156058037" y1="518" x2="463.3496895918021" y2="518" stroke="#172033" stroke-width="3"/>
+<line x1="350.0100156058037" y1="510" x2="350.0100156058037" y2="526" stroke="#172033" stroke-width="3"/>
+<line x1="463.3496895918021" y1="510" x2="463.3496895918021" y2="526" stroke="#172033" stroke-width="3"/>
+<text x="475.3496895918021" y="527" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">5.20%</text>
+<text x="830" y="218" font-family="Inter,Arial,sans-serif" font-size="27" font-weight="700" fill="#172033">Classification evidence</text>
+<text x="830" y="249" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="400" fill="#68758A">Coverage and held-out sampled outcomes</text>
+<text x="830" y="290" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600" fill="#172033">Allocation decisions learned</text>
+<rect x="830" y="307" width="600" height="24" rx="12" fill="#EEF2F7"/>
+<rect x="830" y="307" width="410.9646414476333" height="24" rx="12" fill="#4C78A8"/>
+<text x="1445" y="327" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">68.5%</text>
+<text x="830" y="382" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600" fill="#172033">Exact sites learned</text>
+<rect x="830" y="399" width="600" height="24" rx="12" fill="#EEF2F7"/>
+<rect x="830" y="399" width="141.98473282442748" height="24" rx="12" fill="#72B7B2"/>
+<text x="1445" y="419" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">23.7%</text>
+<text x="830" y="474" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600" fill="#172033">Sampled learned accuracy</text>
+<rect x="830" y="491" width="600" height="24" rx="12" fill="#EEF2F7"/>
+<rect x="830" y="491" width="600.0" height="24" rx="12" fill="#54A24B"/>
+<text x="1445" y="511" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">100.0%</text>
+<text x="830" y="566" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="600" fill="#172033">Compiler/static hint coverage</text>
+<rect x="830" y="583" width="600" height="24" rx="12" fill="#EEF2F7"/>
+<rect x="830" y="583" width="0.0" height="24" rx="12" fill="#B8C2D1"/>
+<text x="1445" y="603" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="700" fill="#172033">0.0%</text>
+<rect x="96" y="655" width="1408" height="148" rx="20" fill="#F0F5FB"/>
+<text x="126" y="704" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="700" fill="#315B82">Observed boundary</text>
+<text x="126" y="746" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="600" fill="#172033">0 semantic epoch calls  •  574 Short outcomes  •  14 Long outcomes  •  0 stable Long sites  •  0 THP routes</text>
+<text x="126" y="780" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="400" fill="#526078">The real-app result supports marker-free learning and low-frequency Short sampling; Long/THP benefit remains synthetic-only.</text>
+</svg>

@@ -278,6 +278,18 @@ The highest-return compiler work before claim-grade application performance is:
 5. instrument synchronized epoch barriers and compare static predictions with
    runtime allocation/death epochs.
 
+## Marker-free runtime fallback
+
+The allocator now also has an opt-in runtime classifier that uses subsequent
+allocation pressure as a lifetime clock. Exact static hints become weak priors;
+runtime survival outcomes control stable Short or Long placement. This supplies
+useful Short learning when the strict MIR proof returns `Unknown`, while keeping
+missing identity and ambiguous sites on the ordinary allocator path.
+
+The design, feature-parity evaluation, classification success/failure rates,
+and presentation boundary are recorded in
+[`runtime-lifetime-classifier.md`](runtime-lifetime-classifier.md).
+
 Raw reproducibility artifacts are stored in
 `docs/evidence/automatic-lifetime-classifier-smoke-20260714/`.
 
