@@ -1,0 +1,1668 @@
+{
+  "aggregation_contract": {
+    "cohort_rule": "Rust std_bench, Collections Type Isolation, and real-world targets remain separate populations",
+    "macro_peak_rss": "round-paired harness median; fixed-work targets only in suite headline; adaptive-work targets diagnostic only",
+    "macro_performance": "round-paired harness median; harness geometric mean per target; equal-target suite geometric mean",
+    "micro_peak_rss": "paired process peak-RSS cell medians; equal-family aggregation; diagnostic because iteration counts were not captured",
+    "micro_performance": "paired cell medians; exp(mean over families of median leaf log-ratio); leaves below 100 ns excluded from headline"
+  },
+  "display": {
+    "log2_ratio_cap": 3.0,
+    "raw_csv_ratios_capped": false
+  },
+  "generated_utc": "2026-07-15T01:00:00Z",
+  "lower_ratio_is_better": true,
+  "macrobenchmarks": {
+    "comparison_families": {
+      "compiler_route": {
+        "label": "Compiler route",
+        "peak_rss": {
+          "excluded_diagnostic_targets": [
+            "swc",
+            "rustpython",
+            "actix_web"
+          ],
+          "harness_count": 14,
+          "included_targets": [
+            "oxipng",
+            "redb",
+            "polars"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0328559659160792,
+          "target_count": 3
+        },
+        "performance": {
+          "harness_count": 29,
+          "route_equivalent_equal_target_geomean_ratio": 1.0435212852959215,
+          "route_equivalent_harness_count": 11,
+          "route_equivalent_target_count": 5,
+          "route_equivalent_targets": [
+            "oxipng",
+            "redb",
+            "polars",
+            "rustpython",
+            "actix_web"
+          ],
+          "suite_equal_target_geomean_ratio": 2.565237547575722,
+          "target_count": 6
+        },
+        "reference": "unialloc",
+        "subject": "typed_plain"
+      },
+      "end_to_end": {
+        "label": "End to end",
+        "peak_rss": {
+          "excluded_diagnostic_targets": [
+            "swc",
+            "rustpython",
+            "actix_web"
+          ],
+          "harness_count": 14,
+          "included_targets": [
+            "oxipng",
+            "redb",
+            "polars"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0034222896941378,
+          "target_count": 3
+        },
+        "performance": {
+          "harness_count": 29,
+          "route_equivalent_equal_target_geomean_ratio": 1.0421231954379255,
+          "route_equivalent_harness_count": 11,
+          "route_equivalent_target_count": 5,
+          "route_equivalent_targets": [
+            "oxipng",
+            "redb",
+            "polars",
+            "rustpython",
+            "actix_web"
+          ],
+          "suite_equal_target_geomean_ratio": 2.5770294598455306,
+          "target_count": 6
+        },
+        "reference": "unialloc",
+        "subject": "typeiso_perf"
+      },
+      "policy_increment": {
+        "label": "Policy increment",
+        "peak_rss": {
+          "excluded_diagnostic_targets": [
+            "swc",
+            "rustpython",
+            "actix_web"
+          ],
+          "harness_count": 14,
+          "included_targets": [
+            "oxipng",
+            "redb",
+            "polars"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0005703933484715,
+          "target_count": 3
+        },
+        "performance": {
+          "harness_count": 29,
+          "route_equivalent_equal_target_geomean_ratio": 0.9967802879157435,
+          "route_equivalent_harness_count": 11,
+          "route_equivalent_target_count": 5,
+          "route_equivalent_targets": [
+            "oxipng",
+            "redb",
+            "polars",
+            "rustpython",
+            "actix_web"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0054108472765604,
+          "target_count": 6
+        },
+        "reference": "typed_plain",
+        "subject": "typeiso_perf"
+      }
+    },
+    "harness_count": 29,
+    "reference": "unialloc",
+    "suite": {
+      "typed_plain": {
+        "comparison_family": "compiler_route",
+        "label": "Typed control",
+        "peak_rss": {
+          "excluded_diagnostic_targets": [
+            "swc",
+            "rustpython",
+            "actix_web"
+          ],
+          "harness_count": 14,
+          "included_targets": [
+            "oxipng",
+            "redb",
+            "polars"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0328559659160792,
+          "target_count": 3
+        },
+        "performance": {
+          "harness_count": 29,
+          "route_equivalent_equal_target_geomean_ratio": 1.0435212852959215,
+          "route_equivalent_harness_count": 11,
+          "route_equivalent_target_count": 5,
+          "route_equivalent_targets": [
+            "oxipng",
+            "redb",
+            "polars",
+            "rustpython",
+            "actix_web"
+          ],
+          "suite_equal_target_geomean_ratio": 2.565237547575722,
+          "target_count": 6
+        }
+      },
+      "typeiso_perf": {
+        "comparison_family": "end_to_end",
+        "label": "Type Isolation",
+        "peak_rss": {
+          "excluded_diagnostic_targets": [
+            "swc",
+            "rustpython",
+            "actix_web"
+          ],
+          "harness_count": 14,
+          "included_targets": [
+            "oxipng",
+            "redb",
+            "polars"
+          ],
+          "suite_equal_target_geomean_ratio": 1.0034222896941378,
+          "target_count": 3
+        },
+        "performance": {
+          "harness_count": 29,
+          "route_equivalent_equal_target_geomean_ratio": 1.0421231954379255,
+          "route_equivalent_harness_count": 11,
+          "route_equivalent_target_count": 5,
+          "route_equivalent_targets": [
+            "oxipng",
+            "redb",
+            "polars",
+            "rustpython",
+            "actix_web"
+          ],
+          "suite_equal_target_geomean_ratio": 2.5770294598455306,
+          "target_count": 6
+        }
+      }
+    },
+    "target_count": 6,
+    "target_order": [
+      "oxipng",
+      "redb",
+      "polars",
+      "swc",
+      "rustpython",
+      "actix_web"
+    ],
+    "targets": {
+      "actix_web": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "async_service_direct": 0.10666666666666667,
+                "async_web_service_direct": 1.1512085441259134,
+                "compression_gzip": 1.0,
+                "get_body_async_burst": 1.0434782608695652,
+                "router_actix": 1.0666666666666667
+              },
+              "target_geomean_ratio": 0.6716437401919355
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "async_service_direct": 53.90792291220558,
+                "async_web_service_direct": 3.1131658010573626,
+                "compression_gzip": 1.0755888120942099,
+                "get_body_async_burst": 1.2079884850665707,
+                "router_actix": 1.29873043146239
+              },
+              "route_equivalent_harness_median_ratios": {
+                "compression_gzip": 1.0755888120942099
+              },
+              "route_equivalent_target_geomean_ratio": 1.0755888120942099,
+              "target_geomean_ratio": 3.0932611526807015
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "async_service_direct": 0.10650887573964497,
+                "async_web_service_direct": 1.0714285714285714,
+                "compression_gzip": 1.0,
+                "get_body_async_burst": 1.0,
+                "router_actix": 1.0588235294117647
+              },
+              "target_geomean_ratio": 0.6552914802357916
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "async_service_direct": 52.951281707153406,
+                "async_web_service_direct": 3.1597378321463214,
+                "compression_gzip": 1.0882677945435149,
+                "get_body_async_burst": 1.2640825937330196,
+                "router_actix": 1.2856592135697764
+              },
+              "route_equivalent_harness_median_ratios": {
+                "compression_gzip": 1.0882677945435149
+              },
+              "route_equivalent_target_geomean_ratio": 1.0882677945435149,
+              "target_geomean_ratio": 3.1205627810195917
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "async_service_direct": 1.0159290084330044,
+                "async_web_service_direct": 1.0836860957342884,
+                "compression_gzip": 1.0,
+                "get_body_async_burst": 0.9583333333333334,
+                "router_actix": 1.0
+              },
+              "target_geomean_ratio": 1.0107801192852999
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "async_service_direct": 0.9859226572732938,
+                "async_web_service_direct": 1.0211230149684674,
+                "compression_gzip": 1.009187304172346,
+                "get_body_async_burst": 1.049492385786802,
+                "router_actix": 0.9855929072774289
+              },
+              "route_equivalent_harness_median_ratios": {
+                "compression_gzip": 1.009187304172346
+              },
+              "route_equivalent_target_geomean_ratio": 1.009187304172346,
+              "target_geomean_ratio": 1.009982643156386
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 5,
+        "label": "Actix Web",
+        "rss_eligibility": "diagnostic_only",
+        "rss_work_model": "workload_native_adaptive_iterations",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "async_service_direct": 0.10666666666666667,
+                "async_web_service_direct": 1.1512085441259134,
+                "compression_gzip": 1.0,
+                "get_body_async_burst": 1.0434782608695652,
+                "router_actix": 1.0666666666666667
+              },
+              "target_geomean_ratio": 0.6716437401919355
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "async_service_direct": 53.90792291220558,
+                "async_web_service_direct": 3.1131658010573626,
+                "compression_gzip": 1.0755888120942099,
+                "get_body_async_burst": 1.2079884850665707,
+                "router_actix": 1.29873043146239
+              },
+              "route_equivalent_harness_median_ratios": {
+                "compression_gzip": 1.0755888120942099
+              },
+              "route_equivalent_target_geomean_ratio": 1.0755888120942099,
+              "target_geomean_ratio": 3.0932611526807015
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "async_service_direct": 0.10650887573964497,
+                "async_web_service_direct": 1.0714285714285714,
+                "compression_gzip": 1.0,
+                "get_body_async_burst": 1.0,
+                "router_actix": 1.0588235294117647
+              },
+              "target_geomean_ratio": 0.6552914802357916
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "async_service_direct": 52.951281707153406,
+                "async_web_service_direct": 3.1597378321463214,
+                "compression_gzip": 1.0882677945435149,
+                "get_body_async_burst": 1.2640825937330196,
+                "router_actix": 1.2856592135697764
+              },
+              "route_equivalent_harness_median_ratios": {
+                "compression_gzip": 1.0882677945435149
+              },
+              "route_equivalent_target_geomean_ratio": 1.0882677945435149,
+              "target_geomean_ratio": 3.1205627810195917
+            }
+          }
+        }
+      },
+      "oxipng": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0106017191977077,
+                "cli_issue_141_t4": 1.0152457783550968,
+                "filters_8bit_filter_0": 1.25,
+                "filters_entropy": 1.0,
+                "reductions_rgba_to_palette_8": 1.25
+              },
+              "target_geomean_ratio": 1.0989912893394933
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.017616244521667,
+                "cli_issue_141_t4": 1.0169388640997745,
+                "filters_8bit_filter_0": 1.0880028928418808,
+                "filters_entropy": 1.0507908507047752,
+                "reductions_rgba_to_palette_8": 1.005735039834762
+              },
+              "route_equivalent_harness_median_ratios": {
+                "cli_issue_141_t1": 1.017616244521667,
+                "cli_issue_141_t4": 1.0169388640997745,
+                "filters_8bit_filter_0": 1.0880028928418808,
+                "filters_entropy": 1.0507908507047752,
+                "reductions_rgba_to_palette_8": 1.005735039834762
+              },
+              "route_equivalent_target_geomean_ratio": 1.0353847356475916,
+              "target_geomean_ratio": 1.0353847356475916
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0096009036144578,
+                "cli_issue_141_t4": 0.9979489984275655,
+                "filters_8bit_filter_0": 1.0,
+                "filters_entropy": 1.0,
+                "reductions_rgba_to_palette_8": 1.0
+              },
+              "target_geomean_ratio": 1.0015015261772915
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0442140388382706,
+                "cli_issue_141_t4": 1.041986840344493,
+                "filters_8bit_filter_0": 1.0557756118075234,
+                "filters_entropy": 1.046491312018977,
+                "reductions_rgba_to_palette_8": 0.9993626315338131
+              },
+              "route_equivalent_harness_median_ratios": {
+                "cli_issue_141_t1": 1.0442140388382706,
+                "cli_issue_141_t4": 1.041986840344493,
+                "filters_8bit_filter_0": 1.0557756118075234,
+                "filters_entropy": 1.046491312018977,
+                "reductions_rgba_to_palette_8": 0.9993626315338131
+              },
+              "route_equivalent_target_geomean_ratio": 1.0373765444400513,
+              "target_geomean_ratio": 1.0373765444400513
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 0.9879028447216709,
+                "cli_issue_141_t4": 1.0111663375774493,
+                "filters_8bit_filter_0": 1.0,
+                "filters_entropy": 1.0,
+                "reductions_rgba_to_palette_8": 1.0
+              },
+              "target_geomean_ratio": 0.9997867293265497
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0297996297971708,
+                "cli_issue_141_t4": 1.0255143601536343,
+                "filters_8bit_filter_0": 0.9801059239153237,
+                "filters_entropy": 0.9969179827860007,
+                "reductions_rgba_to_palette_8": 0.9975082472903156
+              },
+              "route_equivalent_harness_median_ratios": {
+                "cli_issue_141_t1": 1.0297996297971708,
+                "cli_issue_141_t4": 1.0255143601536343,
+                "filters_8bit_filter_0": 0.9801059239153237,
+                "filters_entropy": 0.9969179827860007,
+                "reductions_rgba_to_palette_8": 0.9975082472903156
+              },
+              "route_equivalent_target_geomean_ratio": 1.0057931727806915,
+              "target_geomean_ratio": 1.0057931727806915
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 5,
+        "label": "Oxipng",
+        "rss_eligibility": "core",
+        "rss_work_model": "fixed_work",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0106017191977077,
+                "cli_issue_141_t4": 1.0152457783550968,
+                "filters_8bit_filter_0": 1.25,
+                "filters_entropy": 1.0,
+                "reductions_rgba_to_palette_8": 1.25
+              },
+              "target_geomean_ratio": 1.0989912893394933
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.017616244521667,
+                "cli_issue_141_t4": 1.0169388640997745,
+                "filters_8bit_filter_0": 1.0880028928418808,
+                "filters_entropy": 1.0507908507047752,
+                "reductions_rgba_to_palette_8": 1.005735039834762
+              },
+              "route_equivalent_harness_median_ratios": {
+                "cli_issue_141_t1": 1.017616244521667,
+                "cli_issue_141_t4": 1.0169388640997745,
+                "filters_8bit_filter_0": 1.0880028928418808,
+                "filters_entropy": 1.0507908507047752,
+                "reductions_rgba_to_palette_8": 1.005735039834762
+              },
+              "route_equivalent_target_geomean_ratio": 1.0353847356475916,
+              "target_geomean_ratio": 1.0353847356475916
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0096009036144578,
+                "cli_issue_141_t4": 0.9979489984275655,
+                "filters_8bit_filter_0": 1.0,
+                "filters_entropy": 1.0,
+                "reductions_rgba_to_palette_8": 1.0
+              },
+              "target_geomean_ratio": 1.0015015261772915
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "cli_issue_141_t1": 1.0442140388382706,
+                "cli_issue_141_t4": 1.041986840344493,
+                "filters_8bit_filter_0": 1.0557756118075234,
+                "filters_entropy": 1.046491312018977,
+                "reductions_rgba_to_palette_8": 0.9993626315338131
+              },
+              "route_equivalent_harness_median_ratios": {
+                "cli_issue_141_t1": 1.0442140388382706,
+                "cli_issue_141_t4": 1.041986840344493,
+                "filters_8bit_filter_0": 1.0557756118075234,
+                "filters_entropy": 1.046491312018977,
+                "reductions_rgba_to_palette_8": 0.9993626315338131
+              },
+              "route_equivalent_target_geomean_ratio": 1.0373765444400513,
+              "target_geomean_ratio": 1.0373765444400513
+            }
+          }
+        }
+      },
+      "polars": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 0.9946886104357584,
+                "filter_retain": 1.0,
+                "groupby_high_cardinality": 1.0067567567567568,
+                "groupby_low_cardinality": 1.0067567567567568,
+                "groupby_multikey": 1.0048215343499882
+              },
+              "target_geomean_ratio": 1.0025938516680954
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.0106125207127592,
+                "filter_retain": 1.4236977115199847,
+                "groupby_high_cardinality": 1.4000714494654871,
+                "groupby_low_cardinality": 1.4307738854117762,
+                "groupby_multikey": 1.2587635696367203
+              },
+              "route_equivalent_harness_median_ratios": {
+                "csv_scan": 1.0106125207127592
+              },
+              "route_equivalent_target_geomean_ratio": 1.0106125207127592,
+              "target_geomean_ratio": 1.2939978841560242
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.005912067352666,
+                "filter_retain": 1.0067567567567568,
+                "groupby_high_cardinality": 1.0067567567567568,
+                "groupby_low_cardinality": 1.0067567567567568,
+                "groupby_multikey": 1.001308702180711
+              },
+              "target_geomean_ratio": 1.0054959682802094
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.0193406479486948,
+                "filter_retain": 1.4281248706651353,
+                "groupby_high_cardinality": 1.3971097342551466,
+                "groupby_low_cardinality": 1.4281906225058911,
+                "groupby_multikey": 1.266184924291079
+              },
+              "route_equivalent_harness_median_ratios": {
+                "csv_scan": 1.0193406479486948
+              },
+              "route_equivalent_target_geomean_ratio": 1.0193406479486948,
+              "target_geomean_ratio": 1.2975373615361296
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.0034769463340891,
+                "filter_retain": 1.0,
+                "groupby_high_cardinality": 1.0,
+                "groupby_low_cardinality": 0.9933333333333333,
+                "groupby_multikey": 0.9965040238000575
+              },
+              "target_geomean_ratio": 0.9986568680452999
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.001779107077223,
+                "filter_retain": 1.0016037114749659,
+                "groupby_high_cardinality": 0.9978845970957616,
+                "groupby_low_cardinality": 0.9981944995416647,
+                "groupby_multikey": 1.0011384805005703
+              },
+              "route_equivalent_harness_median_ratios": {
+                "csv_scan": 1.001779107077223
+              },
+              "route_equivalent_target_geomean_ratio": 1.001779107077223,
+              "target_geomean_ratio": 1.000118609093225
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 5,
+        "label": "Polars",
+        "rss_eligibility": "core",
+        "rss_work_model": "fixed_work",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 0.9946886104357584,
+                "filter_retain": 1.0,
+                "groupby_high_cardinality": 1.0067567567567568,
+                "groupby_low_cardinality": 1.0067567567567568,
+                "groupby_multikey": 1.0048215343499882
+              },
+              "target_geomean_ratio": 1.0025938516680954
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.0106125207127592,
+                "filter_retain": 1.4236977115199847,
+                "groupby_high_cardinality": 1.4000714494654871,
+                "groupby_low_cardinality": 1.4307738854117762,
+                "groupby_multikey": 1.2587635696367203
+              },
+              "route_equivalent_harness_median_ratios": {
+                "csv_scan": 1.0106125207127592
+              },
+              "route_equivalent_target_geomean_ratio": 1.0106125207127592,
+              "target_geomean_ratio": 1.2939978841560242
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.005912067352666,
+                "filter_retain": 1.0067567567567568,
+                "groupby_high_cardinality": 1.0067567567567568,
+                "groupby_low_cardinality": 1.0067567567567568,
+                "groupby_multikey": 1.001308702180711
+              },
+              "target_geomean_ratio": 1.0054959682802094
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "csv_scan": 1.0193406479486948,
+                "filter_retain": 1.4281248706651353,
+                "groupby_high_cardinality": 1.3971097342551466,
+                "groupby_low_cardinality": 1.4281906225058911,
+                "groupby_multikey": 1.266184924291079
+              },
+              "route_equivalent_harness_median_ratios": {
+                "csv_scan": 1.0193406479486948
+              },
+              "route_equivalent_target_geomean_ratio": 1.0193406479486948,
+              "target_geomean_ratio": 1.2975373615361296
+            }
+          }
+        }
+      },
+      "redb": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0,
+                "delete_reinsert": 1.0,
+                "large_values": 1.0,
+                "transaction_churn": 1.0
+              },
+              "target_geomean_ratio": 1.0
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106,
+                "transaction_churn": 1.3982844803133816
+              },
+              "route_equivalent_harness_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106
+              },
+              "route_equivalent_target_geomean_ratio": 1.0346616952789067,
+              "target_geomean_ratio": 1.1155721475564533
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.013157894736842,
+                "delete_reinsert": 1.0,
+                "large_values": 1.0,
+                "transaction_churn": 1.0
+              },
+              "target_geomean_ratio": 1.0032733661922877
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341,
+                "transaction_churn": 1.410456992403389
+              },
+              "route_equivalent_harness_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341
+              },
+              "route_equivalent_target_geomean_ratio": 1.041062676943563,
+              "target_geomean_ratio": 1.123175495263244
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.013157894736842,
+                "delete_reinsert": 1.0,
+                "large_values": 1.0,
+                "transaction_churn": 1.0
+              },
+              "target_geomean_ratio": 1.0032733661922877
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0056564344769034,
+                "delete_reinsert": 1.0095705288044037,
+                "large_values": 0.9992066438046392,
+                "transaction_churn": 1.008705318739774
+              },
+              "route_equivalent_harness_median_ratios": {
+                "bulk_small": 1.0056564344769034,
+                "delete_reinsert": 1.0095705288044037,
+                "large_values": 0.9992066438046392
+              },
+              "route_equivalent_target_geomean_ratio": 1.0048021091025487,
+              "target_geomean_ratio": 1.0057764932647826
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 4,
+        "label": "redb",
+        "rss_eligibility": "core",
+        "rss_work_model": "fixed_work",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0,
+                "delete_reinsert": 1.0,
+                "large_values": 1.0,
+                "transaction_churn": 1.0
+              },
+              "target_geomean_ratio": 1.0
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106,
+                "transaction_churn": 1.3982844803133816
+              },
+              "route_equivalent_harness_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106
+              },
+              "route_equivalent_target_geomean_ratio": 1.0346616952789067,
+              "target_geomean_ratio": 1.1155721475564533
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.013157894736842,
+                "delete_reinsert": 1.0,
+                "large_values": 1.0,
+                "transaction_churn": 1.0
+              },
+              "target_geomean_ratio": 1.0032733661922877
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341,
+                "transaction_churn": 1.410456992403389
+              },
+              "route_equivalent_harness_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341
+              },
+              "route_equivalent_target_geomean_ratio": 1.041062676943563,
+              "target_geomean_ratio": 1.123175495263244
+            }
+          }
+        }
+      },
+      "rustpython": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "execute_fannkuch": 0.9286965898369053,
+                "execute_mandelbrot": 1.016600391340024,
+                "execute_nbody": 1.011693723953474,
+                "parse_mandelbrot": 1.0057460256655812,
+                "pystone_30000": 0.9258802034467434
+              },
+              "target_geomean_ratio": 0.9768396077115173
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "execute_fannkuch": 4.6154719754158595,
+                "execute_mandelbrot": 1.0626138699918097,
+                "execute_nbody": 1.429064173549968,
+                "parse_mandelbrot": 4.578978311993729,
+                "pystone_30000": 3.5993407498969923
+              },
+              "route_equivalent_harness_median_ratios": {
+                "execute_mandelbrot": 1.0626138699918097
+              },
+              "route_equivalent_target_geomean_ratio": 1.0626138699918097,
+              "target_geomean_ratio": 2.585395425373309
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "execute_fannkuch": 0.9323977870732695,
+                "execute_mandelbrot": 1.007574323044878,
+                "execute_nbody": 1.0107587064676617,
+                "parse_mandelbrot": 1.0248994445508524,
+                "pystone_30000": 0.9232218091697646
+              },
+              "target_geomean_ratio": 0.9788195296004895
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "execute_fannkuch": 4.674727770726168,
+                "execute_mandelbrot": 1.0259516431069053,
+                "execute_nbody": 1.4740412445730824,
+                "parse_mandelbrot": 4.616939998682738,
+                "pystone_30000": 3.602444462796267
+              },
+              "route_equivalent_harness_median_ratios": {
+                "execute_mandelbrot": 1.0259516431069053
+              },
+              "route_equivalent_target_geomean_ratio": 1.0259516431069053,
+              "target_geomean_ratio": 2.594590809176717
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "execute_fannkuch": 1.00358249419055,
+                "execute_mandelbrot": 0.9896849212303076,
+                "execute_nbody": 0.9945719220330619,
+                "parse_mandelbrot": 1.0190439916206437,
+                "pystone_30000": 0.9935880451486407
+              },
+              "target_geomean_ratio": 1.0000393819518956
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "execute_fannkuch": 1.0094785360285512,
+                "execute_mandelbrot": 0.9630841487279843,
+                "execute_nbody": 1.035647641721897,
+                "parse_mandelbrot": 1.0123162211204617,
+                "pystone_30000": 1.0048997055576003
+              },
+              "route_equivalent_harness_median_ratios": {
+                "execute_mandelbrot": 0.9630841487279843
+              },
+              "route_equivalent_target_geomean_ratio": 0.9630841487279843,
+              "target_geomean_ratio": 1.0048065372823636
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 5,
+        "label": "RustPython",
+        "rss_eligibility": "diagnostic_only",
+        "rss_work_model": "workload_native_adaptive_iterations",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "execute_fannkuch": 0.9286965898369053,
+                "execute_mandelbrot": 1.016600391340024,
+                "execute_nbody": 1.011693723953474,
+                "parse_mandelbrot": 1.0057460256655812,
+                "pystone_30000": 0.9258802034467434
+              },
+              "target_geomean_ratio": 0.9768396077115173
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "execute_fannkuch": 4.6154719754158595,
+                "execute_mandelbrot": 1.0626138699918097,
+                "execute_nbody": 1.429064173549968,
+                "parse_mandelbrot": 4.578978311993729,
+                "pystone_30000": 3.5993407498969923
+              },
+              "route_equivalent_harness_median_ratios": {
+                "execute_mandelbrot": 1.0626138699918097
+              },
+              "route_equivalent_target_geomean_ratio": 1.0626138699918097,
+              "target_geomean_ratio": 2.585395425373309
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "execute_fannkuch": 0.9323977870732695,
+                "execute_mandelbrot": 1.007574323044878,
+                "execute_nbody": 1.0107587064676617,
+                "parse_mandelbrot": 1.0248994445508524,
+                "pystone_30000": 0.9232218091697646
+              },
+              "target_geomean_ratio": 0.9788195296004895
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "execute_fannkuch": 4.674727770726168,
+                "execute_mandelbrot": 1.0259516431069053,
+                "execute_nbody": 1.4740412445730824,
+                "parse_mandelbrot": 4.616939998682738,
+                "pystone_30000": 3.602444462796267
+              },
+              "route_equivalent_harness_median_ratios": {
+                "execute_mandelbrot": 1.0259516431069053
+              },
+              "route_equivalent_target_geomean_ratio": 1.0259516431069053,
+              "target_geomean_ratio": 2.594590809176717
+            }
+          }
+        }
+      },
+      "swc": {
+        "comparison_families": {
+          "compiler_route": {
+            "label": "Compiler route",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0031737971308874,
+                "large_all_es5": 1.006077216396568,
+                "large_codegen_es2020": 1.0773472645479611,
+                "large_fixer": 1.0103824418451834,
+                "large_parser": 0.967511655011655
+              },
+              "target_geomean_ratio": 1.0122808955898024
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "large_all_es2020": 27.244106018450726,
+                "large_all_es5": 21.173602961090552,
+                "large_codegen_es2020": 2.8908793930133307,
+                "large_fixer": 81.68883249881053,
+                "large_parser": 56.51775486827033
+              },
+              "route_equivalent_harness_median_ratios": {},
+              "route_equivalent_target_geomean_ratio": null,
+              "target_geomean_ratio": 23.839051845077122
+            },
+            "reference": "unialloc",
+            "subject": "typed_plain"
+          },
+          "end_to_end": {
+            "label": "End to end",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0077258566978193,
+                "large_all_es5": 1.0162396246842296,
+                "large_codegen_es2020": 1.0938940092165899,
+                "large_fixer": 1.0150914439186596,
+                "large_parser": 0.9887407407407407
+              },
+              "target_geomean_ratio": 1.0237178442288049
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "large_all_es2020": 27.333565904994472,
+                "large_all_es5": 21.298384749708966,
+                "large_codegen_es2020": 2.8568870160653153,
+                "large_fixer": 82.71856070879667,
+                "large_parser": 57.0182555780933
+              },
+              "route_equivalent_harness_median_ratios": {},
+              "route_equivalent_target_geomean_ratio": null,
+              "target_geomean_ratio": 23.928230543359113
+            },
+            "reference": "unialloc",
+            "subject": "typeiso_perf"
+          },
+          "policy_increment": {
+            "label": "Policy increment",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0080180405913306,
+                "large_all_es5": 1.0248235580433196,
+                "large_codegen_es2020": 1.0182305630026809,
+                "large_fixer": 1.002162024672517,
+                "large_parser": 1.0203038270522933
+              },
+              "target_geomean_ratio": 1.0146732197539292
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0055576457941413,
+                "large_all_es5": 1.0085506626763574,
+                "large_codegen_es2020": 0.9877559865640914,
+                "large_fixer": 1.0215200826192539,
+                "large_parser": 1.0069677177996355
+              },
+              "route_equivalent_harness_median_ratios": {},
+              "route_equivalent_target_geomean_ratio": null,
+              "target_geomean_ratio": 1.0060124694551897
+            },
+            "reference": "typed_plain",
+            "subject": "typeiso_perf"
+          }
+        },
+        "harness_count": 5,
+        "label": "SWC",
+        "rss_eligibility": "diagnostic_only",
+        "rss_work_model": "workload_native_adaptive_iterations",
+        "variants": {
+          "typed_plain": {
+            "comparison_family": "compiler_route",
+            "label": "Typed control",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0031737971308874,
+                "large_all_es5": 1.006077216396568,
+                "large_codegen_es2020": 1.0773472645479611,
+                "large_fixer": 1.0103824418451834,
+                "large_parser": 0.967511655011655
+              },
+              "target_geomean_ratio": 1.0122808955898024
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "large_all_es2020": 27.244106018450726,
+                "large_all_es5": 21.173602961090552,
+                "large_codegen_es2020": 2.8908793930133307,
+                "large_fixer": 81.68883249881053,
+                "large_parser": 56.51775486827033
+              },
+              "route_equivalent_harness_median_ratios": {},
+              "route_equivalent_target_geomean_ratio": null,
+              "target_geomean_ratio": 23.839051845077122
+            }
+          },
+          "typeiso_perf": {
+            "comparison_family": "end_to_end",
+            "label": "Type Isolation",
+            "peak_rss": {
+              "diagnostic_only": true,
+              "harness_median_ratios": {
+                "large_all_es2020": 1.0077258566978193,
+                "large_all_es5": 1.0162396246842296,
+                "large_codegen_es2020": 1.0938940092165899,
+                "large_fixer": 1.0150914439186596,
+                "large_parser": 0.9887407407407407
+              },
+              "target_geomean_ratio": 1.0237178442288049
+            },
+            "performance": {
+              "diagnostic_only": false,
+              "harness_median_ratios": {
+                "large_all_es2020": 27.333565904994472,
+                "large_all_es5": 21.298384749708966,
+                "large_codegen_es2020": 2.8568870160653153,
+                "large_fixer": 82.71856070879667,
+                "large_parser": 57.0182555780933
+              },
+              "route_equivalent_harness_median_ratios": {},
+              "route_equivalent_target_geomean_ratio": null,
+              "target_geomean_ratio": 23.928230543359113
+            }
+          }
+        }
+      }
+    }
+  },
+  "microbenchmarks": {
+    "collections_type_isolation_subset": {
+      "cohort_pooling": "separate",
+      "harness_count": 5,
+      "reference": "unialloc",
+      "rss_claim": "process-observed adaptive-iteration diagnostic only",
+      "variants": {
+        "typed_plain": {
+          "label": "Typed control",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "family_count": 5,
+            "family_median_ratios": {
+              "binary_heap_push": 1.0,
+              "btree_set_clone_remove": 1.3333333333333333,
+              "slice_random_inserts": 1.0,
+              "vec_deque_grow_1025": 1.0,
+              "vec_in_place_collect_droppable": 1.0
+            },
+            "headline_ratio": 1.0592238410488122,
+            "observation_count": 5,
+            "sensitivity_equal_family_geomean_ratio": 1.0592238410488122,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap_push": 1.0,
+              "btree_set_clone_remove": 1.3333333333333333,
+              "slice_random_inserts": 1.0,
+              "vec_deque_grow_1025": 1.0,
+              "vec_in_place_collect_droppable": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "family_count": 5,
+            "family_median_ratios": {
+              "binary_heap_push": 1.0124765107878193,
+              "btree_set_clone_remove": 3.258458624424157,
+              "slice_random_inserts": 1.071225038424564,
+              "vec_deque_grow_1025": 1.2444361596939686,
+              "vec_in_place_collect_droppable": 1.395166821900203
+            },
+            "headline_ratio": 1.4373923489680298,
+            "observation_count": 5,
+            "sensitivity_equal_family_geomean_ratio": 1.4373923489680298,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap_push": 1.0124765107878193,
+              "btree_set_clone_remove": 3.258458624424157,
+              "slice_random_inserts": 1.071225038424564,
+              "vec_deque_grow_1025": 1.2444361596939686,
+              "vec_in_place_collect_droppable": 1.395166821900203
+            }
+          }
+        },
+        "typeiso_perf": {
+          "label": "Type Isolation",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "family_count": 5,
+            "family_median_ratios": {
+              "binary_heap_push": 1.0,
+              "btree_set_clone_remove": 1.3333333333333333,
+              "slice_random_inserts": 1.0,
+              "vec_deque_grow_1025": 1.0,
+              "vec_in_place_collect_droppable": 1.0
+            },
+            "headline_ratio": 1.0592238410488122,
+            "observation_count": 5,
+            "sensitivity_equal_family_geomean_ratio": 1.0592238410488122,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap_push": 1.0,
+              "btree_set_clone_remove": 1.3333333333333333,
+              "slice_random_inserts": 1.0,
+              "vec_deque_grow_1025": 1.0,
+              "vec_in_place_collect_droppable": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "family_count": 5,
+            "family_median_ratios": {
+              "binary_heap_push": 1.005492773081331,
+              "btree_set_clone_remove": 3.233823263401383,
+              "slice_random_inserts": 1.0700044255671335,
+              "vec_deque_grow_1025": 1.2349805456913359,
+              "vec_in_place_collect_droppable": 1.3857816955433004
+            },
+            "headline_ratio": 1.4287858780305578,
+            "observation_count": 5,
+            "sensitivity_equal_family_geomean_ratio": 1.4287858780305578,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap_push": 1.005492773081331,
+              "btree_set_clone_remove": 3.233823263401383,
+              "slice_random_inserts": 1.0700044255671335,
+              "vec_deque_grow_1025": 1.2349805456913359,
+              "vec_in_place_collect_droppable": 1.3857816955433004
+            }
+          }
+        }
+      }
+    },
+    "rust_std_bench": {
+      "benchmark_count": 468,
+      "comparable_leaf_count": 466,
+      "family_count": 8,
+      "peak_rss_claim": "process-observed adaptive-libtest diagnostic only",
+      "performance_headline_leaf_count": 236,
+      "performance_threshold_ns_per_iter": 100.0,
+      "reference": "unialloc",
+      "variants": {
+        "jemalloc": {
+          "label": "jemalloc",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0,
+              "linked_list": 1.0,
+              "slice": 1.0,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            },
+            "headline_ratio": 1.0,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 0.9858301700131972,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0281437446556543,
+              "linked_list": 0.8200854337859753,
+              "slice": 1.0402903432806951,
+              "str": 1.0,
+              "string": 1.0170664710381807,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0004480844776449,
+              "btree": 1.0153797994942046,
+              "linked_list": 1.0033201722900216,
+              "slice": 0.9985419704228287,
+              "str": 1.0002170138888888,
+              "string": 0.9729999580536358,
+              "vec": 0.9971552224456829,
+              "vec_deque": 0.9072751506952872
+            },
+            "headline_ratio": 0.9863753793889839,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 0.9313224077305244,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 0.9801731644324555,
+              "btree": 1.0286720865953956,
+              "linked_list": 0.7839693537747642,
+              "slice": 0.9437017063573369,
+              "str": 1.0044996549777463,
+              "string": 0.9519950318963784,
+              "vec": 0.9540669615178344,
+              "vec_deque": 0.8316172663006638
+            }
+          }
+        },
+        "mimalloc": {
+          "label": "mimalloc",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0,
+              "linked_list": 1.0,
+              "slice": 1.0,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            },
+            "headline_ratio": 1.0,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 0.9858717734253976,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0445521122209551,
+              "linked_list": 0.8463719476143534,
+              "slice": 1.0094204237068,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.001713263713866,
+              "btree": 0.9860239688256227,
+              "linked_list": 0.9936277149524322,
+              "slice": 0.9975322279281292,
+              "str": 1.0,
+              "string": 0.9764617875370523,
+              "vec": 0.9679665589600429,
+              "vec_deque": 0.998265960620525
+            },
+            "headline_ratio": 0.9901316078880537,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 0.8885475261746657,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0001594322189287,
+              "btree": 0.9793137217919854,
+              "linked_list": 0.586108456020938,
+              "slice": 0.9280150235515567,
+              "str": 0.9298384853610234,
+              "string": 0.9587809975273348,
+              "vec": 0.8791059594183747,
+              "vec_deque": 0.9305786153628177
+            }
+          }
+        },
+        "ptmalloc": {
+          "label": "ptmalloc",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0,
+              "linked_list": 1.0,
+              "slice": 1.0,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            },
+            "headline_ratio": 1.0,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 1.0042240634322872,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0,
+              "btree": 0.997098338461539,
+              "linked_list": 1.0345583883471743,
+              "slice": 1.0026560798868638,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0015423085174595,
+              "btree": 0.9812177020028725,
+              "linked_list": 1.001794687724336,
+              "slice": 1.0003497370010515,
+              "str": 1.0002313922097956,
+              "string": 0.9628564720539865,
+              "vec": 1.0006411838869684,
+              "vec_deque": 0.91547205874956
+            },
+            "headline_ratio": 0.9825820936708559,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 0.9401944565793812,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.016919864643632,
+              "btree": 0.9842848928102734,
+              "linked_list": 0.797708884647043,
+              "slice": 1.0218055542194047,
+              "str": 0.9935489435504333,
+              "string": 0.937585144665202,
+              "vec": 0.9490326812474665,
+              "vec_deque": 0.846525606512475
+            }
+          }
+        },
+        "scudo": {
+          "label": "Scudo",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0,
+              "linked_list": 1.0,
+              "slice": 1.0,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            },
+            "headline_ratio": 1.0,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 0.9782241373292986,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0,
+              "btree": 1.0523250219736062,
+              "linked_list": 0.7893507749029514,
+              "slice": 1.0094552258692309,
+              "str": 1.0,
+              "string": 1.0,
+              "vec": 1.0,
+              "vec_deque": 1.0
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.002056721958152,
+              "btree": 1.1926918021224069,
+              "linked_list": 1.0047567761622689,
+              "slice": 0.9997107596756747,
+              "str": 1.000325509060002,
+              "string": 1.0056524128036977,
+              "vec": 1.0006163623770319,
+              "vec_deque": 0.9750532158274812
+            },
+            "headline_ratio": 1.0207164797421722,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 1.064504954767654,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0004211730258035,
+              "btree": 1.4704967315053095,
+              "linked_list": 1.220387883977377,
+              "slice": 1.0212764383580206,
+              "str": 1.0094636247606952,
+              "string": 1.022538239452277,
+              "vec": 1.0096704026965542,
+              "vec_deque": 0.8628662887780444
+            }
+          }
+        },
+        "snmalloc": {
+          "label": "snmalloc",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.3333333333333333,
+              "btree": 1.5,
+              "linked_list": 1.3333333333333333,
+              "slice": 1.3333333333333333,
+              "str": 1.3333333333333333,
+              "string": 1.3333333333333333,
+              "vec": 1.3333333333333333,
+              "vec_deque": 1.3333333333333333
+            },
+            "headline_ratio": 1.3531090598756028,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 1.3742838003705469,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.3848821642589764,
+              "btree": 1.5126915823085585,
+              "linked_list": 1.4063362699931305,
+              "slice": 1.329659841419412,
+              "str": 1.3425908969544507,
+              "string": 1.3333333333333333,
+              "vec": 1.3608094107168325,
+              "vec_deque": 1.3333333333333333
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.002854508117427,
+              "btree": 0.9878672401473865,
+              "linked_list": 1.003589375448672,
+              "slice": 0.9952270214210587,
+              "str": 0.9996379959455545,
+              "string": 0.9340444128350247,
+              "vec": 0.9753752947451004,
+              "vec_deque": 0.9050072612250581
+            },
+            "headline_ratio": 0.9748349769298694,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 0.8724889925920641,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0067174142787287,
+              "btree": 0.9846863828638259,
+              "linked_list": 0.591309636536591,
+              "slice": 0.915897613343797,
+              "str": 0.9135478044903115,
+              "string": 0.9048355403298274,
+              "vec": 0.9149132520129053,
+              "vec_deque": 0.8270493187132542
+            }
+          }
+        },
+        "tcmalloc": {
+          "label": "TCMalloc",
+          "peak_rss": {
+            "diagnostic_only": true,
+            "eligibility": "process-observed adaptive-libtest",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 3.0000000000000004,
+              "btree": 3.0000000000000004,
+              "linked_list": 3.0000000000000004,
+              "slice": 3.0000000000000004,
+              "str": 3.0000000000000004,
+              "string": 3.0000000000000004,
+              "vec": 3.0000000000000004,
+              "vec_deque": 3.0000000000000004
+            },
+            "headline_ratio": 3.0000000000000004,
+            "observation_count": 466,
+            "sensitivity_equal_family_geomean_ratio": 2.7677072230616866,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 2.6866538995899485,
+              "btree": 2.9802975525295476,
+              "linked_list": 2.13926789971324,
+              "slice": 2.5071989357221676,
+              "str": 3.0000000000000004,
+              "string": 3.0000000000000004,
+              "vec": 2.969423179411973,
+              "vec_deque": 3.0000000000000004
+            }
+          },
+          "performance": {
+            "diagnostic_only": false,
+            "eligibility": "timer-floor-safe",
+            "family_count": 8,
+            "family_median_ratios": {
+              "binary_heap": 1.0077472749244567,
+              "btree": 0.9982904553520826,
+              "linked_list": 1.0012562814070352,
+              "slice": 0.998219589372567,
+              "str": 0.9999344906649196,
+              "string": 0.9705429920506562,
+              "vec": 0.9638818505647188,
+              "vec_deque": 0.8949331857887766
+            },
+            "headline_ratio": 0.9786954729679196,
+            "observation_count": 236,
+            "sensitivity_equal_family_geomean_ratio": 0.9098610429312377,
+            "sensitivity_family_geomean_ratios": {
+              "binary_heap": 1.0098354985605758,
+              "btree": 0.9960611245351586,
+              "linked_list": 0.6878424431652223,
+              "slice": 0.9252880015779609,
+              "str": 0.9867314835871313,
+              "string": 0.9550815241971786,
+              "vec": 0.9389636927316976,
+              "vec_deque": 0.8291055270798295
+            }
+          }
+        }
+      }
+    }
+  },
+  "production_contract": true,
+  "reference": "unialloc",
+  "schema_version": 1,
+  "sources": {
+    "micro_records": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f",
+    "micro_results": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",
+    "type_isolation_results": "3e252a0f8ed1f6ca18c5b63f30acd48dcf5ed0280f29e8ecb1327b659333e8a5"
+  }
+}

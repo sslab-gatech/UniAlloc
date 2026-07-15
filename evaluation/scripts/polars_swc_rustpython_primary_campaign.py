@@ -3,8 +3,9 @@
 
 The campaign is intentionally fail closed.  It freezes one allocator snapshot,
 builds all three variants from that snapshot, retains source/patch/compiler
-audits, runs one warmup plus five paired rounds, and only enables a gate when
-the corresponding evidence is present.
+audits, runs one warmup plus five paired primary rounds, and only enables a gate
+when the corresponding evidence is present. Current-working-tree diagnostics
+may select three paired rounds.
 """
 
 from __future__ import annotations
@@ -77,6 +78,8 @@ DATA_ELIGIBILITY_GATES = tuple(
 )
 ROUTE_RATIO_MIN = 0.85
 ROUTE_RATIO_MAX = 1.15
+PRIMARY_ROUNDS = 5
+DIAGNOSTIC_ROUNDS = 3
 ALLOCATOR_MARKER = "// UniAlloc Polars/SWC/RustPython primary campaign allocator."
 GNU_TIME_FORMAT = "UNIALLOC_PRIMARY_TIME\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
@@ -499,7 +502,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--jobs", type=int, default=min(32, os.cpu_count() or 1))
     parser.add_argument("--warmups", type=int, default=1)
-    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=PRIMARY_ROUNDS,
+        help="paired rounds: five primary; three or five working-tree diagnostic",
+    )
     parser.add_argument("--build-timeout", type=int, default=3600)
     parser.add_argument("--run-timeout", type=int, default=600)
     implementation = parser.add_mutually_exclusive_group()
@@ -543,11 +551,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         args.jobs < 1
         or args.jobs > 32
         or args.warmups != 1
-        or args.rounds != 5
         or args.quiescence_timeout < 1
         or args.quiescence_seconds < 1
     ):
-        parser.error("the primary campaign requires exactly one warmup and five rounds")
+        parser.error("the campaign requires one warmup and positive resource limits")
+    if args.current_working_tree:
+        if args.rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+            parser.error("working-tree diagnostics require three or five rounds")
+    elif args.rounds != PRIMARY_ROUNDS:
+        parser.error("the primary campaign requires exactly five rounds")
     if args.allocator_revision is None and not args.current_working_tree:
         args.allocator_revision = SUITE_IMPLEMENTATION_REVISION
     if not args.current_working_tree and (
@@ -2598,6 +2610,7 @@ def primary_publication_allowed(
         not current_working_tree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
+        and record.get("measured_rounds") == PRIMARY_ROUNDS
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2608,9 +2621,12 @@ def apply_diagnostic_result_metadata(
     *,
     cpu_list: str,
     numa_node: str,
+    measured_rounds: int,
 ) -> None:
     if snapshot.get("source_kind") != "working_tree":
         raise CampaignError("diagnostic campaign did not freeze a working tree")
+    if measured_rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+        raise CampaignError("working-tree diagnostics require three or five rounds")
     record.update(
         {
             "campaign_classification": "diagnostic_current_worktree",
@@ -2627,6 +2643,7 @@ def apply_diagnostic_result_metadata(
             "campaign_snapshot_file_count": snapshot["campaign_snapshot_file_count"],
             "measurement_cpu_list": cpu_list,
             "measurement_numa_node": int(numa_node),
+            "measured_rounds": measured_rounds,
         }
     )
 
@@ -2695,12 +2712,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (CampaignError, matrix.MatrixError, OSError, ValueError) as error:
             record = failed_target(spec, str(error), args.raw_dir)
             exit_code = 2
+        record["measured_rounds"] = args.rounds
         if args.current_working_tree:
             apply_diagnostic_result_metadata(
                 record,
                 snapshot,
                 cpu_list=args.cpu_list,
                 numa_node=args.numa_node,
+                measured_rounds=args.rounds,
             )
         output = args.raw_dir / "results" / f"{target_id}.json"
         if args.phase != "build":

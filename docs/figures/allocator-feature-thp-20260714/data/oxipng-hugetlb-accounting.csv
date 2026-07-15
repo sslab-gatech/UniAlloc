@@ -1,0 +1,3 @@
+target,variant,label,sampling_interval_seconds,sample_count,vmhwm_mib_max,hugetlb_pages_mib_max,boundary,source_json_path
+Oxipng,unialloc_no_optional,UniAlloc base,0.002,229,56.45703125,0.0,VmHWM and HugetlbPages maxima were sampled independently and are not stacked.,benchmark-results/allocator-feature-thp-evaluation-20260714.json#runtime_preflights.unialloc_feature_activation.process_memory_sampling.variants.unialloc_no_optional.maxima
+Oxipng,unialloc_hugepage,+ hugepage,0.002,227,55.41015625,8.0,VmHWM and HugetlbPages maxima were sampled independently and are not stacked.,benchmark-results/allocator-feature-thp-evaluation-20260714.json#runtime_preflights.unialloc_feature_activation.process_memory_sampling.variants.unialloc_hugepage.maxima

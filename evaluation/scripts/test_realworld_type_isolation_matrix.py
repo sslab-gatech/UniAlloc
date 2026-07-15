@@ -197,6 +197,124 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             'libmimalloc-sys = "=0.1.49"',
         )
 
+    def test_mimalloc_thp_variants_share_the_same_allocator_source(self) -> None:
+        dependency, features = matrix.dependency_for_variant("mimalloc_no_thp")
+        self.assertEqual(
+            dependency,
+            'mimalloc = { version = "=0.1.25", default-features = false }',
+        )
+        self.assertEqual(features, ())
+        self.assertEqual(
+            matrix.allocator_source("mimalloc_no_thp"),
+            matrix.allocator_source("mimalloc"),
+        )
+
+    def test_mimalloc_runtime_modes_override_inherited_environment(self) -> None:
+        inherited = {
+            "MIMALLOC_ALLOW_THP": "unexpected",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "unexpected",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "unexpected",
+            "EXISTING": "kept",
+        }
+        enabled = matrix.allocator_runtime_environment(inherited, "mimalloc")
+        disabled = matrix.allocator_runtime_environment(
+            inherited, "mimalloc_no_thp"
+        )
+        common = {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+        }
+        self.assertEqual(
+            {name: enabled[name] for name in (*common, "MIMALLOC_ALLOW_THP")},
+            {**common, "MIMALLOC_ALLOW_THP": "1"},
+        )
+        self.assertEqual(
+            {name: disabled[name] for name in (*common, "MIMALLOC_ALLOW_THP")},
+            {**common, "MIMALLOC_ALLOW_THP": "0"},
+        )
+        self.assertEqual(enabled["EXISTING"], "kept")
+        self.assertEqual(disabled["EXISTING"], "kept")
+        enabled_prefix = matrix.allocator_runtime_prefix("mimalloc", None)
+        self.assertIn("MIMALLOC_ALLOW_THP=1", enabled_prefix)
+        self.assertIn("MIMALLOC_ALLOW_LARGE_OS_PAGES=0", enabled_prefix)
+        self.assertIn("MIMALLOC_RESERVE_HUGE_OS_PAGES=0", enabled_prefix)
+        prefix = matrix.allocator_runtime_prefix("mimalloc_no_thp", None)
+        self.assertEqual(prefix[0], "env")
+        self.assertIn("MIMALLOC_ALLOW_THP=0", prefix)
+        self.assertIn("MIMALLOC_ALLOW_LARGE_OS_PAGES=0", prefix)
+        self.assertIn("MIMALLOC_RESERVE_HUGE_OS_PAGES=0", prefix)
+        self.assertEqual(
+            matrix.allocator_thp_mode("mimalloc_no_thp"),
+            "process-wide-pr-set-thp-disable",
+        )
+
+    def test_mimalloc_no_thp_build_record_reuses_the_mimalloc_binary(self) -> None:
+        base = {
+            "app": "oxipng",
+            "variant": "mimalloc",
+            "success": True,
+            "binary": "/tmp/oxipng-mimalloc",
+            "binary_sha256": "same-binary",
+            "runtime_environment_overrides": (
+                matrix.allocator_runtime_environment_overrides("mimalloc")
+            ),
+            "thp_mode": matrix.allocator_thp_mode("mimalloc"),
+        }
+        aliased = matrix.mimalloc_no_thp_build_record(base)
+        self.assertEqual(aliased["variant"], "mimalloc_no_thp")
+        self.assertEqual(aliased["base_build_variant"], "mimalloc")
+        self.assertEqual(aliased["binary"], base["binary"])
+        self.assertEqual(aliased["binary_sha256"], base["binary_sha256"])
+        self.assertEqual(
+            aliased["runtime_environment_overrides"]["MIMALLOC_ALLOW_THP"],
+            "0",
+        )
+
+    def test_unialloc_feature_variants_disable_defaults_and_select_one_feature(
+        self,
+    ) -> None:
+        self.assertEqual(
+            matrix.unialloc_build_evidence("unialloc"),
+            {"unialloc_features": [], "default_features_enabled": True},
+        )
+        expected = {
+            "unialloc_no_optional": (),
+            "unialloc_rseq": ("rseq",),
+            "unialloc_pthread_dtor": ("pthread_dtor",),
+            "unialloc_hugepage": ("hugepage",),
+            "unialloc_separate_sc": ("separate_sc_backend",),
+            "unialloc_metadata_segregation": ("metadata_segregation",),
+            "unialloc_type_isolation": ("type_isolation",),
+            "unialloc_pac": ("pac",),
+        }
+        for variant, selected_features in expected.items():
+            with self.subTest(variant=variant):
+                dependency, features = matrix.dependency_for_variant(variant)
+                self.assertEqual(features, selected_features)
+                self.assertIn("default-features = false", dependency)
+                for feature in selected_features:
+                    self.assertIn(f'"{feature}"', dependency)
+                evidence = matrix.unialloc_build_evidence(variant)
+                self.assertEqual(
+                    evidence["unialloc_features"], list(selected_features)
+                )
+                self.assertFalse(evidence["default_features_enabled"])
+                self.assertTrue(matrix.uses_unialloc(variant))
+                self.assertIn("unialloc::UniAlloc", matrix.allocator_source(variant))
+
+    def test_feature_and_thp_variants_are_explicit_opt_in_arguments(self) -> None:
+        opt_in = (
+            "mimalloc_no_thp",
+            *matrix.UNIALLOC_FEATURE_VARIANTS,
+        )
+        for variant in opt_in:
+            self.assertIn(variant, matrix.VARIANTS)
+            self.assertNotIn(variant, matrix.DEFAULT_VARIANTS)
+        parsed = matrix.parse_args(
+            ["--variants", ",".join(opt_in), "--apps", "oxipng"]
+        )
+        self.assertEqual(parsed.variants, opt_in)
+
     def test_system_and_tcmalloc_are_explicit_realworld_variants(self) -> None:
         self.assertIn("system", matrix.VARIANTS)
         self.assertIn("tcmalloc", matrix.VARIANTS)
@@ -234,6 +352,12 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
     def test_quick_mode_uses_one_warmup_and_three_measurements(self) -> None:
         args = matrix.parse_args(["--quick"])
         self.assertEqual(matrix.measurement_counts(args), (1, 3))
+
+    def test_oxipng_threads_default_to_one_and_accept_positive_values(self) -> None:
+        self.assertEqual(matrix.parse_args([]).oxipng_threads, 1)
+        self.assertEqual(matrix.parse_args(["--oxipng-threads", "8"]).oxipng_threads, 8)
+        with self.assertRaises(SystemExit):
+            matrix.parse_args(["--oxipng-threads", "0"])
 
     def test_runtime_keeps_libc_rseq_by_default_and_disables_it_only_on_request(
         self,
@@ -284,17 +408,10 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             fd.force_load_lock_packages,
             ("fd-find", "ignore", "walkdir", "same-file", "globset"),
         )
-        with tempfile.TemporaryDirectory() as tmp:
-            lock_path = pathlib.Path(tmp) / "Cargo.lock"
-            packages = "\n".join(
-                f'[[package]]\nname = "{name}"\nversion = "0.0.0"\n'
-                for name in fd.force_load_lock_packages
-            )
-            lock_path.write_text(
-                f"version = 3\n\n{packages}",
-                encoding="utf-8",
-            )
-            matrix.validate_force_load_lock_targets(fd, lock_path)
+        matrix.validate_force_load_lock_targets(
+            fd,
+            ROOT / "evaluation" / "external" / "_checkouts" / fd.checkout / "Cargo.lock",
+        )
 
     def test_force_load_features_match_each_typeiso_variant(self) -> None:
         self.assertEqual(
@@ -576,14 +693,23 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                 json.dumps(
                     {
                         "rustc_args": ["rustc", "--crate-name", "rg"],
-                        "compiler_pass": {"semantic_scope_rewrite_applied_count": 3},
+                        "compiler_pass": {
+                            "rewrite_applied_count": 2,
+                            "direct_layout_allocator_rewrite_applied_count": 1,
+                            "semantic_scope_rewrite_applied_count": 3,
+                            "semantic_ownership_transfer_rewrite_applied_count": 5,
+                        },
                         "summary": {"semantic_scope_drop_rewrite_applied_count": 4},
                     }
                 ),
                 encoding="utf-8",
             )
             audit = matrix.summarize_audits(audit_dir)
+        self.assertEqual(audit["direct_allocator_rewrites_applied"], 2)
+        self.assertEqual(audit["direct_layout_allocator_rewrites_applied"], 1)
+        self.assertEqual(audit["semantic_ownership_transfer_rewrites_applied"], 5)
         self.assertEqual(audit["semantic_rewrites_applied"], 7)
+        self.assertEqual(audit["total_compiler_rewrites_applied"], 14)
         matrix.validate_typeiso_audits(audit, ("rg",))
         matrix.validate_typeiso_coverage(audit, {"typed_allocations": 1, "total_allocations": 2})
         with self.assertRaises(matrix.MatrixError):
@@ -595,6 +721,20 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             )
         with self.assertRaises(matrix.MatrixError):
             matrix.validate_typeiso_coverage(audit, {"typed_allocations": 0, "total_allocations": 2})
+
+
+    def test_structural_audit_presence_accepts_zero_rewrite_target_audit(self) -> None:
+        audit = {
+            "audit_file_count": 1,
+            "semantic_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0,
+            "crate_names": ["demo", "rsh_999_harness"],
+        }
+
+        matrix.validate_typeiso_audit_presence(audit, ("demo", "rsh-999-harness"))
+
+        with self.assertRaises(matrix.MatrixError):
+            matrix.validate_typeiso_audits(audit, ("demo",))
 
     def test_measured_run_captures_wall_rss_and_output_hash(self) -> None:
         if not pathlib.Path("/usr/bin/time").exists():
@@ -747,6 +887,22 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                 self.assertIn("--no-ignore", command)
                 self.assertIsNone(output)
                 self.assertEqual(command.count("."), 3)
+
+    def test_oxipng_workload_uses_requested_thread_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            command, cwd, output = matrix.workload_command(
+                matrix.APP_SPECS["oxipng"],
+                root / "oxipng",
+                corpus=root,
+                source_checkout=root,
+                run_dir=root,
+                quick=True,
+                oxipng_threads=8,
+            )
+        self.assertEqual(command[command.index("--threads") + 1], "8")
+        self.assertEqual(cwd, root)
+        self.assertEqual(output, root / "output.png")
 
     def test_fd_metadata_tree_shape_and_digest_are_deterministic(self) -> None:
         self.assertEqual(matrix.fd_tree_file_count(True), 20_480)

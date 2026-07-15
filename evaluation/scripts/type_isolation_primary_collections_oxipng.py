@@ -61,6 +61,8 @@ CORE_REQUIRED_GATES = (
 )
 COMPILER_ROUTE_MIN = 0.85
 COMPILER_ROUTE_MAX = 1.15
+PRIMARY_ROUNDS = 5
+DIAGNOSTIC_ROUNDS = 3
 LEGACY_OXIPNG_INPUT_COMMIT = "dea23211ae6259007e068c59ab16929798d00d96"
 LEGACY_OXIPNG_INPUT_PATH = "tests/files/issue-141.png"
 GNU_TIME = Path("/usr/bin/time")
@@ -1178,16 +1180,24 @@ def validate_cli_output_digests(records: Sequence[dict[str, Any]]) -> None:
 
 def compiler_route_equivalence(
     measurements: Sequence[dict[str, Any]],
+    *,
+    measured_rounds: int = PRIMARY_ROUNDS,
 ) -> tuple[bool, float]:
     index = {
         (int(row["round"]), str(row["variant"])): float(row["performance"])
         for row in measurements
     }
-    rounds = sorted({int(row["round"]) for row in measurements})
-    ratios = [
-        index[(round_number, "typed_plain")] / index[(round_number, "unialloc")]
-        for round_number in rounds
-    ]
+    try:
+        ratios = [
+            index[(round_number, "typed_plain")]
+            / index[(round_number, "unialloc")]
+            for round_number in range(1, measured_rounds + 1)
+        ]
+    except KeyError as error:
+        raise CampaignError(
+            "compiler-route gate requires "
+            f"{measured_rounds} complete typed_plain/unialloc pairs"
+        ) from error
     median_ratio = statistics.median(ratios)
     return (
         COMPILER_ROUTE_MIN <= median_ratio <= COMPILER_ROUTE_MAX,
@@ -1196,10 +1206,15 @@ def compiler_route_equivalence(
 
 
 def validate_measurements(
-    spec: TargetSpec, measurements: dict[str, list[dict[str, Any]]]
+    spec: TargetSpec,
+    measurements: dict[str, list[dict[str, Any]]],
+    *,
+    measured_rounds: int = PRIMARY_ROUNDS,
 ) -> None:
     expected = {
-        (round_number, variant) for round_number in range(1, 6) for variant in VARIANTS
+        (round_number, variant)
+        for round_number in range(1, measured_rounds + 1)
+        for variant in VARIANTS
     }
     if set(measurements) != {harness.id for harness in spec.harnesses}:
         raise CampaignError(f"measurement harness mismatch for {spec.id}")
@@ -1208,7 +1223,8 @@ def validate_measurements(
         observed = {(int(row["round"]), str(row["variant"])) for row in rows}
         if observed != expected or len(rows) != len(expected):
             raise CampaignError(
-                f"{spec.id}/{harness.id} does not have five complete paired rounds"
+                f"{spec.id}/{harness.id} does not have "
+                f"{measured_rounds} complete paired rounds"
             )
         for row in rows:
             for field in ("performance", "peak_rss_mib"):
@@ -1344,14 +1360,17 @@ def build_target_result(
     source_audit_path: Path,
     build_records: dict[str, dict[str, Any]],
     raw_records: dict[str, list[dict[str, Any]]],
+    measured_rounds: int = PRIMARY_ROUNDS,
 ) -> dict[str, Any]:
-    validate_measurements(spec, measurements)
+    validate_measurements(spec, measurements, measured_rounds=measured_rounds)
     harnesses: list[dict[str, Any]] = []
     for harness in spec.harnesses:
         rows = measurements[harness.id]
         harness_warmups = warmup_evidence.get(harness.id)
         validate_warmup_evidence(spec.id, harness.id, harness_warmups)
-        route_equivalent, route_ratio = compiler_route_equivalence(rows)
+        route_equivalent, route_ratio = compiler_route_equivalence(
+            rows, measured_rounds=measured_rounds
+        )
         gates = {
             "correctness": True,
             "build_success": bool(build_gates["build_success"]),
@@ -1390,6 +1409,7 @@ def build_target_result(
         "source_commit": spec.commit,
         "implementation_revision": implementation_revision,
         "implementation_sha256": implementation_sha256,
+        "measured_rounds": measured_rounds,
         "harnesses": harnesses,
         "evidence": {
             "raw_root": str(raw_root.resolve()),
@@ -1407,6 +1427,8 @@ def build_target_result(
 def validate_core_result(result: dict[str, Any]) -> None:
     if result.get("schema_version") != 1:
         raise CampaignError("target result schema version must be 1")
+    if result.get("measured_rounds") not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+        raise CampaignError("target result must record three or five measured rounds")
     harnesses = result.get("harnesses")
     if not isinstance(harnesses, list) or not harnesses:
         raise CampaignError("target result must contain harnesses")
@@ -1448,6 +1470,10 @@ def publish_target_results(
         ):
             raise CampaignError(
                 f"diagnostic result cannot enter primary publication: {result_path}"
+            )
+        if result.get("measured_rounds") != PRIMARY_ROUNDS:
+            raise CampaignError(
+                f"primary publication requires five measured rounds: {result_path}"
             )
         validate_primary_implementation(
             result.get("implementation_revision"),
@@ -1550,6 +1576,7 @@ def diagnostic_result_metadata(
     *,
     cpu_list: str,
     numa_node: int,
+    measured_rounds: int,
 ) -> dict[str, Any]:
     if (
         not isinstance(implementation_source, dict)
@@ -1557,9 +1584,12 @@ def diagnostic_result_metadata(
         or implementation_source.get("primary_eligible") is not False
     ):
         raise CampaignError("diagnostic campaign lacks a working-tree source record")
+    if measured_rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+        raise CampaignError("diagnostic campaigns require three or five rounds")
     return {
         "campaign_classification": "diagnostic_current_worktree",
         "primary_eligible": False,
+        "core_eligible": False,
         "primary_ineligibility_reason": "working_tree_implementation",
         "implementation_source_kind": "working_tree",
         "repository_head": implementation_source["repository_head"],
@@ -1578,6 +1608,7 @@ def diagnostic_result_metadata(
         ],
         "measurement_cpu_list": cpu_list,
         "measurement_numa_node": numa_node,
+        "measured_rounds": measured_rounds,
     }
 
 
@@ -1608,7 +1639,15 @@ def run_target(
     stage: str,
     diagnostic_current_worktree: bool = False,
     implementation_source: dict[str, Any] | None = None,
+    measured_rounds: int = PRIMARY_ROUNDS,
 ) -> Path:
+    if diagnostic_current_worktree and measured_rounds not in {
+        DIAGNOSTIC_ROUNDS,
+        PRIMARY_ROUNDS,
+    }:
+        raise CampaignError("diagnostic campaigns require three or five rounds")
+    if not diagnostic_current_worktree and measured_rounds != PRIMARY_ROUNDS:
+        raise CampaignError("primary campaigns require exactly five rounds")
     if stage == "measure":
         (
             source_audit_path,
@@ -1672,7 +1711,11 @@ def run_target(
         harness.id: [] for harness in spec.harnesses
     }
     oxipng_input = Path(source_audit["input"]["path"]) if spec.id == "oxipng" else None
-    round_indices = range(1, 6) if stage == "measure" else range(6)
+    round_indices = (
+        range(1, measured_rounds + 1)
+        if stage == "measure"
+        else range(measured_rounds + 1)
+    )
     if stage == "preflight":
         round_indices = range(1)
     with primary_measurement_lock(raw_root) as lock_path:
@@ -1723,6 +1766,7 @@ def run_target(
                 ),
                 "unialloc_implementation_sha256": unialloc_implementation_sha256,
                 "implementation_revision": implementation_revision,
+                "measured_rounds": measured_rounds,
                 "source_audit": str(source_audit_path.resolve()),
                 "build_records": {
                     variant: str(
@@ -1748,6 +1792,7 @@ def run_target(
                             implementation_source,
                             cpu_list=cpu_list,
                             numa_node=numa_node,
+                            measured_rounds=measured_rounds,
                         ),
                     }
                     if diagnostic_current_worktree
@@ -1808,6 +1853,7 @@ def run_target(
         source_audit_path=source_audit_path,
         build_records=builds,
         raw_records=all_records,
+        measured_rounds=measured_rounds,
     )
     result_path = target_result_path(
         raw_root,
@@ -1839,9 +1885,9 @@ def run_target(
                 implementation_source,
                 cpu_list=cpu_list,
                 numa_node=numa_node,
+                measured_rounds=measured_rounds,
             )
         )
-        result["core_eligible"] = False
     persist_json(result_path, result)
     return result_path
 
@@ -1889,6 +1935,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--jobs", type=int, default=min(16, os.cpu_count() or 1))
     parser.add_argument("--build-timeout", type=int, default=1800)
     parser.add_argument("--run-timeout", type=int, default=300)
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=PRIMARY_ROUNDS,
+        help="paired rounds: five primary; three or five diagnostic",
+    )
     parser.add_argument("--cpu-list", default="0-15")
     parser.add_argument("--numa-node", type=int, default=0)
     parser.add_argument(
@@ -1910,6 +1962,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.diagnostic_current_worktree = bool(
         args.current_working_tree or args.implementation_revision is None
     )
+    if args.diagnostic_current_worktree:
+        if args.rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+            parser.error("diagnostic campaigns require three or five rounds")
+    elif args.rounds != PRIMARY_ROUNDS:
+        parser.error("primary campaigns require exactly five rounds")
     if not args.diagnostic_current_worktree and (
         args.cpu_list != "0-15" or args.numa_node != 0
     ):
@@ -1964,7 +2021,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "cpu_list": args.cpu_list,
                         "numa_node": args.numa_node,
                         "warmups": 1,
-                        "measured_rounds": 5,
+                        "measured_rounds": args.rounds,
                         "compiler_route_cost_ratio_bounds": [
                             COMPILER_ROUTE_MIN,
                             COMPILER_ROUTE_MAX,
@@ -2022,6 +2079,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 stage=args.stage,
                 diagnostic_current_worktree=args.diagnostic_current_worktree,
                 implementation_source=implementation_source,
+                measured_rounds=args.rounds,
             )
             for target_id in args.targets
         ]

@@ -1,0 +1,214 @@
+{
+  "assets": [
+    {
+      "path": "01-ripgrep-configurations.png",
+      "sha256": "91c7dd33eddb2726c6293c6c5f7e2275aaa748a12f95c560d8eb1c66f500ae85"
+    },
+    {
+      "path": "01-ripgrep-configurations.svg",
+      "sha256": "9384525698a3a8ac94fca5af640a7439003d633571359d24cda0df2a64e40280"
+    },
+    {
+      "path": "02-oxipng-configurations.png",
+      "sha256": "a924c2eef387165717fbc58a3817d5861a6176e5efc38a802fb255564e51ad61"
+    },
+    {
+      "path": "02-oxipng-configurations.svg",
+      "sha256": "60fad527a453bec813092539a29f79e896da10a03fffc183509c18c626095420"
+    },
+    {
+      "path": "03-rsedis-configurations.png",
+      "sha256": "3638086f82ea19b40917976e4b00303944e0dd03bccaaa6fe88ff161b3d98f23"
+    },
+    {
+      "path": "03-rsedis-configurations.svg",
+      "sha256": "cc394543051addbeadcabb340a7c2b295339187f2d1e13111d78cd0d40991c65"
+    },
+    {
+      "path": "allocator-feature-thp-slide-pack.pdf",
+      "sha256": "ddfdde939d05fffda331c2f02cb225682fa66c0f97294ae4ed81d7be9aeb89fa"
+    }
+  ],
+  "boundaries": [
+    "Each figure represents one measured target.",
+    "Oxipng 1-thread and 4-thread campaigns use independent axes and are not pooled.",
+    "Rsedis allocator and THP mechanism campaigns use independent axes and are not pooled.",
+    "TCMalloc in the THP mechanism campaign uses the host default.",
+    "UniAlloc is outside the Rsedis THP mechanism campaign.",
+    "VmHWM and HugetlbPages maxima are independently sampled and are not stacked.",
+    "Raw-point ranges are descriptive and are not confidence intervals."
+  ],
+  "campaigns": [
+    {
+      "configuration_count": 7,
+      "id": "ripgrep_realworld_single_thread",
+      "label": "Real-world matrix, 1 thread",
+      "measured_runs": 49,
+      "performance_metric": "wall_time",
+      "plot_reference": "system",
+      "repetitions": 7,
+      "source_json_path": "benchmark-results/realworld-rust-allocator-20260714.json#campaigns[app=ripgrep]",
+      "target": "ripgrep",
+      "warmups": 7
+    },
+    {
+      "configuration_count": 7,
+      "id": "oxipng_realworld_single_thread",
+      "label": "Real-world matrix, 1 thread",
+      "measured_runs": 49,
+      "performance_metric": "wall_time",
+      "plot_reference": "system",
+      "repetitions": 7,
+      "source_json_path": "benchmark-results/realworld-rust-allocator-20260714.json#campaigns[app=oxipng]",
+      "target": "Oxipng",
+      "warmups": 7
+    },
+    {
+      "configuration_count": 15,
+      "id": "oxipng_feature_matrix_four_threads",
+      "label": "Feature matrix, 4 threads",
+      "measured_runs": 75,
+      "performance_metric": "wall_time",
+      "plot_reference": "system",
+      "repetitions": 5,
+      "source_json_path": "benchmark-results/allocator-feature-thp-evaluation-20260714.json#campaigns.oxipng_feature_matrix",
+      "target": "Oxipng",
+      "warmups": 15
+    },
+    {
+      "configuration_count": 5,
+      "id": "rsedis_allocator_matrix",
+      "label": "Allocator matrix",
+      "measured_runs": 25,
+      "performance_metric": "throughput",
+      "plot_reference": "system_ptmalloc",
+      "repetitions": 5,
+      "source_json_path": "benchmark-results/rust-alloc-paper-evaluation-20260714.json#live_results.rsedis_current_head",
+      "target": "Rsedis",
+      "warmups": 5
+    },
+    {
+      "configuration_count": 3,
+      "id": "rsedis_thp_mechanism_matrix",
+      "label": "THP mechanism matrix",
+      "measured_runs": 15,
+      "performance_metric": "throughput",
+      "plot_reference": "mimalloc_thp_default",
+      "repetitions": 5,
+      "source_json_path": "benchmark-results/allocator-feature-thp-evaluation-20260714.json#campaigns.rsedis_thp_matrix",
+      "target": "Rsedis",
+      "warmups": 3
+    }
+  ],
+  "chart_contracts": [
+    {
+      "campaigns": [
+        "ripgrep_realworld_single_thread"
+      ],
+      "encoding": "horizontal median bars with seven measured-run dots",
+      "question": "How do allocator and Type Isolation configurations affect ripgrep wall time and peak RSS?",
+      "stem": "01-ripgrep-configurations",
+      "target": "ripgrep"
+    },
+    {
+      "campaigns": [
+        "oxipng_realworld_single_thread",
+        "oxipng_feature_matrix_four_threads"
+      ],
+      "encoding": "two campaign-separated rows of horizontal median bars and measured-run dots",
+      "question": "How do allocator, THP, and UniAlloc feature configurations affect Oxipng?",
+      "stem": "02-oxipng-configurations",
+      "target": "Oxipng"
+    },
+    {
+      "campaigns": [
+        "rsedis_allocator_matrix",
+        "rsedis_thp_mechanism_matrix"
+      ],
+      "encoding": "two campaign-separated rows of horizontal median bars and measured-run dots",
+      "question": "How do allocator and THP configurations affect Rsedis throughput and peak RSS?",
+      "stem": "03-rsedis-configurations",
+      "target": "Rsedis"
+    }
+  ],
+  "data_tables": [
+    {
+      "path": "data/oxipng-configurations.csv",
+      "rows": 124,
+      "sha256": "daf8faa73bb7c9c7190bfa88c091c626e30b4de4bbee8b6fd691f6383c242d8b"
+    },
+    {
+      "path": "data/oxipng-hugetlb-accounting.csv",
+      "rows": 2,
+      "sha256": "8d118b09c3b1507b930a49d4c24a9810fcbafed3f4f2f0e0e51b6e7a85b1bf07"
+    },
+    {
+      "path": "data/ripgrep-configurations.csv",
+      "rows": 49,
+      "sha256": "35ae9cf68ee093568a163f64307ed9b0fd24288892f90a7e089f489c43fa7734"
+    },
+    {
+      "path": "data/rsedis-configurations.csv",
+      "rows": 40,
+      "sha256": "526c9013ffed2cc9c9e2408df1565ffc1365519c41442c365470a3b9a5f03182"
+    }
+  ],
+  "evaluation_scope": {
+    "measured_timed_runs": 213,
+    "timed_configuration_cells": 37,
+    "timed_warmups": 37,
+    "type_isolation_is_subset": true,
+    "unique_target_count": 3,
+    "unique_targets": [
+      "ripgrep",
+      "Oxipng",
+      "Rsedis"
+    ]
+  },
+  "generator": {
+    "figure_size_inches": {
+      "height": 9,
+      "width": 16
+    },
+    "path": "evaluation/scripts/plot_allocator_feature_thp_slides.py",
+    "pdf_pages": 3,
+    "png_dimensions": {
+      "height": 1350,
+      "width": 2400
+    },
+    "renderer": "Matplotlib 3.11.0",
+    "sha256": "64ce86cfeebf3268f4ab2a3fe74a8ac4a3cb45a2f6a02fcb471ee0176e7ad026",
+    "svg_viewbox_points": {
+      "height": 648,
+      "width": 1152
+    }
+  },
+  "palette": {
+    "jemalloc": "#BCBEC4",
+    "mimalloc": "#FF9365",
+    "system": "#767881",
+    "tcmalloc": "#A3D576",
+    "type_isolation": "#5477C4",
+    "typed_control": "#A3BEFA",
+    "unialloc": "#2E4780"
+  },
+  "schema_version": 3,
+  "source": "unialloc-target-centric-allocator-figure-pack",
+  "source_artifacts": [
+    {
+      "name": "feature",
+      "path": "benchmark-results/allocator-feature-thp-evaluation-20260714.json",
+      "sha256": "293dbfd0e1b6966b4bb2e1884fd498994299e065fc5c240a337b18e43d9fd490"
+    },
+    {
+      "name": "realworld",
+      "path": "benchmark-results/realworld-rust-allocator-20260714.json",
+      "sha256": "7598e2b06143b7bd3a73d8c599402fd3c8dd6bdddb60706d46f987b3b4fd2741"
+    },
+    {
+      "name": "paper",
+      "path": "benchmark-results/rust-alloc-paper-evaluation-20260714.json",
+      "sha256": "163a2897ce92b80a758949c614e525ef9fe37380aa44af566d40f898a1407609"
+    }
+  ]
+}

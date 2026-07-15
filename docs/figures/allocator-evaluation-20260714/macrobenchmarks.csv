@@ -1,0 +1,235 @@
+metric,comparison,comparison_label,aggregation_level,target_id,target_label,harness_id,rss_work_model,eligible_for_suite_headline,diagnostic_only,ratio,observation_count,note
+performance,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,1.017616244521667,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,1.0169388640997745,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,1.0880028928418808,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,1.0507908507047752,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,1.005735039834762,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0353847356475916,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,route_equivalent_target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0353847356475916,5,geometric mean across route-equivalent harnesses
+peak_rss,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,1.0106017191977077,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,1.0152457783550968,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,1.25,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,1.25,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0989912893394933,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,1.0442140388382706,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,1.041986840344493,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,1.0557756118075234,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,1.046491312018977,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,0.9993626315338131,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0373765444400513,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,route_equivalent_target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0373765444400513,5,geometric mean across route-equivalent harnesses
+peak_rss,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,1.0096009036144578,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,0.9979489984275655,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0015015261772915,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,1.0297996297971708,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,1.0255143601536343,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,0.9801059239153237,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,0.9969179827860007,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,0.9975082472903156,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0057931727806915,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,route_equivalent_target_geomean,oxipng,Oxipng,,fixed_work,True,False,1.0057931727806915,5,geometric mean across route-equivalent harnesses
+peak_rss,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,cli_issue_141_t1,fixed_work,True,False,0.9879028447216709,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,cli_issue_141_t4,fixed_work,True,False,1.0111663375774493,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,filters_8bit_filter_0,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,filters_entropy,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,oxipng,Oxipng,reductions_rgba_to_palette_8,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,target_geomean,oxipng,Oxipng,,fixed_work,True,False,0.9997867293265497,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.0548699480766464,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.3982844803133816,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0586793827836183,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,redb,redb,large_values,fixed_work,True,False,0.9918174339490106,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,target_geomean,redb,redb,,fixed_work,True,False,1.1155721475564533,4,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,route_equivalent_target_geomean,redb,redb,,fixed_work,True,False,1.0346616952789067,3,geometric mean across route-equivalent harnesses
+peak_rss,compiler_route,Compiler route,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,redb,redb,large_values,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,target_geomean,redb,redb,,fixed_work,True,False,1.0,4,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.0688604181982921,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.410456992403389,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0632608733783695,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,redb,redb,large_values,fixed_work,True,False,0.9928183678600341,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,target_geomean,redb,redb,,fixed_work,True,False,1.123175495263244,4,geometric mean across harness paired medians
+performance,end_to_end,End to end,route_equivalent_target_geomean,redb,redb,,fixed_work,True,False,1.041062676943563,3,geometric mean across route-equivalent harnesses
+peak_rss,end_to_end,End to end,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.013157894736842,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,redb,redb,large_values,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,target_geomean,redb,redb,,fixed_work,True,False,1.0032733661922877,4,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.0056564344769034,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.008705318739774,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0095705288044037,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,redb,redb,large_values,fixed_work,True,False,0.9992066438046392,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,target_geomean,redb,redb,,fixed_work,True,False,1.0057764932647826,4,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,route_equivalent_target_geomean,redb,redb,,fixed_work,True,False,1.0048021091025487,3,geometric mean across route-equivalent harnesses
+peak_rss,policy_increment,Policy increment,harness_paired_median,redb,redb,bulk_small,fixed_work,True,False,1.013157894736842,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,redb,redb,transaction_churn,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,redb,redb,delete_reinsert,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,redb,redb,large_values,fixed_work,True,False,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,target_geomean,redb,redb,,fixed_work,True,False,1.0032733661922877,4,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,1.4307738854117762,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,1.4000714494654871,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,1.2587635696367203,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.4236977115199847,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,1.0106125207127592,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,target_geomean,polars,Polars,,fixed_work,True,False,1.2939978841560242,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,route_equivalent_target_geomean,polars,Polars,,fixed_work,True,False,1.0106125207127592,1,geometric mean across route-equivalent harnesses
+peak_rss,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,1.0067567567567568,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,1.0067567567567568,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,1.0048215343499882,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,0.9946886104357584,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,target_geomean,polars,Polars,,fixed_work,True,False,1.0025938516680954,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,1.4281906225058911,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,1.3971097342551466,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,1.266184924291079,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.4281248706651353,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,1.0193406479486948,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,target_geomean,polars,Polars,,fixed_work,True,False,1.2975373615361296,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,route_equivalent_target_geomean,polars,Polars,,fixed_work,True,False,1.0193406479486948,1,geometric mean across route-equivalent harnesses
+peak_rss,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,1.0067567567567568,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,1.0067567567567568,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,1.001308702180711,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.0067567567567568,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,1.005912067352666,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,target_geomean,polars,Polars,,fixed_work,True,False,1.0054959682802094,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,0.9981944995416647,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,0.9978845970957616,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,1.0011384805005703,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.0016037114749659,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,1.001779107077223,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,target_geomean,polars,Polars,,fixed_work,True,False,1.000118609093225,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,route_equivalent_target_geomean,polars,Polars,,fixed_work,True,False,1.001779107077223,1,geometric mean across route-equivalent harnesses
+peak_rss,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_low_cardinality,fixed_work,True,False,0.9933333333333333,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_high_cardinality,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,polars,Polars,groupby_multikey,fixed_work,True,False,0.9965040238000575,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,polars,Polars,filter_retain,fixed_work,True,False,1.0,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,polars,Polars,csv_scan,fixed_work,True,False,1.0034769463340891,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,target_geomean,polars,Polars,,fixed_work,True,False,0.9986568680452999,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,True,False,56.51775486827033,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,True,False,81.68883249881053,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,True,False,2.8908793930133307,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,True,False,27.244106018450726,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,True,False,21.173602961090552,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,target_geomean,swc,SWC,,workload_native_adaptive_iterations,True,False,23.839051845077122,5,geometric mean across harness paired medians
+peak_rss,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,False,True,0.967511655011655,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,False,True,1.0103824418451834,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,False,True,1.0773472645479611,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,False,True,1.0031737971308874,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,False,True,1.006077216396568,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,target_geomean,swc,SWC,,workload_native_adaptive_iterations,False,True,1.0122808955898024,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,True,False,57.0182555780933,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,True,False,82.71856070879667,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,True,False,2.8568870160653153,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,True,False,27.333565904994472,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,True,False,21.298384749708966,5,median of five round-paired ratios
+performance,end_to_end,End to end,target_geomean,swc,SWC,,workload_native_adaptive_iterations,True,False,23.928230543359113,5,geometric mean across harness paired medians
+peak_rss,end_to_end,End to end,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,False,True,0.9887407407407407,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,False,True,1.0150914439186596,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,False,True,1.0938940092165899,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,False,True,1.0077258566978193,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,False,True,1.0162396246842296,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,target_geomean,swc,SWC,,workload_native_adaptive_iterations,False,True,1.0237178442288049,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,True,False,1.0069677177996355,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,True,False,1.0215200826192539,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,True,False,0.9877559865640914,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,True,False,1.0055576457941413,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,True,False,1.0085506626763574,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,target_geomean,swc,SWC,,workload_native_adaptive_iterations,True,False,1.0060124694551897,5,geometric mean across harness paired medians
+peak_rss,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_parser,workload_native_adaptive_iterations,False,True,1.0203038270522933,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_fixer,workload_native_adaptive_iterations,False,True,1.002162024672517,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_codegen_es2020,workload_native_adaptive_iterations,False,True,1.0182305630026809,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_all_es2020,workload_native_adaptive_iterations,False,True,1.0080180405913306,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,swc,SWC,large_all_es5,workload_native_adaptive_iterations,False,True,1.0248235580433196,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,target_geomean,swc,SWC,,workload_native_adaptive_iterations,False,True,1.0146732197539292,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,True,False,4.578978311993729,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,True,False,1.0626138699918097,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,True,False,1.429064173549968,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,True,False,4.6154719754158595,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,True,False,3.5993407498969923,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,2.585395425373309,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,route_equivalent_target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,1.0626138699918097,1,geometric mean across route-equivalent harnesses
+peak_rss,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,False,True,1.0057460256655812,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,False,True,1.016600391340024,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,False,True,1.011693723953474,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,False,True,0.9286965898369053,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,False,True,0.9258802034467434,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,False,True,0.9768396077115173,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,True,False,4.616939998682738,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,True,False,1.0259516431069053,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,True,False,1.4740412445730824,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,True,False,4.674727770726168,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,True,False,3.602444462796267,5,median of five round-paired ratios
+performance,end_to_end,End to end,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,2.594590809176717,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,route_equivalent_target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,1.0259516431069053,1,geometric mean across route-equivalent harnesses
+peak_rss,end_to_end,End to end,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,False,True,1.0248994445508524,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,False,True,1.007574323044878,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,False,True,1.0107587064676617,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,False,True,0.9323977870732695,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,False,True,0.9232218091697646,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,False,True,0.9788195296004895,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,True,False,1.0123162211204617,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,True,False,0.9630841487279843,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,True,False,1.035647641721897,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,True,False,1.0094785360285512,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,True,False,1.0048997055576003,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,1.0048065372823636,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,route_equivalent_target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,True,False,0.9630841487279843,1,geometric mean across route-equivalent harnesses
+peak_rss,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,parse_mandelbrot,workload_native_adaptive_iterations,False,True,1.0190439916206437,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_mandelbrot,workload_native_adaptive_iterations,False,True,0.9896849212303076,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_nbody,workload_native_adaptive_iterations,False,True,0.9945719220330619,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,execute_fannkuch,workload_native_adaptive_iterations,False,True,1.00358249419055,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,rustpython,RustPython,pystone_30000,workload_native_adaptive_iterations,False,True,0.9935880451486407,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,target_geomean,rustpython,RustPython,,workload_native_adaptive_iterations,False,True,1.0000393819518956,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,True,False,53.90792291220558,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,True,False,3.1131658010573626,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,True,False,1.2079884850665707,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,True,False,1.0755888120942099,5,median of five round-paired ratios; compiler-route-equivalent
+performance,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,True,False,1.29873043146239,5,median of five round-paired ratios
+performance,compiler_route,Compiler route,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,3.0932611526807015,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,route_equivalent_target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,1.0755888120942099,1,geometric mean across route-equivalent harnesses
+peak_rss,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,False,True,0.10666666666666667,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,False,True,1.1512085441259134,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,False,True,1.0434782608695652,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,False,True,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,compiler_route,Compiler route,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,False,True,1.0666666666666667,5,median of five round-paired ratios
+peak_rss,compiler_route,Compiler route,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,False,True,0.6716437401919355,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,True,False,52.951281707153406,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,True,False,3.1597378321463214,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,True,False,1.2640825937330196,5,median of five round-paired ratios
+performance,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,True,False,1.0882677945435149,5,median of five round-paired ratios; compiler-route-equivalent
+performance,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,True,False,1.2856592135697764,5,median of five round-paired ratios
+performance,end_to_end,End to end,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,3.1205627810195917,5,geometric mean across harness paired medians
+performance,end_to_end,End to end,route_equivalent_target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,1.0882677945435149,1,geometric mean across route-equivalent harnesses
+peak_rss,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,False,True,0.10650887573964497,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,False,True,1.0714285714285714,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,False,True,1.0,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,False,True,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,end_to_end,End to end,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,False,True,1.0588235294117647,5,median of five round-paired ratios
+peak_rss,end_to_end,End to end,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,False,True,0.6552914802357916,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,True,False,0.9859226572732938,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,True,False,1.0211230149684674,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,True,False,1.049492385786802,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,True,False,1.009187304172346,5,median of five round-paired ratios; compiler-route-equivalent
+performance,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,True,False,0.9855929072774289,5,median of five round-paired ratios
+performance,policy_increment,Policy increment,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,1.009982643156386,5,geometric mean across harness paired medians
+performance,policy_increment,Policy increment,route_equivalent_target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,True,False,1.009187304172346,1,geometric mean across route-equivalent harnesses
+peak_rss,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,async_service_direct,workload_native_adaptive_iterations,False,True,1.0159290084330044,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,async_web_service_direct,workload_native_adaptive_iterations,False,True,1.0836860957342884,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,get_body_async_burst,workload_native_adaptive_iterations,False,True,0.9583333333333334,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,compression_gzip,workload_native_adaptive_iterations,False,True,1.0,5,median of five round-paired ratios; compiler-route-equivalent
+peak_rss,policy_increment,Policy increment,harness_paired_median,actix_web,Actix Web,router_actix,workload_native_adaptive_iterations,False,True,1.0,5,median of five round-paired ratios
+peak_rss,policy_increment,Policy increment,target_geomean,actix_web,Actix Web,,workload_native_adaptive_iterations,False,True,1.0107801192852999,5,geometric mean across harness paired medians
+performance,compiler_route,Compiler route,suite_equal_target_geomean,all_real_world_targets,Equal-target suite,,mixed,True,False,2.565237547575722,6,equal-weight geometric mean of target geometric means
+peak_rss,compiler_route,Compiler route,suite_equal_target_geomean,fixed_work_targets,Equal-target suite,,fixed_work,True,False,1.0328559659160792,3,equal-weight geometric mean of target geometric means
+performance,compiler_route,Compiler route,route_equivalent_suite_equal_target_geomean,route_equivalent_real_world_targets,Route-equivalent equal-target suite,,mixed,True,False,1.0435212852959215,5,equal-weight geometric mean of route-equivalent target summaries
+performance,end_to_end,End to end,suite_equal_target_geomean,all_real_world_targets,Equal-target suite,,mixed,True,False,2.5770294598455306,6,equal-weight geometric mean of target geometric means
+peak_rss,end_to_end,End to end,suite_equal_target_geomean,fixed_work_targets,Equal-target suite,,fixed_work,True,False,1.0034222896941378,3,equal-weight geometric mean of target geometric means
+performance,end_to_end,End to end,route_equivalent_suite_equal_target_geomean,route_equivalent_real_world_targets,Route-equivalent equal-target suite,,mixed,True,False,1.0421231954379255,5,equal-weight geometric mean of route-equivalent target summaries
+performance,policy_increment,Policy increment,suite_equal_target_geomean,all_real_world_targets,Equal-target suite,,mixed,True,False,1.0054108472765604,6,equal-weight geometric mean of target geometric means
+peak_rss,policy_increment,Policy increment,suite_equal_target_geomean,fixed_work_targets,Equal-target suite,,fixed_work,True,False,1.0005703933484715,3,equal-weight geometric mean of target geometric means
+performance,policy_increment,Policy increment,route_equivalent_suite_equal_target_geomean,route_equivalent_real_world_targets,Route-equivalent equal-target suite,,mixed,True,False,0.9967802879157435,5,equal-weight geometric mean of route-equivalent target summaries

@@ -1,0 +1,41 @@
+{
+  "artifacts": {
+    "macrobenchmarks.csv": {
+      "bytes": 44558,
+      "sha256": "83efa7c588ed8d80e4efa82db1d41c6f38717b4485ea1053b54e5b0981252f5a"
+    },
+    "macrobenchmarks.png": {
+      "bytes": 115204,
+      "sha256": "4a2fdadc052b52a8dd0ec35225f53214df1ac7cc123bd82f8af07e0648db0da3"
+    },
+    "macrobenchmarks.svg": {
+      "bytes": 31959,
+      "sha256": "60995b0031df20cc99d24641fe1ab649b8d9626e4da6ec5f7217a6acfc198138"
+    },
+    "microbenchmarks.csv": {
+      "bytes": 957950,
+      "sha256": "436196eecab18fd9d7ba9a5ec0ec1cd65e5e7174484ee8ce707648bed325c1c3"
+    },
+    "microbenchmarks.png": {
+      "bytes": 247758,
+      "sha256": "34446cc45a463823cbc44b2b99fbd573f736e74cc1c362ff13b3a122cf182b1f"
+    },
+    "microbenchmarks.svg": {
+      "bytes": 1108845,
+      "sha256": "e20238f397ab69393b3aa03c4e0da4b8b248cc5352eff12db321256dd3e5571c"
+    },
+    "presentation-data.json": {
+      "bytes": 64978,
+      "sha256": "95fa83d09e7204ed93fd9631f73e16388d08cbdb63a8a31bc893bfb3708dad8c"
+    }
+  },
+  "generated_utc": "2026-07-15T01:00:00Z",
+  "production_contract": true,
+  "renderer": "Matplotlib 3.11.0",
+  "schema_version": 1,
+  "sources": {
+    "micro_records": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f",
+    "micro_results": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",
+    "type_isolation_results": "3e252a0f8ed1f6ca18c5b63f30acd48dcf5ed0280f29e8ecb1327b659333e8a5"
+  }
+}

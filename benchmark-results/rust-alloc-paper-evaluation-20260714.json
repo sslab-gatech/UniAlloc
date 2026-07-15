@@ -1,0 +1,1101 @@
+{
+  "failed_closed_probes": [
+    {
+      "reason": "No historical lockfile; old pinned Cargo resolves modern incompatible dependencies, while current Rust rejects old swc_common source.",
+      "result": "blocked",
+      "target": "SWC v1.2.51"
+    },
+    {
+      "reason": "The paper tag is absent and the available 2021 nightly rejects the 2019 derive/macro expansion.",
+      "result": "blocked",
+      "target": "RustPython 0.1.0 fallback"
+    }
+  ],
+  "generated_at": "2026-07-14T16:47:49.712196+00:00",
+  "global_boundaries": [
+    "These runs use the current UniAlloc tree and nightly-2026-06-11 on a shared AMD EPYC host.",
+    "Exact paper source versions do not make the current commands paper-exact; workload inputs, historical dependencies, and RSS protocols remain missing.",
+    "Build time is excluded from measured performance.",
+    "libc-managed rseq remains enabled for measured application processes.",
+    "Lower wall time and peak RSS are better; higher service throughput is better."
+  ],
+  "host_environment": {
+    "cpu": "AMD EPYC 9354 32-Core Processor",
+    "cpu_boost": true,
+    "cpu_frequency_governor": "schedutil",
+    "glibc": "2.39",
+    "host_is_shared": true,
+    "kernel": "6.8.0-111-generic",
+    "logical_cpus": 128,
+    "numa_nodes": 2,
+    "perf_event_paranoid": 4,
+    "transparent_huge_pages": "madvise"
+  },
+  "live_results": {
+    "collections_current_subset": {
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-collections-current-20260714/summary.json",
+        "sha256": "9261d4fa8f62be6e5fdc83308606ad6ea948679a5b1ec291eb92a008b37da07d"
+      },
+      "claim_grade": false,
+      "controls": {
+        "allocator_tuning": "defaults",
+        "allocators": [
+          "unialloc",
+          "jemalloc",
+          "mimalloc",
+          "tcmalloc",
+          "ptmalloc"
+        ],
+        "benchmarks": [
+          "binary_heap::bench_push",
+          "btree::map::insert_rand_10_000",
+          "btree::set::clone_10k_and_remove_half",
+          "linked_list::bench_push_back_pop_back",
+          "slice::random_inserts",
+          "str::bench_join",
+          "string::bench_exact_size_shrink_to_fit",
+          "vec::bench_with_capacity_1000",
+          "vec::bench_in_place_collect_droppable",
+          "vec_deque::bench_grow_1025"
+        ],
+        "build_excluded_from_timing": true,
+        "cpu": 20,
+        "direct_benchmark_binary": true,
+        "libc_rseq": "default enabled; GLIBC_TUNABLES absent",
+        "measured_fresh_processes_per_cell": 5,
+        "memory_statistic": "median GNU time peak RSS per cell; geomean of cell ratios",
+        "numa_node": 0,
+        "performance_statistic": "median libtest ns/iter per cell; geomean of cell ratios",
+        "profile": "family-smoke",
+        "timeout_seconds": 25,
+        "warmup_fresh_processes_per_cell": 1
+      },
+      "paper_exact": false,
+      "raw_all_ten_boundary": "The raw ten-leaf aggregate is retained, but sub-30 ns leaves and a 0.27 ns ptmalloc LinkedList result indicate compiler-elision sensitivity.",
+      "robustness_aggregate": [
+        {
+          "allocator": "unialloc",
+          "benchmarks": 5,
+          "geomean_ns_ratio_vs_unialloc": 1.0,
+          "geomean_peak_rss_ratio_vs_unialloc": 1.0,
+          "selection_rule": "minimum cell median across all allocators >= 100 ns/iter"
+        },
+        {
+          "allocator": "jemalloc",
+          "benchmarks": 5,
+          "geomean_ns_ratio_vs_unialloc": 1.0170925197548257,
+          "geomean_peak_rss_ratio_vs_unialloc": 1.0,
+          "selection_rule": "minimum cell median across all allocators >= 100 ns/iter"
+        },
+        {
+          "allocator": "mimalloc",
+          "benchmarks": 5,
+          "geomean_ns_ratio_vs_unialloc": 0.9645531505740137,
+          "geomean_peak_rss_ratio_vs_unialloc": 1.0,
+          "selection_rule": "minimum cell median across all allocators >= 100 ns/iter"
+        },
+        {
+          "allocator": "tcmalloc",
+          "benchmarks": 5,
+          "geomean_ns_ratio_vs_unialloc": 0.9557284604909291,
+          "geomean_peak_rss_ratio_vs_unialloc": 3.0000000000000004,
+          "selection_rule": "minimum cell median across all allocators >= 100 ns/iter"
+        },
+        {
+          "allocator": "ptmalloc",
+          "benchmarks": 5,
+          "geomean_ns_ratio_vs_unialloc": 0.9665422142500918,
+          "geomean_peak_rss_ratio_vs_unialloc": 1.0,
+          "selection_rule": "minimum cell median across all allocators >= 100 ns/iter"
+        }
+      ],
+      "robustness_selected_benchmarks": [
+        "binary_heap::bench_push",
+        "btree::set::clone_10k_and_remove_half",
+        "slice::random_inserts",
+        "vec::bench_in_place_collect_droppable",
+        "vec_deque::bench_grow_1025"
+      ],
+      "robustness_selection_rule": "Keep only leaves whose median is at least 100 ns/iter for every allocator.",
+      "rss_boundary": "The fresh microprocess RSS floor was 3072 KiB for UniAlloc, jemalloc, mimalloc, and ptmalloc; TCMalloc was 9216 KiB. This does not measure allocator retention.",
+      "toolchain": "nightly-2026-06-11",
+      "validation": {
+        "all_surfaces_identical": true,
+        "benchmark_inventory_count": 430,
+        "binary_hashes_verified": 300,
+        "measured_processes": 250,
+        "raw_hashes_verified": 900,
+        "rseq_success_min_per_allocator": 3,
+        "status": "pass",
+        "valid_process_records": 300
+      },
+      "validation_artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-collections-current-20260714/validation.json",
+        "sha256": "6c4aaa9fb7a7daafa0d9031184ade6731688b7040f284de02e1fed5871d89226"
+      }
+    },
+    "oxipng_v4_0_3_full_four_threads_one_shot": {
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-oxipng-v403-4t-20260714/results.full-one-shot.json",
+        "sha256": "9236c0a937c6339d4f485a2f6b9b639980791f9a6cf96aa1816ac86b8d941327"
+      },
+      "claim_grade": false,
+      "controls": {
+        "cpu_list": "24-27",
+        "glibc_rseq_mode": "libc_default",
+        "measured_repetitions": 1,
+        "numa_node": 0,
+        "warmups": 0
+      },
+      "input": {
+        "description": "lossless PNG optimization",
+        "input": "/home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts/realworld-oxipng/tests/files/issue-167.png",
+        "input_sha256": "e477ace8a30d2e6e07e4e362dea406fd2349546fff05f6e32e56425b01b0288d",
+        "threads": 4,
+        "work_amount": 32353257,
+        "work_unit": "bytes"
+      },
+      "measurement_role": "large-input RSS scale check; one measured repetition is not a performance estimate",
+      "paper_method_exact": false,
+      "paper_source_exact": true,
+      "source_commit": "dea23211ae6259007e068c59ab16929798d00d96",
+      "summaries": [
+        {
+          "median_minor_page_faults": 10035,
+          "median_peak_rss_kib": 2786340.0,
+          "median_system_cpu_seconds": 0.62,
+          "median_user_cpu_seconds": 135.77,
+          "median_wall_seconds": 74.214083596,
+          "output_sha256": "401510255c94ce842d559946d3cc5dcbd3b700e965fb10d74dffdc1c869c5418",
+          "rss_ratio_vs_system": 1.1447557193825482,
+          "sample_count": 1,
+          "variant": "mimalloc",
+          "wall_ratio_vs_system": 0.9787038400401818
+        },
+        {
+          "median_minor_page_faults": 1938116,
+          "median_peak_rss_kib": 2434004.0,
+          "median_system_cpu_seconds": 3.66,
+          "median_user_cpu_seconds": 136.14,
+          "median_wall_seconds": 75.828949024,
+          "output_sha256": "401510255c94ce842d559946d3cc5dcbd3b700e965fb10d74dffdc1c869c5418",
+          "rss_ratio_vs_system": 1.0,
+          "sample_count": 1,
+          "variant": "system",
+          "wall_ratio_vs_system": 1.0
+        },
+        {
+          "median_minor_page_faults": 892925,
+          "median_peak_rss_kib": 3510376.0,
+          "median_system_cpu_seconds": 1.73,
+          "median_user_cpu_seconds": 139.19,
+          "median_wall_seconds": 76.32046265,
+          "output_sha256": "401510255c94ce842d559946d3cc5dcbd3b700e965fb10d74dffdc1c869c5418",
+          "rss_ratio_vs_system": 1.4422227736684081,
+          "sample_count": 1,
+          "variant": "tcmalloc",
+          "wall_ratio_vs_system": 1.0064818731147709
+        },
+        {
+          "median_minor_page_faults": 2394666,
+          "median_peak_rss_kib": 2993772.0,
+          "median_system_cpu_seconds": 4.67,
+          "median_user_cpu_seconds": 137.16,
+          "median_wall_seconds": 78.709782395,
+          "output_sha256": "401510255c94ce842d559946d3cc5dcbd3b700e965fb10d74dffdc1c869c5418",
+          "rss_ratio_vs_system": 1.229978258047234,
+          "sample_count": 1,
+          "variant": "unialloc",
+          "wall_ratio_vs_system": 1.0379912079499904
+        }
+      ],
+      "toolchain": "nightly-2026-06-11"
+    },
+    "oxipng_v4_0_3_quick_four_threads": {
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-oxipng-v403-4t-20260714/results.quick.json",
+        "sha256": "bcb46f2ea6048026896acd59a86236231eb82efef02cb0d88ea7a9301e5bc08a"
+      },
+      "claim_grade": false,
+      "controls": {
+        "cpu_list": "20-23",
+        "glibc_rseq_mode": "libc_default",
+        "measured_repetitions": 5,
+        "numa_node": 0,
+        "warmups": 1
+      },
+      "input": {
+        "description": "lossless PNG optimization",
+        "input": "/home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts/realworld-oxipng/tests/files/issue-141.png",
+        "input_sha256": "909418f09bfb42612575aa3d12c7d7b57546d361b382a9ebd8d3c83531948334",
+        "threads": 4,
+        "work_amount": 1653611,
+        "work_unit": "bytes"
+      },
+      "paper_method_exact": false,
+      "paper_source_exact": true,
+      "source_commit": "dea23211ae6259007e068c59ab16929798d00d96",
+      "summaries": [
+        {
+          "median_minor_page_faults": 29589,
+          "median_peak_rss_kib": 79204.0,
+          "median_system_cpu_seconds": 0.06,
+          "median_user_cpu_seconds": 1.71,
+          "median_wall_seconds": 0.637525633,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_ratio_vs_system": 1.2258404011638704,
+          "sample_count": 5,
+          "variant": "jemalloc",
+          "wall_ratio_vs_system": 1.0632864036709782
+        },
+        {
+          "median_minor_page_faults": 739,
+          "median_peak_rss_kib": 93820.0,
+          "median_system_cpu_seconds": 0.01,
+          "median_user_cpu_seconds": 1.66,
+          "median_wall_seconds": 0.595562306,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_ratio_vs_system": 1.452052250355971,
+          "sample_count": 5,
+          "variant": "mimalloc",
+          "wall_ratio_vs_system": 0.9932985745668593
+        },
+        {
+          "median_minor_page_faults": 19662,
+          "median_peak_rss_kib": 64612.0,
+          "median_system_cpu_seconds": 0.04,
+          "median_user_cpu_seconds": 1.72,
+          "median_wall_seconds": 0.599580349,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_ratio_vs_system": 1.0,
+          "sample_count": 5,
+          "variant": "system",
+          "wall_ratio_vs_system": 1.0
+        },
+        {
+          "median_minor_page_faults": 16938,
+          "median_peak_rss_kib": 68608.0,
+          "median_system_cpu_seconds": 0.04,
+          "median_user_cpu_seconds": 1.71,
+          "median_wall_seconds": 0.625148553,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_ratio_vs_system": 1.0618460967003034,
+          "sample_count": 5,
+          "variant": "tcmalloc",
+          "wall_ratio_vs_system": 1.0426434989783162
+        },
+        {
+          "median_minor_page_faults": 35497,
+          "median_peak_rss_kib": 56100.0,
+          "median_system_cpu_seconds": 0.08,
+          "median_user_cpu_seconds": 1.72,
+          "median_wall_seconds": 0.653298968,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_ratio_vs_system": 0.8682597659877422,
+          "sample_count": 5,
+          "variant": "unialloc",
+          "wall_ratio_vs_system": 1.0895936951395984
+        }
+      ],
+      "toolchain": "nightly-2026-06-11"
+    },
+    "polars_compatibility_smoke": {
+      "boundary": "System-allocator smoke only; no allocator comparison is reported.",
+      "claim_grade": false,
+      "compatibility_pin": {
+        "dependency": "jsonpath",
+        "revision": "1a84c5af9445e617a6deed14dadfaee13af0d95f"
+      },
+      "paper_exact": false,
+      "paper_source_commit": "07da7f07e9bca6dfe3034a2176f1ab5f037bf584",
+      "paper_source_tag": "py-0.13.0",
+      "peak_rss_kib": 13272,
+      "process_wall_seconds": 4.702,
+      "rows": [
+        {
+          "ns_per_iter": 5006,
+          "plus_minus_ns": 43,
+          "size": 1024
+        },
+        {
+          "ns_per_iter": 19219,
+          "plus_minus_ns": 257,
+          "size": 4096
+        }
+      ],
+      "target": "collect optional_str",
+      "threads": 1
+    },
+    "rsedis_current_head": {
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-rsedis-current-20260714/report.json",
+        "sha256": "3178ff4d6880f679bfdf3de71cd94ded4e0483571b22db2a17c45e41dc454e9a"
+      },
+      "claim_grade": false,
+      "claim_grade_blockers": [
+        "the paper does not identify the Rsedis revision",
+        "the paper does not publish its redis-benchmark command or key distribution",
+        "this campaign uses the pinned current upstream HEAD and Redis 7.0.15 client",
+        "allocator dependencies are current reproducible locks rather than the paper environment"
+      ],
+      "controls": {
+        "build_cpus": "72-95",
+        "client_cpus": "68-71",
+        "clients": 50,
+        "commands": [
+          "SET",
+          "GET"
+        ],
+        "data_size_bytes": 64,
+        "fresh_server_per_repetition": true,
+        "glibc_rseq_mode": "libc-default-no-disable-tunable",
+        "glibc_tunables_removed_from_measured_environment": true,
+        "measured_repetitions": 5,
+        "numa_node": 0,
+        "order_rotation": true,
+        "requests_per_command": 100000,
+        "server_cpus": "64-67",
+        "warmups": 1
+      },
+      "measured_rows": [
+        {
+          "benchmark_elapsed_seconds": 3.283412884,
+          "combined_effective_rps": 60912.22976391293,
+          "correctness_passed": true,
+          "get_rps": 60753.34,
+          "idle_private_dirty_kib": 280,
+          "idle_pss_kib": 1469,
+          "idle_rss_kib": 3760,
+          "order_index": 4,
+          "peak_rss_kib": 5268,
+          "post_private_dirty_kib": 1680,
+          "post_pss_kib": 2869,
+          "post_rss_kib": 5268,
+          "repetition": 1,
+          "round_index": 1,
+          "set_rps": 61425.06,
+          "success": true,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.240554348,
+          "combined_effective_rps": 61717.835444863216,
+          "correctness_passed": true,
+          "get_rps": 60459.49,
+          "idle_private_dirty_kib": 280,
+          "idle_pss_kib": 1469,
+          "idle_rss_kib": 3796,
+          "order_index": 3,
+          "peak_rss_kib": 5400,
+          "post_private_dirty_kib": 1712,
+          "post_pss_kib": 2965,
+          "post_rss_kib": 5400,
+          "repetition": 2,
+          "round_index": 2,
+          "set_rps": 63451.78,
+          "success": true,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.256462906,
+          "combined_effective_rps": 61416.32985639174,
+          "correctness_passed": true,
+          "get_rps": 60827.25,
+          "idle_private_dirty_kib": 280,
+          "idle_pss_kib": 1405,
+          "idle_rss_kib": 3696,
+          "order_index": 2,
+          "peak_rss_kib": 5060,
+          "post_private_dirty_kib": 1536,
+          "post_pss_kib": 2661,
+          "post_rss_kib": 5060,
+          "repetition": 3,
+          "round_index": 3,
+          "set_rps": 62421.97,
+          "success": true,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.133341445,
+          "combined_effective_rps": 63829.62199001583,
+          "correctness_passed": true,
+          "get_rps": 64143.68,
+          "idle_private_dirty_kib": 276,
+          "idle_pss_kib": 1401,
+          "idle_rss_kib": 3728,
+          "order_index": 1,
+          "peak_rss_kib": 5168,
+          "post_private_dirty_kib": 1580,
+          "post_pss_kib": 2769,
+          "post_rss_kib": 5168,
+          "repetition": 4,
+          "round_index": 4,
+          "set_rps": 63938.62,
+          "success": true,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.259099845,
+          "combined_effective_rps": 61366.637879116584,
+          "correctness_passed": true,
+          "get_rps": 60132.29,
+          "idle_private_dirty_kib": 284,
+          "idle_pss_kib": 1537,
+          "idle_rss_kib": 3828,
+          "order_index": 0,
+          "peak_rss_kib": 5324,
+          "post_private_dirty_kib": 1600,
+          "post_pss_kib": 2853,
+          "post_rss_kib": 5324,
+          "repetition": 5,
+          "round_index": 5,
+          "set_rps": 63051.7,
+          "success": true,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.171247699,
+          "combined_effective_rps": 63066.65987114998,
+          "correctness_passed": true,
+          "get_rps": 63532.4,
+          "idle_private_dirty_kib": 1160,
+          "idle_pss_kib": 2790,
+          "idle_rss_kib": 5184,
+          "order_index": 0,
+          "peak_rss_kib": 16224,
+          "post_private_dirty_kib": 8868,
+          "post_pss_kib": 10498,
+          "post_rss_kib": 16224,
+          "repetition": 1,
+          "round_index": 1,
+          "set_rps": 62972.29,
+          "success": true,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.1541173,
+          "combined_effective_rps": 63409.182657854864,
+          "correctness_passed": true,
+          "get_rps": 63451.78,
+          "idle_private_dirty_kib": 1160,
+          "idle_pss_kib": 2766,
+          "idle_rss_kib": 5156,
+          "order_index": 4,
+          "peak_rss_kib": 15276,
+          "post_private_dirty_kib": 8496,
+          "post_pss_kib": 10165,
+          "post_rss_kib": 15276,
+          "repetition": 2,
+          "round_index": 2,
+          "set_rps": 63775.51,
+          "success": true,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.231530417,
+          "combined_effective_rps": 61890.18025263415,
+          "correctness_passed": true,
+          "get_rps": 63371.36,
+          "idle_private_dirty_kib": 1160,
+          "idle_pss_kib": 2721,
+          "idle_rss_kib": 5056,
+          "order_index": 3,
+          "peak_rss_kib": 15360,
+          "post_private_dirty_kib": 8536,
+          "post_pss_kib": 10161,
+          "post_rss_kib": 15216,
+          "repetition": 3,
+          "round_index": 3,
+          "set_rps": 60827.25,
+          "success": true,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.209924815,
+          "combined_effective_rps": 62306.755306354426,
+          "correctness_passed": true,
+          "get_rps": 63451.78,
+          "idle_private_dirty_kib": 1164,
+          "idle_pss_kib": 2829,
+          "idle_rss_kib": 5224,
+          "order_index": 2,
+          "peak_rss_kib": 15884,
+          "post_private_dirty_kib": 8260,
+          "post_pss_kib": 9926,
+          "post_rss_kib": 15884,
+          "repetition": 4,
+          "round_index": 4,
+          "set_rps": 61538.46,
+          "success": true,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.156661725,
+          "combined_effective_rps": 63358.07173003309,
+          "correctness_passed": true,
+          "get_rps": 64143.68,
+          "idle_private_dirty_kib": 1160,
+          "idle_pss_kib": 2729,
+          "idle_rss_kib": 5116,
+          "order_index": 1,
+          "peak_rss_kib": 14876,
+          "post_private_dirty_kib": 8516,
+          "post_pss_kib": 10086,
+          "post_rss_kib": 14876,
+          "repetition": 5,
+          "round_index": 5,
+          "set_rps": 62972.29,
+          "success": true,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.18941311,
+          "combined_effective_rps": 62707.46156179185,
+          "correctness_passed": true,
+          "get_rps": 63897.76,
+          "idle_private_dirty_kib": 6456,
+          "idle_pss_kib": 7761,
+          "idle_rss_kib": 10052,
+          "order_index": 1,
+          "peak_rss_kib": 70032,
+          "post_private_dirty_kib": 13756,
+          "post_pss_kib": 15125,
+          "post_rss_kib": 43292,
+          "repetition": 1,
+          "round_index": 1,
+          "set_rps": 61957.87,
+          "success": true,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.181994493,
+          "combined_effective_rps": 62853.66000474722,
+          "correctness_passed": true,
+          "get_rps": 64102.57,
+          "idle_private_dirty_kib": 6452,
+          "idle_pss_kib": 7737,
+          "idle_rss_kib": 10028,
+          "order_index": 0,
+          "peak_rss_kib": 70080,
+          "post_private_dirty_kib": 13744,
+          "post_pss_kib": 15029,
+          "post_rss_kib": 53296,
+          "repetition": 2,
+          "round_index": 2,
+          "set_rps": 62034.74,
+          "success": true,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.24899672,
+          "combined_effective_rps": 61557.46442243253,
+          "correctness_passed": true,
+          "get_rps": 62932.66,
+          "idle_private_dirty_kib": 6456,
+          "idle_pss_kib": 7658,
+          "idle_rss_kib": 9984,
+          "order_index": 4,
+          "peak_rss_kib": 70116,
+          "post_private_dirty_kib": 65448,
+          "post_pss_kib": 66649,
+          "post_rss_kib": 69916,
+          "repetition": 3,
+          "round_index": 3,
+          "set_rps": 60606.06,
+          "success": true,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.221324596,
+          "combined_effective_rps": 62086.26111393588,
+          "correctness_passed": true,
+          "get_rps": 61652.28,
+          "idle_private_dirty_kib": 6456,
+          "idle_pss_kib": 7717,
+          "idle_rss_kib": 10040,
+          "order_index": 3,
+          "peak_rss_kib": 70360,
+          "post_private_dirty_kib": 57768,
+          "post_pss_kib": 59029,
+          "post_rss_kib": 61360,
+          "repetition": 4,
+          "round_index": 4,
+          "set_rps": 62893.08,
+          "success": true,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.179308018,
+          "combined_effective_rps": 62906.770551226284,
+          "correctness_passed": true,
+          "get_rps": 62034.74,
+          "idle_private_dirty_kib": 6456,
+          "idle_pss_kib": 7833,
+          "idle_rss_kib": 10156,
+          "order_index": 2,
+          "peak_rss_kib": 70104,
+          "post_private_dirty_kib": 65728,
+          "post_pss_kib": 67105,
+          "post_rss_kib": 70104,
+          "repetition": 5,
+          "round_index": 5,
+          "set_rps": 64226.07,
+          "success": true,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.150759675,
+          "combined_effective_rps": 63476.75501464579,
+          "correctness_passed": true,
+          "get_rps": 63775.51,
+          "idle_private_dirty_kib": 4296,
+          "idle_pss_kib": 5724,
+          "idle_rss_kib": 9680,
+          "order_index": 2,
+          "peak_rss_kib": 11884,
+          "post_private_dirty_kib": 6172,
+          "post_pss_kib": 7756,
+          "post_rss_kib": 11884,
+          "repetition": 1,
+          "round_index": 1,
+          "set_rps": 63613.23,
+          "success": true,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.247494146,
+          "combined_effective_rps": 61585.946273788904,
+          "correctness_passed": true,
+          "get_rps": 63291.14,
+          "idle_private_dirty_kib": 4304,
+          "idle_pss_kib": 5728,
+          "idle_rss_kib": 9672,
+          "order_index": 1,
+          "peak_rss_kib": 12024,
+          "post_private_dirty_kib": 6300,
+          "post_pss_kib": 7936,
+          "post_rss_kib": 12024,
+          "repetition": 2,
+          "round_index": 2,
+          "set_rps": 60313.63,
+          "success": true,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.233308996,
+          "combined_effective_rps": 61856.13569486386,
+          "correctness_passed": true,
+          "get_rps": 61576.36,
+          "idle_private_dirty_kib": 4296,
+          "idle_pss_kib": 5781,
+          "idle_rss_kib": 9704,
+          "order_index": 0,
+          "peak_rss_kib": 12136,
+          "post_private_dirty_kib": 6372,
+          "post_pss_kib": 8049,
+          "post_rss_kib": 12136,
+          "repetition": 3,
+          "round_index": 3,
+          "set_rps": 62539.09,
+          "success": true,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.221113744,
+          "combined_effective_rps": 62090.32524000183,
+          "correctness_passed": true,
+          "get_rps": 62189.05,
+          "idle_private_dirty_kib": 4296,
+          "idle_pss_kib": 5720,
+          "idle_rss_kib": 9664,
+          "order_index": 4,
+          "peak_rss_kib": 11916,
+          "post_private_dirty_kib": 6196,
+          "post_pss_kib": 7808,
+          "post_rss_kib": 11916,
+          "repetition": 4,
+          "round_index": 4,
+          "set_rps": 62344.14,
+          "success": true,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.274190367,
+          "combined_effective_rps": 61083.80319475786,
+          "correctness_passed": true,
+          "get_rps": 61919.5,
+          "idle_private_dirty_kib": 4296,
+          "idle_pss_kib": 5724,
+          "idle_rss_kib": 9680,
+          "order_index": 3,
+          "peak_rss_kib": 11828,
+          "post_private_dirty_kib": 6096,
+          "post_pss_kib": 7680,
+          "post_rss_kib": 11828,
+          "repetition": 5,
+          "round_index": 5,
+          "set_rps": 60753.34,
+          "success": true,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.193554364,
+          "combined_effective_rps": 62626.14541795224,
+          "correctness_passed": true,
+          "get_rps": 63171.2,
+          "idle_private_dirty_kib": 904,
+          "idle_pss_kib": 2281,
+          "idle_rss_kib": 4604,
+          "order_index": 3,
+          "peak_rss_kib": 24624,
+          "post_private_dirty_kib": 19884,
+          "post_pss_kib": 21261,
+          "post_rss_kib": 24624,
+          "repetition": 1,
+          "round_index": 1,
+          "set_rps": 62460.96,
+          "success": true,
+          "variant": "unialloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.20469746,
+          "combined_effective_rps": 62408.38721793101,
+          "correctness_passed": true,
+          "get_rps": 61996.28,
+          "idle_private_dirty_kib": 908,
+          "idle_pss_kib": 2153,
+          "idle_rss_kib": 4480,
+          "order_index": 2,
+          "peak_rss_kib": 25152,
+          "post_private_dirty_kib": 20116,
+          "post_pss_kib": 21361,
+          "post_rss_kib": 25152,
+          "repetition": 2,
+          "round_index": 2,
+          "set_rps": 63251.11,
+          "success": true,
+          "variant": "unialloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.173505669,
+          "combined_effective_rps": 63021.787530955255,
+          "correctness_passed": true,
+          "get_rps": 62227.75,
+          "idle_private_dirty_kib": 904,
+          "idle_pss_kib": 2282,
+          "idle_rss_kib": 4608,
+          "order_index": 1,
+          "peak_rss_kib": 24364,
+          "post_private_dirty_kib": 17912,
+          "post_pss_kib": 19289,
+          "post_rss_kib": 24364,
+          "repetition": 3,
+          "round_index": 3,
+          "set_rps": 64226.07,
+          "success": true,
+          "variant": "unialloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.228012658,
+          "combined_effective_rps": 61957.62569404398,
+          "correctness_passed": true,
+          "get_rps": 60827.25,
+          "idle_private_dirty_kib": 904,
+          "idle_pss_kib": 2281,
+          "idle_rss_kib": 4608,
+          "order_index": 0,
+          "peak_rss_kib": 24944,
+          "post_private_dirty_kib": 19936,
+          "post_pss_kib": 21313,
+          "post_rss_kib": 24944,
+          "repetition": 4,
+          "round_index": 4,
+          "set_rps": 63451.78,
+          "success": true,
+          "variant": "unialloc"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.156931473,
+          "combined_effective_rps": 63352.65801951096,
+          "correctness_passed": true,
+          "get_rps": 63775.51,
+          "idle_private_dirty_kib": 900,
+          "idle_pss_kib": 2277,
+          "idle_rss_kib": 4604,
+          "order_index": 4,
+          "peak_rss_kib": 25020,
+          "post_private_dirty_kib": 20424,
+          "post_pss_kib": 21801,
+          "post_rss_kib": 25020,
+          "repetition": 5,
+          "round_index": 5,
+          "set_rps": 63331.22,
+          "success": true,
+          "variant": "unialloc"
+        }
+      ],
+      "measured_rows_source": {
+        "measured_rows": 25,
+        "path": "evaluation/raw/rust-alloc-paper-rsedis-current-20260714/records.json",
+        "selection": "phase=measured and success=true",
+        "sha256": "581f320372ddd88487d80807ec6ea35147cfbc8b5ea13519a1ba47531549b886",
+        "successful_measured_rows": 25,
+        "total_rows": 30,
+        "warmup_rows": 5
+      },
+      "paired_comparisons_vs_system_ptmalloc": [
+        {
+          "baseline": "system_ptmalloc",
+          "median_elapsed_ratio": 0.9733264624759813,
+          "median_peak_rss_delta_percent": 203.5573122529644,
+          "median_peak_rss_ratio": 3.035573122529644,
+          "median_post_rss_ratio": 3.007114624505929,
+          "median_throughput_delta_percent": 2.7404512825188743,
+          "median_throughput_ratio": 1.0274045128251887,
+          "paired_rounds": 5,
+          "variant": "jemalloc"
+        },
+        {
+          "baseline": "system_ptmalloc",
+          "median_elapsed_ratio": 0.9819290625271747,
+          "median_peak_rss_delta_percent": 1229.384965831435,
+          "median_peak_rss_ratio": 13.29384965831435,
+          "median_post_rss_ratio": 11.873065015479876,
+          "median_throughput_delta_percent": 1.8403506080486354,
+          "median_throughput_ratio": 1.0184035060804864,
+          "paired_rounds": 5,
+          "variant": "mimalloc"
+        },
+        {
+          "baseline": "system_ptmalloc",
+          "median_elapsed_ratio": 1.002141546554923,
+          "median_peak_rss_delta_percent": 125.58845861807137,
+          "median_peak_rss_ratio": 2.2558845861807137,
+          "median_post_rss_ratio": 2.2558845861807137,
+          "median_throughput_delta_percent": -0.2136970133894911,
+          "median_throughput_ratio": 0.9978630298661051,
+          "paired_rounds": 5,
+          "variant": "tcmalloc"
+        },
+        {
+          "baseline": "system_ptmalloc",
+          "median_elapsed_ratio": 0.9745253548421656,
+          "median_peak_rss_delta_percent": 369.94740796393694,
+          "median_peak_rss_ratio": 4.699474079639369,
+          "median_post_rss_ratio": 4.699474079639369,
+          "median_throughput_delta_percent": 2.6140566821845512,
+          "median_throughput_ratio": 1.0261405668218455,
+          "paired_rounds": 5,
+          "variant": "unialloc"
+        }
+      ],
+      "paper_exact": false,
+      "source_commit": "e50029606295cb9e0980c04a09f5bf888afa309a",
+      "summaries": [
+        {
+          "benchmark_elapsed_seconds_median": 3.256462906,
+          "combined_effective_rps_median": 61416.32985639174,
+          "get_rps_median": 60753.34,
+          "idle_private_dirty_kib_median": 280.0,
+          "idle_pss_kib_median": 1469.0,
+          "idle_rss_kib_median": 3760.0,
+          "peak_rss_kib_median": 5268.0,
+          "post_private_dirty_kib_median": 1600.0,
+          "post_pss_kib_median": 2853.0,
+          "post_rss_kib_median": 5268.0,
+          "set_rps_median": 63051.7,
+          "successful_repetitions": 5,
+          "variant": "system_ptmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds_median": 3.171247699,
+          "combined_effective_rps_median": 63066.65987114998,
+          "get_rps_median": 63451.78,
+          "idle_private_dirty_kib_median": 1160.0,
+          "idle_pss_kib_median": 2766.0,
+          "idle_rss_kib_median": 5156.0,
+          "peak_rss_kib_median": 15360.0,
+          "post_private_dirty_kib_median": 8516.0,
+          "post_pss_kib_median": 10161.0,
+          "post_rss_kib_median": 15276.0,
+          "set_rps_median": 62972.29,
+          "successful_repetitions": 5,
+          "variant": "jemalloc"
+        },
+        {
+          "benchmark_elapsed_seconds_median": 3.18941311,
+          "combined_effective_rps_median": 62707.46156179185,
+          "get_rps_median": 62932.66,
+          "idle_private_dirty_kib_median": 6456.0,
+          "idle_pss_kib_median": 7737.0,
+          "idle_rss_kib_median": 10040.0,
+          "peak_rss_kib_median": 70104.0,
+          "post_private_dirty_kib_median": 57768.0,
+          "post_pss_kib_median": 59029.0,
+          "post_rss_kib_median": 61360.0,
+          "set_rps_median": 62034.74,
+          "successful_repetitions": 5,
+          "variant": "mimalloc"
+        },
+        {
+          "benchmark_elapsed_seconds_median": 3.233308996,
+          "combined_effective_rps_median": 61856.13569486386,
+          "get_rps_median": 62189.05,
+          "idle_private_dirty_kib_median": 4296.0,
+          "idle_pss_kib_median": 5724.0,
+          "idle_rss_kib_median": 9680.0,
+          "peak_rss_kib_median": 11916.0,
+          "post_private_dirty_kib_median": 6196.0,
+          "post_pss_kib_median": 7808.0,
+          "post_rss_kib_median": 11916.0,
+          "set_rps_median": 62344.14,
+          "successful_repetitions": 5,
+          "variant": "tcmalloc"
+        },
+        {
+          "benchmark_elapsed_seconds_median": 3.193554364,
+          "combined_effective_rps_median": 62626.14541795224,
+          "get_rps_median": 62227.75,
+          "idle_private_dirty_kib_median": 904.0,
+          "idle_pss_kib_median": 2281.0,
+          "idle_rss_kib_median": 4604.0,
+          "peak_rss_kib_median": 24944.0,
+          "post_private_dirty_kib_median": 19936.0,
+          "post_pss_kib_median": 21313.0,
+          "post_rss_kib_median": 24944.0,
+          "set_rps_median": 63331.22,
+          "successful_repetitions": 5,
+          "variant": "unialloc"
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "counts": {
+          "jemalloc": {
+            "measured": 5,
+            "successful_measured": 5,
+            "total": 6,
+            "warmups": 1
+          },
+          "mimalloc": {
+            "measured": 5,
+            "successful_measured": 5,
+            "total": 6,
+            "warmups": 1
+          },
+          "system_ptmalloc": {
+            "measured": 5,
+            "successful_measured": 5,
+            "total": 6,
+            "warmups": 1
+          },
+          "tcmalloc": {
+            "measured": 5,
+            "successful_measured": 5,
+            "total": 6,
+            "warmups": 1
+          },
+          "unialloc": {
+            "measured": 5,
+            "successful_measured": 5,
+            "total": 6,
+            "warmups": 1
+          }
+        },
+        "paper_exact": false
+      },
+      "validation_artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-rsedis-current-20260714/validation.json",
+        "sha256": "ec9e7688f9cd952c0326f0cada637c040edf30740328d43d0e83302a70fcfe7a"
+      }
+    }
+  },
+  "paper_repository": {
+    "branch": "asplos",
+    "commit": "cbb5bf39a9387c27fc3d257e828a8dde8c33528d",
+    "contains_executable_benchmark_harness": false,
+    "path": "/home/hanqing/alloc/rust-alloc-paper",
+    "recorded_method": {
+      "aggregate": "geometric mean of the final five executions",
+      "default_unspecified_thread_count": 4,
+      "discard_first": true,
+      "executions": 6
+    },
+    "reproduction_boundary": "The repository contains prose and normalized plot data, but no workload commands, inputs, exact dependency locks, or RSS collection protocol."
+  },
+  "schema_version": 1,
+  "status": "diagnostic-current-host-evidence",
+  "target_audit": [
+    {
+      "decision": "keep-primary",
+      "live_action": "Measured a stratified 10-leaf current-toolchain subset; retained a five-leaf sanity-filtered aggregate.",
+      "paper_version": null,
+      "source_status": "Historical Rust commit is unspecified; the current 430-leaf in-tree surface is runnable.",
+      "target": "Collections"
+    },
+    {
+      "decision": "keep-primary-after-reconstruction",
+      "live_action": "Build probes failed closed; no performance number was emitted.",
+      "paper_version": "v1.2.51",
+      "source_status": "Exact tag resolves to 8eae00900f88b09cf04dc1a991f815124a07d08f; the tag has no usable historical Cargo.lock and current dependency resolution fails.",
+      "target": "SWC"
+    },
+    {
+      "decision": "supplemental-only",
+      "live_action": "Build probe failed closed; no performance number was emitted.",
+      "paper_version": "v0.1.2",
+      "source_status": "Upstream exposes no v0.1.2/0.1.2 tag; nearest fallback 0.1.0 is cc24b73031b6bf95d27ab012ed9175a34051140b and needs a circa-2019 toolchain.",
+      "target": "RustPython"
+    },
+    {
+      "decision": "keep-primary-with-fixed-input-and-dependency-pin",
+      "live_action": "Single-thread Criterion collect smoke passed after pinning jsonpath revision 1a84c5af9445e617a6deed14dadfaee13af0d95f.",
+      "paper_version": "v0.13.0",
+      "source_status": "Tag py-0.13.0 resolves to 07da7f07e9bca6dfe3034a2176f1ab5f037bf584; its Rust crate reports 0.19.1 and a floating jsonpath dependency requires a historical compatibility pin.",
+      "target": "Polars"
+    },
+    {
+      "decision": "keep-primary",
+      "live_action": "Measured exact source with four worker threads under five allocators on the quick input and four allocators on the full input.",
+      "paper_version": "v4.0.3",
+      "source_status": "Exact tag resolves to dea23211ae6259007e068c59ab16929798d00d96.",
+      "target": "Oxipng"
+    },
+    {
+      "decision": "keep-diagnostic",
+      "live_action": "Measured a fresh-server five-allocator SET/GET matrix with an explicit redis-benchmark contract.",
+      "paper_version": null,
+      "source_status": "The paper gives no version; current upstream HEAD is pinned at e50029606295cb9e0980c04a09f5bf888afa309a.",
+      "target": "Rsedis"
+    },
+    {
+      "decision": "exclude-primary-matrix",
+      "live_action": "No performance number was emitted; one standardized maintained framework is suitable as a future supplementary service target.",
+      "paper_version": null,
+      "source_status": "Fourteen framework rows have no FrameworkBenchmarks commit, endpoint, database, client, concurrency, or duration contract.",
+      "target": "TechEmpower Rust frameworks"
+    }
+  ],
+  "thp_runtime_followup": {
+    "artifact": {
+      "legacy_sha256": "65bec2545912009fa240183dfb6a33c6bacf75eaf0ca2fe748b6dac76cecf523",
+      "legacy_sha256_status": "pre_document_consolidation_artifact",
+      "path": "benchmark-results/allocator-feature-thp-evaluation-20260714.json",
+      "sha256": "293dbfd0e1b6966b4bb2e1884fd498994299e065fc5c240a337b18e43d9fd490"
+    },
+    "canonical_documentation": "docs/allocator-memory-and-mechanisms.md",
+    "legacy_documentation": {
+      "path": "docs/allocator-feature-thp-evaluation.md",
+      "status": "folded_into_canonical_documentation_2026-07-14"
+    },
+    "mimalloc_prior_rows": "Oxipng and Rsedis used mimalloc 3.3.2 with Linux THP allowed by default; Collections used older mimalloc 1.7.0 and is outside this toggle",
+    "mimalloc_same_binary_rsedis_result": {
+      "thp_allowed_effective_rps_median": 63162.063785429775,
+      "thp_allowed_peak_rss_kib_median": 70032.0,
+      "thp_disabled_effective_rps_median": 63170.550996631464,
+      "thp_disabled_peak_rss_kib_median": 10468.0
+    },
+    "tcmalloc_interpretation": "process THP eligibility enabled; effectively THP-inactive under host madvise policy; measured AnonHugePages and Hugetlb remained zero"
+  }
+}

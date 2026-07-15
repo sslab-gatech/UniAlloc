@@ -1,0 +1,3407 @@
+{
+  "allocator_provenance": {
+    "mimalloc": {
+      "embedded_core_version": "3.3.2",
+      "large_os_pages_forced_off_in_both_cells": true,
+      "libmimalloc_sys_version": "0.1.49",
+      "linux_default_allow_thp": true,
+      "reserve_huge_os_pages_forced_off_in_both_cells": true,
+      "rust_wrapper_version": "0.1.25",
+      "thp_off_semantics": "MIMALLOC_ALLOW_THP=0 invokes process-wide PR_SET_THP_DISABLE"
+    },
+    "tcmalloc": {
+      "activation": "full libtcmalloc through LD_PRELOAD",
+      "explicit_process_thp_disable": false,
+      "hugetlb_interpretation": "TCMALLOC_MEMFS_MALLOC_PATH is empty or unset, so the optional memfs/hugetlbfs path is inactive",
+      "implementation": "gperftools TCMalloc",
+      "library_sha256": "3e9994675a51a1a7f893e02236b36e3150a37b5e8ea740e0cc78f6650f7b1841",
+      "source_archive_sha256": "d18d919175f9e4d740ace6b52f0f4f91284160c454e91b36ffd6456282a02206",
+      "thp_interpretation": "effectively THP-inactive under host madvise policy because the runtime does not request MADV_HUGEPAGE; measured AnonHugePages stayed zero",
+      "version": "2.18.1"
+    }
+  },
+  "boundaries": [
+    "The new application and service results are current-host diagnostics on a shared machine with five measured repetitions per cell.",
+    "The Oxipng feature rows measure complete Cargo feature closures. Small deltas overlap same-run dispersion and do not establish causal speedups or regressions.",
+    "The unialloc_type_isolation and unialloc_pac Oxipng cells select runtime feature closures without the MIR semantic rewrite. Use typeiso_perf versus typed_plain for actual Type Isolation policy cost.",
+    "This x86_64 host cannot measure ARM hardware PAC cost. The unialloc_pac application row is software-fallback build evidence only.",
+    "The hugepage Cargo feature used explicit HugeTLB mappings. mimalloc MIMALLOC_ALLOW_THP controls Linux transparent huge pages. These mechanisms are reported separately.",
+    "TCMalloc keeps process THP eligibility enabled. Under the host madvise policy it made no MADV_HUGEPAGE request and all measured AnonHugePages counters remained zero.",
+    "The rseq and pthread_dtor rows establish build selection. Repository audit found no active allocator callsite for rseq outside its module and no direct pthread_dtor cfg use.",
+    "The Oxipng GNU-time peak RSS metric omits the separately reported explicit HugeTLB footprint on this host. The unialloc_hugepage process sample recorded 56,740 KiB VmHWM plus 8,192 KiB HugetlbPages; report both values for memory interpretation.",
+    "A future UniAlloc-owned rseq registration must use libc-managed rseq state or disable glibc registration before creating an independent per-thread registration; the current feature row exercises neither path."
+  ],
+  "campaigns": {
+    "oxipng_feature_matrix": {
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/oxipng/results.json",
+        "sha256": "d78b5ee4794ed34517873e27c003284431cd5123480a2987a78fc91acbf8dce4"
+      },
+      "builds": [
+        {
+          "base_build_variant": null,
+          "binary_sha256": "c52127160634704351c77f17877fb19919a58f9a76fadd26568e3fc2aac5ba9f",
+          "default_features_enabled": null,
+          "requested_unialloc_features": null,
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "system"
+        },
+        {
+          "base_build_variant": null,
+          "binary_sha256": "5ef971fcc6080743e4a158af960440021d187e9fd6f79369b4be83b7204e6210",
+          "default_features_enabled": null,
+          "requested_unialloc_features": null,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "success": true,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "variant": "mimalloc"
+        },
+        {
+          "base_build_variant": "mimalloc",
+          "binary_sha256": "5ef971fcc6080743e4a158af960440021d187e9fd6f79369b4be83b7204e6210",
+          "default_features_enabled": null,
+          "requested_unialloc_features": null,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "success": true,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "base_build_variant": "system",
+          "binary_sha256": "c52127160634704351c77f17877fb19919a58f9a76fadd26568e3fc2aac5ba9f",
+          "default_features_enabled": null,
+          "requested_unialloc_features": null,
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "tcmalloc"
+        },
+        {
+          "activation_evidence": "allocator baseline with all optional Cargo features disabled",
+          "base_build_variant": null,
+          "binary_sha256": "95cd3a16e00b2650716ec7c50013fe342b0c9e4c9828db1be2fa1c5056c95838",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [],
+          "resolved_unialloc_feature_closure": [],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_no_optional"
+        },
+        {
+          "activation_evidence": "Cargo closure selected; repository audit found no allocator callsite outside the rseq module",
+          "base_build_variant": null,
+          "binary_sha256": "f509b6059539b9563db60a7a03d6014b848be9ab2c93c8bd2ea1f87b2639d5fd",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "rseq"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "rseq"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_rseq"
+        },
+        {
+          "activation_evidence": "Cargo closure selected; repository audit found no direct pthread_dtor cfg use",
+          "base_build_variant": null,
+          "binary_sha256": "8d51c987a23cc9dead99f39d442a5e38ec1f97de325bc38f3b6cd1162fb915be",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "pthread_dtor"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "pthread_dtor"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_pthread_dtor"
+        },
+        {
+          "activation_evidence": "runtime activated: four successful MAP_HUGETLB mappings totaling 8 MiB in the Oxipng preflight",
+          "base_build_variant": null,
+          "binary_sha256": "e57497ae44c814e23940bae6d86aded2d9ee95a5e83be5d64742e77c539e9cd5",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "hugepage"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "hugepage"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_hugepage"
+        },
+        {
+          "activation_evidence": "compile-time backend selection active for the complete application binary",
+          "base_build_variant": null,
+          "binary_sha256": "ac104b64d3e9a0a3c13689f722c410b094e8c00077d775bfc0f2740de9d678db",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "separate_sc_backend"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "separate_sc_backend"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_separate_sc"
+        },
+        {
+          "activation_evidence": "runtime feature closure only; no MIR semantic rewrite in this cell",
+          "base_build_variant": null,
+          "binary_sha256": "19d241754c4f9f4c59e04108e71c1724e1e5070d7ab374bd15bcec597e032593",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "type_isolation"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "type_isolation"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_type_isolation"
+        },
+        {
+          "activation_evidence": "separate backend closure active; Oxipng allocations remain untyped without the MIR policy driver",
+          "base_build_variant": null,
+          "binary_sha256": "fd169a051acb9e42c5929530d6012938c077b067e292e77b670c1b312c0ba828",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "metadata_segregation"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "metadata_segregation",
+            "separate_sc_backend",
+            "type_isolation"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_metadata_segregation"
+        },
+        {
+          "activation_evidence": "x86_64 software-fallback closure only; untyped Oxipng does not establish PAC operation cost",
+          "base_build_variant": null,
+          "binary_sha256": "462d2461f8a83a1a399d7c357c601bc75c5fed3f8778ea99500785741be910b8",
+          "default_features_enabled": false,
+          "requested_unialloc_features": [
+            "pac"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "pac",
+            "type_isolation"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc_pac"
+        },
+        {
+          "activation_evidence": "default Cargo closure: pthread_dtor plus rseq",
+          "base_build_variant": null,
+          "binary_sha256": "d4f4952c71d149b7dd7368a39bdbb54d7237a7930c76521558e773fe4303c76c",
+          "default_features_enabled": true,
+          "requested_unialloc_features": [],
+          "resolved_unialloc_feature_closure": [
+            "pthread_dtor",
+            "rseq"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "unialloc"
+        },
+        {
+          "activation_evidence": "actual MIR rewrite control with Type Isolation policy disabled",
+          "base_build_variant": null,
+          "binary_sha256": "539a1003f56836fd3630cdac4403428b8a017826316f480351bf839dc9e79bf5",
+          "compiler_audit": {
+            "audit_file_count": 2,
+            "audit_sha256": "3596a15e4aac4bcdefffe58b2b387bee73b4c528f8f129c0c465c19946196509",
+            "claim_grade_file_count": 0,
+            "crate_names": [
+              "oxipng"
+            ],
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 284,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 397,
+            "semantic_scope_rewrites_applied": 113,
+            "total_compiler_rewrites_applied": 397,
+            "unresolved_file_count": 0
+          },
+          "default_features_enabled": true,
+          "requested_unialloc_features": [
+            "type_isolation"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "pthread_dtor",
+            "rseq",
+            "type_isolation"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "typed_plain"
+        },
+        {
+          "activation_evidence": "actual MIR rewrite path with 397 semantic rewrites and Type Isolation policy enabled",
+          "base_build_variant": null,
+          "binary_sha256": "ef5107cdbdc865cccb133ae2609f2cc8c7961493b13935697f596e93e0b4634a",
+          "compiler_audit": {
+            "audit_file_count": 2,
+            "audit_sha256": "b20307863eb85145858df6fd2932f9434a5f276d1f53fc3ea70e432a83073de1",
+            "claim_grade_file_count": 0,
+            "crate_names": [
+              "oxipng"
+            ],
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 284,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 397,
+            "semantic_scope_rewrites_applied": 113,
+            "total_compiler_rewrites_applied": 397,
+            "unresolved_file_count": 0
+          },
+          "default_features_enabled": true,
+          "requested_unialloc_features": [
+            "type_isolation"
+          ],
+          "resolved_unialloc_feature_closure": [
+            "pthread_dtor",
+            "rseq",
+            "type_isolation"
+          ],
+          "runtime_environment_overrides": {},
+          "success": true,
+          "thp_mode": null,
+          "variant": "typeiso_perf"
+        }
+      ],
+      "claim_grade": false,
+      "configuration": {
+        "affinity": {
+          "command_prefix": [
+            "numactl",
+            "--physcpubind=20-23",
+            "--membind=0"
+          ],
+          "cpu_list": "20-23",
+          "numa_node": 0
+        },
+        "glibc_rseq_mode": "libc_default",
+        "input": {
+          "description": "lossless PNG optimization",
+          "input": "/home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts/realworld-oxipng/tests/files/issue-141.png",
+          "input_sha256": "909418f09bfb42612575aa3d12c7d7b57546d361b382a9ebd8d3c83531948334",
+          "threads": 4,
+          "work_amount": 1653611,
+          "work_unit": "bytes"
+        },
+        "measured_repetitions": 5,
+        "run_order": "round-robin rotation across all variants",
+        "statistics_enabled": false,
+        "toolchain": "nightly-2026-06-11",
+        "variants": [
+          "system",
+          "mimalloc",
+          "mimalloc_no_thp",
+          "tcmalloc",
+          "unialloc_no_optional",
+          "unialloc_rseq",
+          "unialloc_pthread_dtor",
+          "unialloc_hugepage",
+          "unialloc_separate_sc",
+          "unialloc_type_isolation",
+          "unialloc_metadata_segregation",
+          "unialloc_pac",
+          "unialloc",
+          "typed_plain",
+          "typeiso_perf"
+        ],
+        "warmups": 1
+      },
+      "measured_rows": [
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 73,
+          "major_page_faults": 0,
+          "minor_page_faults": 822,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 95652,
+          "round": 1,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.01,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "timed_out": false,
+          "user_cpu_seconds": 1.64,
+          "variant": "mimalloc",
+          "voluntary_context_switches": 39,
+          "wall_seconds": 0.613891245
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 28,
+          "major_page_faults": 0,
+          "minor_page_faults": 18452,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 72704,
+          "round": 1,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.04,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "timed_out": false,
+          "user_cpu_seconds": 1.68,
+          "variant": "mimalloc_no_thp",
+          "voluntary_context_switches": 41,
+          "wall_seconds": 0.627762062
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 27,
+          "major_page_faults": 0,
+          "minor_page_faults": 17313,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 71680,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.04,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "tcmalloc",
+          "voluntary_context_switches": 38,
+          "wall_seconds": 0.62745044
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 30,
+          "major_page_faults": 0,
+          "minor_page_faults": 34891,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58152,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "unialloc_no_optional",
+          "voluntary_context_switches": 59,
+          "wall_seconds": 0.62030807
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 97,
+          "major_page_faults": 0,
+          "minor_page_faults": 34935,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56104,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "unialloc_rseq",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.62015095
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 35,
+          "major_page_faults": 0,
+          "minor_page_faults": 35089,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59176,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.06,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_pthread_dtor",
+          "voluntary_context_switches": 45,
+          "wall_seconds": 0.592544887
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 30,
+          "major_page_faults": 0,
+          "minor_page_faults": 35033,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58124,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.09,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "unialloc_hugepage",
+          "voluntary_context_switches": 54,
+          "wall_seconds": 0.654312167
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 29,
+          "major_page_faults": 0,
+          "minor_page_faults": 35336,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59720,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_separate_sc",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.648684174
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 25,
+          "major_page_faults": 0,
+          "minor_page_faults": 35276,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58192,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.68,
+          "variant": "unialloc_type_isolation",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.653515236
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 73,
+          "major_page_faults": 0,
+          "minor_page_faults": 35545,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58864,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_metadata_segregation",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.683494513
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 82,
+          "major_page_faults": 0,
+          "minor_page_faults": 35517,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59212,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "unialloc_pac",
+          "voluntary_context_switches": 44,
+          "wall_seconds": 0.619151036
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 31,
+          "major_page_faults": 0,
+          "minor_page_faults": 35174,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58344,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "unialloc",
+          "voluntary_context_switches": 47,
+          "wall_seconds": 0.671861685
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 26,
+          "major_page_faults": 0,
+          "minor_page_faults": 35636,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58296,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "typed_plain",
+          "voluntary_context_switches": 47,
+          "wall_seconds": 0.65327767
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 144,
+          "major_page_faults": 0,
+          "minor_page_faults": 35444,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56240,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.75,
+          "variant": "typeiso_perf",
+          "voluntary_context_switches": 53,
+          "wall_seconds": 0.691725276
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 95,
+          "major_page_faults": 0,
+          "minor_page_faults": 23193,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 78696,
+          "round": 1,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.05,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "system",
+          "voluntary_context_switches": 44,
+          "wall_seconds": 0.638494226
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 7,
+          "major_page_faults": 0,
+          "minor_page_faults": 18341,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 71680,
+          "round": 2,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.04,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "mimalloc_no_thp",
+          "voluntary_context_switches": 42,
+          "wall_seconds": 0.647776496
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 22,
+          "major_page_faults": 0,
+          "minor_page_faults": 16881,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 68608,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.03,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "tcmalloc",
+          "voluntary_context_switches": 37,
+          "wall_seconds": 0.602660158
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 25,
+          "major_page_faults": 0,
+          "minor_page_faults": 34890,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58152,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.06,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "unialloc_no_optional",
+          "voluntary_context_switches": 53,
+          "wall_seconds": 0.610866307
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 23,
+          "major_page_faults": 0,
+          "minor_page_faults": 35259,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58160,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.74,
+          "variant": "unialloc_rseq",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.695221539
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 96,
+          "major_page_faults": 0,
+          "minor_page_faults": 35367,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56104,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.06,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_pthread_dtor",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.604015569
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 99,
+          "major_page_faults": 0,
+          "minor_page_faults": 35240,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56072,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.74,
+          "variant": "unialloc_hugepage",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.671109522
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 21,
+          "major_page_faults": 0,
+          "minor_page_faults": 35410,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58844,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.74,
+          "variant": "unialloc_separate_sc",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.683298228
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 27,
+          "major_page_faults": 0,
+          "minor_page_faults": 34823,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58404,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.68,
+          "variant": "unialloc_type_isolation",
+          "voluntary_context_switches": 62,
+          "wall_seconds": 0.604206134
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 34,
+          "major_page_faults": 0,
+          "minor_page_faults": 35800,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56816,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "unialloc_metadata_segregation",
+          "voluntary_context_switches": 47,
+          "wall_seconds": 0.637375257
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 7,
+          "major_page_faults": 0,
+          "minor_page_faults": 34796,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58380,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.67,
+          "variant": "unialloc_pac",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.602774731
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 29,
+          "major_page_faults": 0,
+          "minor_page_faults": 35260,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58152,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "unialloc",
+          "voluntary_context_switches": 48,
+          "wall_seconds": 0.667512491
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 98,
+          "major_page_faults": 0,
+          "minor_page_faults": 34957,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56452,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "typed_plain",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.633555432
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 25,
+          "major_page_faults": 0,
+          "minor_page_faults": 35237,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58308,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.06,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "typeiso_perf",
+          "voluntary_context_switches": 48,
+          "wall_seconds": 0.644503377
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 33,
+          "major_page_faults": 0,
+          "minor_page_faults": 21498,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 71304,
+          "round": 2,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.05,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "system",
+          "voluntary_context_switches": 44,
+          "wall_seconds": 0.613971882
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 95,
+          "major_page_faults": 0,
+          "minor_page_faults": 824,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 93836,
+          "round": 2,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.01,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "timed_out": false,
+          "user_cpu_seconds": 1.65,
+          "variant": "mimalloc",
+          "voluntary_context_switches": 39,
+          "wall_seconds": 0.580756566
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 5,
+          "major_page_faults": 0,
+          "minor_page_faults": 17328,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 70656,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.03,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.76,
+          "variant": "tcmalloc",
+          "voluntary_context_switches": 39,
+          "wall_seconds": 0.63528548
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 97,
+          "major_page_faults": 0,
+          "minor_page_faults": 34933,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56104,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "unialloc_no_optional",
+          "voluntary_context_switches": 56,
+          "wall_seconds": 0.625547916
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 21,
+          "major_page_faults": 0,
+          "minor_page_faults": 35214,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58152,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.09,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "unialloc_rseq",
+          "voluntary_context_switches": 51,
+          "wall_seconds": 0.649546536
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 82,
+          "major_page_faults": 0,
+          "minor_page_faults": 35663,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 57136,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "unialloc_pthread_dtor",
+          "voluntary_context_switches": 54,
+          "wall_seconds": 0.688121303
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 140,
+          "major_page_faults": 0,
+          "minor_page_faults": 34862,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59584,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_hugepage",
+          "voluntary_context_switches": 56,
+          "wall_seconds": 0.616135944
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 84,
+          "major_page_faults": 0,
+          "minor_page_faults": 35143,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 57776,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_separate_sc",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.61852902
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 70,
+          "major_page_faults": 0,
+          "minor_page_faults": 35267,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59212,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.68,
+          "variant": "unialloc_type_isolation",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.667778941
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 98,
+          "major_page_faults": 0,
+          "minor_page_faults": 36052,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 53744,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_metadata_segregation",
+          "voluntary_context_switches": 55,
+          "wall_seconds": 0.665565484
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 26,
+          "major_page_faults": 0,
+          "minor_page_faults": 35264,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58188,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.67,
+          "variant": "unialloc_pac",
+          "voluntary_context_switches": 51,
+          "wall_seconds": 0.654599148
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 26,
+          "major_page_faults": 0,
+          "minor_page_faults": 35257,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58152,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.662471151
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 97,
+          "major_page_faults": 0,
+          "minor_page_faults": 35045,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56224,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.75,
+          "variant": "typed_plain",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.632848542
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 40,
+          "major_page_faults": 0,
+          "minor_page_faults": 35419,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58300,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "typeiso_perf",
+          "voluntary_context_switches": 48,
+          "wall_seconds": 0.669732595
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 36,
+          "major_page_faults": 0,
+          "minor_page_faults": 19767,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 65636,
+          "round": 3,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.04,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "system",
+          "voluntary_context_switches": 42,
+          "wall_seconds": 0.647740905
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 26,
+          "major_page_faults": 0,
+          "minor_page_faults": 821,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 93816,
+          "round": 3,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.01,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "mimalloc",
+          "voluntary_context_switches": 43,
+          "wall_seconds": 0.565898585
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 27,
+          "major_page_faults": 0,
+          "minor_page_faults": 18100,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 70656,
+          "round": 3,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.04,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "mimalloc_no_thp",
+          "voluntary_context_switches": 47,
+          "wall_seconds": 0.618874673
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 76,
+          "major_page_faults": 0,
+          "minor_page_faults": 35503,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59180,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_no_optional",
+          "voluntary_context_switches": 45,
+          "wall_seconds": 0.636680575
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 82,
+          "major_page_faults": 0,
+          "minor_page_faults": 35266,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59180,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_rseq",
+          "voluntary_context_switches": 48,
+          "wall_seconds": 0.662151245
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 95,
+          "major_page_faults": 0,
+          "minor_page_faults": 34919,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56104,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "unialloc_pthread_dtor",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.614743937
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 33,
+          "major_page_faults": 0,
+          "minor_page_faults": 35173,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56704,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.75,
+          "variant": "unialloc_hugepage",
+          "voluntary_context_switches": 58,
+          "wall_seconds": 0.636261926
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 34,
+          "major_page_faults": 0,
+          "minor_page_faults": 35344,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56752,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_separate_sc",
+          "voluntary_context_switches": 53,
+          "wall_seconds": 0.64824514
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 71,
+          "major_page_faults": 0,
+          "minor_page_faults": 35269,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59212,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.06,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "unialloc_type_isolation",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.654895892
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 27,
+          "major_page_faults": 0,
+          "minor_page_faults": 35705,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59052,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.64,
+          "variant": "unialloc_metadata_segregation",
+          "voluntary_context_switches": 46,
+          "wall_seconds": 0.620420678
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 84,
+          "major_page_faults": 0,
+          "minor_page_faults": 34996,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58380,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.65,
+          "variant": "unialloc_pac",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.622424154
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 9,
+          "major_page_faults": 0,
+          "minor_page_faults": 35505,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59180,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.71,
+          "variant": "unialloc",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.64479796
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 98,
+          "major_page_faults": 0,
+          "minor_page_faults": 35661,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56256,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "typed_plain",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.662734209
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 76,
+          "major_page_faults": 0,
+          "minor_page_faults": 35669,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 53176,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "typeiso_perf",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.643327017
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 23,
+          "major_page_faults": 0,
+          "minor_page_faults": 19577,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 64360,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.05,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "system",
+          "voluntary_context_switches": 45,
+          "wall_seconds": 0.599321087
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 114,
+          "major_page_faults": 0,
+          "minor_page_faults": 818,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 93832,
+          "round": 4,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.01,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "timed_out": false,
+          "user_cpu_seconds": 1.65,
+          "variant": "mimalloc",
+          "voluntary_context_switches": 50,
+          "wall_seconds": 0.587243837
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 23,
+          "major_page_faults": 0,
+          "minor_page_faults": 18706,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 72704,
+          "round": 4,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.04,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "timed_out": false,
+          "user_cpu_seconds": 1.67,
+          "variant": "mimalloc_no_thp",
+          "voluntary_context_switches": 47,
+          "wall_seconds": 0.591648393
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 19,
+          "major_page_faults": 0,
+          "minor_page_faults": 16488,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 66560,
+          "round": 4,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.03,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "tcmalloc",
+          "voluntary_context_switches": 37,
+          "wall_seconds": 0.601941805
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 97,
+          "major_page_faults": 0,
+          "minor_page_faults": 35418,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56300,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.72,
+          "variant": "unialloc_rseq",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.650737595
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 80,
+          "major_page_faults": 0,
+          "minor_page_faults": 35262,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59180,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "unialloc_pthread_dtor",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.672608428
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 104,
+          "major_page_faults": 0,
+          "minor_page_faults": 34803,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56268,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "unialloc_hugepage",
+          "voluntary_context_switches": 49,
+          "wall_seconds": 0.628771644
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 138,
+          "major_page_faults": 0,
+          "minor_page_faults": 35522,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59676,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_separate_sc",
+          "voluntary_context_switches": 58,
+          "wall_seconds": 0.661037224
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 71,
+          "major_page_faults": 0,
+          "minor_page_faults": 35532,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59212,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.65,
+          "variant": "unialloc_type_isolation",
+          "voluntary_context_switches": 45,
+          "wall_seconds": 0.622678375
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 35,
+          "major_page_faults": 0,
+          "minor_page_faults": 35135,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 58908,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.69,
+          "variant": "unialloc_metadata_segregation",
+          "voluntary_context_switches": 57,
+          "wall_seconds": 0.623050838
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 143,
+          "major_page_faults": 0,
+          "minor_page_faults": 34983,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56336,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.66,
+          "variant": "unialloc_pac",
+          "voluntary_context_switches": 51,
+          "wall_seconds": 0.631218649
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 140,
+          "major_page_faults": 0,
+          "minor_page_faults": 35248,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 56540,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.74,
+          "variant": "unialloc",
+          "voluntary_context_switches": 52,
+          "wall_seconds": 0.652278412
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 26,
+          "major_page_faults": 0,
+          "minor_page_faults": 35635,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59316,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "typed_plain",
+          "voluntary_context_switches": 48,
+          "wall_seconds": 0.630275866
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 89,
+          "major_page_faults": 0,
+          "minor_page_faults": 35241,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 59316,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.08,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "typeiso_perf",
+          "voluntary_context_switches": 56,
+          "wall_seconds": 0.636698061
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 15,
+          "major_page_faults": 0,
+          "minor_page_faults": 20160,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 67904,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.04,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.7,
+          "variant": "system",
+          "voluntary_context_switches": 46,
+          "wall_seconds": 0.596416147
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 86,
+          "major_page_faults": 0,
+          "minor_page_faults": 820,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 95996,
+          "round": 5,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.01,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "timed_out": false,
+          "user_cpu_seconds": 1.64,
+          "variant": "mimalloc",
+          "voluntary_context_switches": 39,
+          "wall_seconds": 0.58514579
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 79,
+          "major_page_faults": 0,
+          "minor_page_faults": 19211,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 76800,
+          "round": 5,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "system_cpu_seconds": 0.05,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "timed_out": false,
+          "user_cpu_seconds": 1.65,
+          "variant": "mimalloc_no_thp",
+          "voluntary_context_switches": 53,
+          "wall_seconds": 0.588563941
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 25,
+          "major_page_faults": 0,
+          "minor_page_faults": 16726,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 68608,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.04,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.73,
+          "variant": "tcmalloc",
+          "voluntary_context_switches": 37,
+          "wall_seconds": 0.648579658
+        },
+        {
+          "exit_code": 0,
+          "involuntary_context_switches": 93,
+          "major_page_faults": 0,
+          "minor_page_faults": 34918,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "peak_rss_kib": 55072,
+          "round": 5,
+          "runtime_environment_overrides": {},
+          "system_cpu_seconds": 0.07,
+          "thp_mode": null,
+          "timed_out": false,
+          "user_cpu_seconds": 1.77,
+          "variant": "unialloc_no_optional",
+          "voluntary_context_switches": 51,
+          "wall_seconds": 0.648779729
+        }
+      ],
+      "paired_comparisons": [
+        {
+          "median_peak_rss_delta_percent": -23.611407135854044,
+          "median_peak_rss_ratio": 0.7638859286414595,
+          "median_wall_delta_percent": 2.259490929863306,
+          "median_wall_ratio": 1.022594909298633,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.7600886547066449,
+              "round": 1,
+              "wall_ratio": 1.022594909298633
+            },
+            {
+              "peak_rss_ratio": 0.7638859286414595,
+              "round": 2,
+              "wall_ratio": 1.1154010715050615
+            },
+            {
+              "peak_rss_ratio": 0.7531337938091583,
+              "round": 3,
+              "wall_ratio": 1.093614102251201
+            },
+            {
+              "peak_rss_ratio": 0.7748316139483332,
+              "round": 4,
+              "wall_ratio": 1.0075003869304124
+            },
+            {
+              "peak_rss_ratio": 0.8000333347222801,
+              "round": 5,
+              "wall_ratio": 1.0058415373713958
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "mimalloc",
+          "subject": "mimalloc_no_thp"
+        },
+        {
+          "median_peak_rss_delta_percent": 1.036757775683328,
+          "median_peak_rss_ratio": 1.0103675777568333,
+          "median_wall_delta_percent": -1.7296610603961815,
+          "median_wall_ratio": 0.9827033893960382,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.9108468028870591,
+              "round": 1,
+              "wall_ratio": 0.9827033893960382
+            },
+            {
+              "peak_rss_ratio": 0.9621900594637047,
+              "round": 2,
+              "wall_ratio": 0.9815761530264996
+            },
+            {
+              "peak_rss_ratio": 1.0764824181851422,
+              "round": 3,
+              "wall_ratio": 0.9807709766299226
+            },
+            {
+              "peak_rss_ratio": 1.0341827221876942,
+              "round": 4,
+              "wall_ratio": 1.004372811264023
+            },
+            {
+              "peak_rss_ratio": 1.0103675777568333,
+              "round": 5,
+              "wall_ratio": 1.0874616008677578
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "system",
+          "subject": "tcmalloc"
+        },
+        {
+          "median_peak_rss_delta_percent": 0.013757050488383271,
+          "median_peak_rss_ratio": 1.0001375705048838,
+          "median_wall_delta_percent": 3.836415946112748,
+          "median_wall_ratio": 1.0383641594611275,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.9647819507497593,
+              "round": 1,
+              "wall_ratio": 0.9997467065034314
+            },
+            {
+              "peak_rss_ratio": 1.0001375705048838,
+              "round": 2,
+              "wall_ratio": 1.1380911519155044
+            },
+            {
+              "peak_rss_ratio": 1.0365036361043776,
+              "round": 3,
+              "wall_ratio": 1.0383641594611275
+            },
+            {
+              "peak_rss_ratio": 1.0,
+              "round": 4,
+              "wall_ratio": 1.0400054140178534
+            },
+            {
+              "peak_rss_ratio": 1.0222980825101684,
+              "round": 5,
+              "wall_ratio": 1.0030177669129978
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_rseq"
+        },
+        {
+          "median_peak_rss_delta_percent": 1.7609024625120373,
+          "median_peak_rss_ratio": 1.0176090246251204,
+          "median_wall_delta_percent": -1.1214791062293838,
+          "median_wall_ratio": 0.9887852089377062,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.0176090246251204,
+              "round": 1,
+              "wall_ratio": 0.9552429118002608
+            },
+            {
+              "peak_rss_ratio": 0.9647819507497593,
+              "round": 2,
+              "wall_ratio": 0.9887852089377062
+            },
+            {
+              "peak_rss_ratio": 1.0183944103807214,
+              "round": 3,
+              "wall_ratio": 1.10002972657973
+            },
+            {
+              "peak_rss_ratio": 0.9480229807367354,
+              "round": 4,
+              "wall_ratio": 0.9655453003258345
+            },
+            {
+              "peak_rss_ratio": 1.0745932597327135,
+              "round": 5,
+              "wall_ratio": 1.036728488784211
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_pthread_dtor"
+        },
+        {
+          "median_peak_rss_delta_percent": -0.04814967670930814,
+          "median_peak_rss_ratio": 0.9995185032329069,
+          "median_wall_delta_percent": -0.0657549509815003,
+          "median_wall_ratio": 0.999342450490185,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.9995185032329069,
+              "round": 1,
+              "wall_ratio": 1.0548180793456385
+            },
+            {
+              "peak_rss_ratio": 0.9642316687302243,
+              "round": 2,
+              "wall_ratio": 1.0986193121304364
+            },
+            {
+              "peak_rss_ratio": 1.0620276629117353,
+              "round": 3,
+              "wall_ratio": 0.9849540350798643
+            },
+            {
+              "peak_rss_ratio": 0.9581615410611694,
+              "round": 4,
+              "wall_ratio": 0.999342450490185
+            },
+            {
+              "peak_rss_ratio": 1.0217170249854735,
+              "round": 5,
+              "wall_ratio": 0.9691604344191832
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_hugepage"
+        },
+        {
+          "median_peak_rss_delta_percent": 2.696381895721567,
+          "median_peak_rss_ratio": 1.0269638189572157,
+          "median_wall_delta_percent": 1.8893153488154013,
+          "median_wall_ratio": 1.018893153488154,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.0269638189572157,
+              "round": 1,
+              "wall_ratio": 1.0457451794879922
+            },
+            {
+              "peak_rss_ratio": 1.0118998486724446,
+              "round": 2,
+              "wall_ratio": 1.1185724604058085
+            },
+            {
+              "peak_rss_ratio": 1.0298017966633395,
+              "round": 3,
+              "wall_ratio": 0.9887796029361242
+            },
+            {
+              "peak_rss_ratio": 0.9589726258871241,
+              "round": 4,
+              "wall_ratio": 1.018163841420794
+            },
+            {
+              "peak_rss_ratio": 1.083599651365485,
+              "round": 5,
+              "wall_ratio": 1.018893153488154
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_separate_sc"
+        },
+        {
+          "median_peak_rss_delta_percent": 0.4333470903838288,
+          "median_peak_rss_ratio": 1.0043334709038383,
+          "median_wall_delta_percent": 2.860982055248029,
+          "median_wall_ratio": 1.0286098205524803,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.0006878525244187,
+              "round": 1,
+              "wall_ratio": 1.0535333451328468
+            },
+            {
+              "peak_rss_ratio": 1.0043334709038383,
+              "round": 2,
+              "wall_ratio": 0.9890971675411131
+            },
+            {
+              "peak_rss_ratio": 1.0553971196349636,
+              "round": 3,
+              "wall_ratio": 1.0675104559056672
+            },
+            {
+              "peak_rss_ratio": 1.0005407232173031,
+              "round": 4,
+              "wall_ratio": 1.0286098205524803
+            },
+            {
+              "peak_rss_ratio": 1.0751743172574084,
+              "round": 5,
+              "wall_ratio": 0.95976854264508
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_type_isolation"
+        },
+        {
+          "median_peak_rss_delta_percent": -0.21628928692125626,
+          "median_peak_rss_ratio": 0.9978371071307874,
+          "median_wall_delta_percent": 4.339566562475339,
+          "median_wall_ratio": 1.0433956656247534,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.012243774934654,
+              "round": 1,
+              "wall_ratio": 1.1018630033299421
+            },
+            {
+              "peak_rss_ratio": 0.9770257256844133,
+              "round": 2,
+              "wall_ratio": 1.0433956656247534
+            },
+            {
+              "peak_rss_ratio": 0.9579352630828462,
+              "round": 3,
+              "wall_ratio": 1.063972026724808
+            },
+            {
+              "peak_rss_ratio": 0.9978371071307874,
+              "round": 4,
+              "wall_ratio": 0.974461452668004
+            },
+            {
+              "peak_rss_ratio": 1.0696542707728065,
+              "round": 5,
+              "wall_ratio": 0.9603426404218003
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_metadata_segregation"
+        },
+        {
+          "median_peak_rss_delta_percent": -1.4333556597454833,
+          "median_peak_rss_ratio": 0.9856664434025452,
+          "median_wall_delta_percent": -4.292274678680974,
+          "median_wall_ratio": 0.9570772532131903,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.9856664434025452,
+              "round": 1,
+              "wall_ratio": 1.0536630002630525
+            },
+            {
+              "peak_rss_ratio": 0.965535993474271,
+              "round": 2,
+              "wall_ratio": 0.9327921994845273
+            },
+            {
+              "peak_rss_ratio": 0.9302132373303794,
+              "round": 3,
+              "wall_ratio": 1.0760456865871872
+            },
+            {
+              "peak_rss_ratio": 1.0405272060896533,
+              "round": 4,
+              "wall_ratio": 0.9570772532131903
+            },
+            {
+              "peak_rss_ratio": 0.9871305047255178,
+              "round": 5,
+              "wall_ratio": 0.9425351786240711
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_separate_sc",
+          "subject": "unialloc_metadata_segregation"
+        },
+        {
+          "median_peak_rss_delta_percent": 1.8228091897097176,
+          "median_peak_rss_ratio": 1.0182280918970972,
+          "median_wall_delta_percent": -1.3246066949965218,
+          "median_wall_ratio": 0.9867539330500348,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.0182280918970972,
+              "round": 1,
+              "wall_ratio": 0.998134742951192
+            },
+            {
+              "peak_rss_ratio": 1.003920759389187,
+              "round": 2,
+              "wall_ratio": 0.9867539330500348
+            },
+            {
+              "peak_rss_ratio": 1.0371453015827747,
+              "round": 3,
+              "wall_ratio": 1.0464412577469124
+            },
+            {
+              "peak_rss_ratio": 0.9864819195674214,
+              "round": 4,
+              "wall_ratio": 0.9776082048678806
+            },
+            {
+              "peak_rss_ratio": 1.0229517722254504,
+              "round": 5,
+              "wall_ratio": 0.9729321382666073
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc_pac"
+        },
+        {
+          "median_peak_rss_delta_percent": -1.4051205836654757,
+          "median_peak_rss_ratio": 0.9859487941633452,
+          "median_wall_delta_percent": -1.9736760461872782,
+          "median_wall_ratio": 0.9802632395381272,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.0175281825680507,
+              "round": 1,
+              "wall_ratio": 0.9474163751554829
+            },
+            {
+              "peak_rss_ratio": 0.9995890692418328,
+              "round": 2,
+              "wall_ratio": 0.9976309360010569
+            },
+            {
+              "peak_rss_ratio": 0.9827062082010404,
+              "round": 3,
+              "wall_ratio": 0.9802632395381272
+            },
+            {
+              "peak_rss_ratio": 0.9859487941633452,
+              "round": 4,
+              "wall_ratio": 0.9504169465762964
+            },
+            {
+              "peak_rss_ratio": 0.9514287644396406,
+              "round": 5,
+              "wall_ratio": 1.0137153855712429
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_type_isolation",
+          "subject": "unialloc_pac"
+        },
+        {
+          "median_peak_rss_delta_percent": 0.33016921172099867,
+          "median_peak_rss_ratio": 1.00330169211721,
+          "median_wall_delta_percent": 5.90254304356117,
+          "median_wall_ratio": 1.0590254304356117,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 1.00330169211721,
+              "round": 1,
+              "wall_ratio": 1.083109695800024
+            },
+            {
+              "peak_rss_ratio": 1.0,
+              "round": 2,
+              "wall_ratio": 1.0927309025737444
+            },
+            {
+              "peak_rss_ratio": 1.0365036361043776,
+              "round": 3,
+              "wall_ratio": 1.0590254304356117
+            },
+            {
+              "peak_rss_ratio": 1.0,
+              "round": 4,
+              "wall_ratio": 1.012749540850999
+            },
+            {
+              "peak_rss_ratio": 1.0266560139453806,
+              "round": 5,
+              "wall_ratio": 1.0053927131869436
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "unialloc_no_optional",
+          "subject": "unialloc"
+        },
+        {
+          "median_peak_rss_delta_percent": 0.0,
+          "median_peak_rss_ratio": 1.0,
+          "median_wall_delta_percent": 1.7280169101288712,
+          "median_wall_ratio": 1.0172801691012887,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "peak_rss_ratio": 0.9647317140112529,
+              "round": 1,
+              "wall_ratio": 1.0588533907794522
+            },
+            {
+              "peak_rss_ratio": 1.0328774888400765,
+              "round": 2,
+              "wall_ratio": 1.0172801691012887
+            },
+            {
+              "peak_rss_ratio": 1.036923733636881,
+              "round": 3,
+              "wall_ratio": 1.0582825914134761
+            },
+            {
+              "peak_rss_ratio": 0.945250284414107,
+              "round": 4,
+              "wall_ratio": 0.9707164776822316
+            },
+            {
+              "peak_rss_ratio": 1.0,
+              "round": 5,
+              "wall_ratio": 1.010189498513973
+            }
+          ],
+          "ratio_method": "median of same-round subject/reference ratios",
+          "reference": "typed_plain",
+          "subject": "typeiso_perf"
+        }
+      ],
+      "paper_method_exact": false,
+      "paper_source_exact": true,
+      "runner": {
+        "path": "evaluation/scripts/realworld_type_isolation_matrix.py",
+        "sha256": "a63b87b0b8a7d04bd0bfaa2524d5bd14022187d05bc9e1538b0be21098bf7341"
+      },
+      "source_commit": "dea23211ae6259007e068c59ab16929798d00d96",
+      "summaries": [
+        {
+          "median_involuntary_context_switches": 86,
+          "median_minor_page_faults": 821,
+          "median_peak_rss_kib": 93836.0,
+          "median_total_cpu_seconds": 1.66,
+          "median_voluntary_context_switches": 39,
+          "median_wall_seconds": 0.58514579,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 20.0,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "sample_count": 5,
+          "thp_mode": "mimalloc-thp-explicitly-allowed",
+          "variant": "mimalloc",
+          "wall_mad_seconds": 0.004389223999999969
+        },
+        {
+          "median_involuntary_context_switches": 27,
+          "median_minor_page_faults": 18452,
+          "median_peak_rss_kib": 72704.0,
+          "median_total_cpu_seconds": 1.71,
+          "median_voluntary_context_switches": 47,
+          "median_wall_seconds": 0.618874673,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 1024.0,
+          "runtime_environment_overrides": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "sample_count": 5,
+          "thp_mode": "process-wide-pr-set-thp-disable",
+          "variant": "mimalloc_no_thp",
+          "wall_mad_seconds": 0.027226279999999936
+        },
+        {
+          "median_involuntary_context_switches": 33,
+          "median_minor_page_faults": 20160,
+          "median_peak_rss_kib": 67904.0,
+          "median_total_cpu_seconds": 1.77,
+          "median_voluntary_context_switches": 44,
+          "median_wall_seconds": 0.613971882,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 3400.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "system",
+          "wall_mad_seconds": 0.01755573499999996
+        },
+        {
+          "median_involuntary_context_switches": 22,
+          "median_minor_page_faults": 16881,
+          "median_peak_rss_kib": 68608.0,
+          "median_total_cpu_seconds": 1.75,
+          "median_voluntary_context_switches": 37,
+          "median_wall_seconds": 0.62745044,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 2048.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "tcmalloc",
+          "wall_mad_seconds": 0.021129217999999894
+        },
+        {
+          "median_involuntary_context_switches": 97,
+          "median_minor_page_faults": 35635,
+          "median_peak_rss_kib": 56452.0,
+          "median_total_cpu_seconds": 1.81,
+          "median_voluntary_context_switches": 50,
+          "median_wall_seconds": 0.633555432,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 228.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "typed_plain",
+          "wall_mad_seconds": 0.0032795660000000115
+        },
+        {
+          "median_involuntary_context_switches": 76,
+          "median_minor_page_faults": 35419,
+          "median_peak_rss_kib": 58300.0,
+          "median_total_cpu_seconds": 1.79,
+          "median_voluntary_context_switches": 49,
+          "median_wall_seconds": 0.644503377,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 1016.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "typeiso_perf",
+          "wall_mad_seconds": 0.007805316000000007
+        },
+        {
+          "median_involuntary_context_switches": 29,
+          "median_minor_page_faults": 35257,
+          "median_peak_rss_kib": 58152.0,
+          "median_total_cpu_seconds": 1.8,
+          "median_voluntary_context_switches": 49,
+          "median_wall_seconds": 0.662471151,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 192.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc",
+          "wall_mad_seconds": 0.009390534000000006
+        },
+        {
+          "median_involuntary_context_switches": 99,
+          "median_minor_page_faults": 35033,
+          "median_peak_rss_kib": 56704.0,
+          "median_total_cpu_seconds": 1.81,
+          "median_voluntary_context_switches": 54,
+          "median_wall_seconds": 0.636261926,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 632.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_hugepage",
+          "wall_mad_seconds": 0.018050240999999967
+        },
+        {
+          "median_involuntary_context_switches": 35,
+          "median_minor_page_faults": 35705,
+          "median_peak_rss_kib": 58864.0,
+          "median_total_cpu_seconds": 1.76,
+          "median_voluntary_context_switches": 49,
+          "median_wall_seconds": 0.637375257,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 188.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_metadata_segregation",
+          "wall_mad_seconds": 0.01695457899999997
+        },
+        {
+          "median_involuntary_context_switches": 76,
+          "median_minor_page_faults": 34918,
+          "median_peak_rss_kib": 58152.0,
+          "median_total_cpu_seconds": 1.78,
+          "median_voluntary_context_switches": 53,
+          "median_wall_seconds": 0.625547916,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 1028.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_no_optional",
+          "wall_mad_seconds": 0.011132658999999934
+        },
+        {
+          "median_involuntary_context_switches": 82,
+          "median_minor_page_faults": 34996,
+          "median_peak_rss_kib": 58380.0,
+          "median_total_cpu_seconds": 1.74,
+          "median_voluntary_context_switches": 51,
+          "median_wall_seconds": 0.622424154,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 192.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_pac",
+          "wall_mad_seconds": 0.008794495000000069
+        },
+        {
+          "median_involuntary_context_switches": 82,
+          "median_minor_page_faults": 35262,
+          "median_peak_rss_kib": 57136.0,
+          "median_total_cpu_seconds": 1.77,
+          "median_voluntary_context_switches": 52,
+          "median_wall_seconds": 0.614743937,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 1032.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_pthread_dtor",
+          "wall_mad_seconds": 0.022199049999999998
+        },
+        {
+          "median_involuntary_context_switches": 82,
+          "median_minor_page_faults": 35259,
+          "median_peak_rss_kib": 58152.0,
+          "median_total_cpu_seconds": 1.8,
+          "median_voluntary_context_switches": 50,
+          "median_wall_seconds": 0.650737595,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 1028.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_rseq",
+          "wall_mad_seconds": 0.011413650000000053
+        },
+        {
+          "median_involuntary_context_switches": 34,
+          "median_minor_page_faults": 35344,
+          "median_peak_rss_kib": 58844.0,
+          "median_total_cpu_seconds": 1.77,
+          "median_voluntary_context_switches": 52,
+          "median_wall_seconds": 0.648684174,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 876.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_separate_sc",
+          "wall_mad_seconds": 0.012353049999999977
+        },
+        {
+          "median_involuntary_context_switches": 70,
+          "median_minor_page_faults": 35269,
+          "median_peak_rss_kib": 59212.0,
+          "median_total_cpu_seconds": 1.75,
+          "median_voluntary_context_switches": 50,
+          "median_wall_seconds": 0.653515236,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "rss_mad_kib": 0.0,
+          "runtime_environment_overrides": {},
+          "sample_count": 5,
+          "thp_mode": null,
+          "variant": "unialloc_type_isolation",
+          "wall_mad_seconds": 0.01426370499999996
+        }
+      ],
+      "validation": {
+        "all_measured_processes_successful": true,
+        "all_outputs_equivalent": true,
+        "builds_successful": true,
+        "expected_measured_row_count": 75,
+        "measured_row_count": 75,
+        "mimalloc_on_off_binary_identical": true,
+        "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+        "success": true,
+        "typeiso_semantic_rewrites": 397
+      }
+    },
+    "rsedis_thp_matrix": {
+      "claim_grade": false,
+      "configuration": {
+        "base_port": 17400,
+        "baseline_variant": "mimalloc_thp_default",
+        "binaries": {
+          "gperftools_tcmalloc": {
+            "path": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "sha256": "3e9994675a51a1a7f893e02236b36e3150a37b5e8ea740e0cc78f6650f7b1841"
+          },
+          "mimalloc_rsedis": {
+            "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-rsedis-current-20260714/binaries/mimalloc/rsedis",
+            "sha256": "f6cc75dfb3f3f61cba6f76a79f42fb777684251639feb8b6dc6218a4222518da"
+          },
+          "system_rsedis": {
+            "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-rsedis-current-20260714/binaries/system_ptmalloc/rsedis",
+            "sha256": "0fc585666629577bf26ba960054ba802d7b8e8655209d41a0f8d93d748a5c16c"
+          }
+        },
+        "cell_environments": {
+          "mimalloc_thp_default": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "mimalloc_thp_off": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "tcmalloc_default": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          }
+        },
+        "client_cpus": "68-71",
+        "clients": 50,
+        "data_size_bytes": 64,
+        "host": {
+          "transparent_hugepage_defrag": "always defer defer+madvise [madvise] never",
+          "transparent_hugepage_enabled": "always [madvise] never",
+          "uname": "Linux swoop 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64"
+        },
+        "libc_rseq_mode": "glibc default; no rseq-disable tunable",
+        "measured_repetitions": 5,
+        "numa_node": 0,
+        "requests_per_test": 100000,
+        "schema_version": 1,
+        "server_cpus": "64-67",
+        "tests": "set,get",
+        "variants": [
+          "mimalloc_thp_default",
+          "mimalloc_thp_off",
+          "tcmalloc_default"
+        ],
+        "warmups": 1
+      },
+      "exact_tcmalloc_map_proof": "all five measured TCMalloc rows resolved the exact requested library path in /proc/PID/maps",
+      "measured_rows": [
+        {
+          "benchmark_elapsed_seconds": 3.167811929,
+          "combined_effective_requests_per_second": 63135.06119763084,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 62735.26,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 4360,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 10468,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 10468,
+          "post_thp_enabled": 0,
+          "round": 1,
+          "set_requests_per_second": 63938.62,
+          "success": true,
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.187876203,
+          "combined_effective_requests_per_second": 62737.69345615959,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [
+            "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5"
+          ],
+          "get_requests_per_second": 64432.99,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 9556,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12124,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12124,
+          "post_thp_enabled": 1,
+          "round": 1,
+          "set_requests_per_second": 61500.61,
+          "success": true,
+          "variant": "tcmalloc_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.15927282,
+          "combined_effective_requests_per_second": 63305.7071658661,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 63171.2,
+          "idle_anon_huge_pages_kib": 6144,
+          "idle_rss_kib": 10016,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 70140,
+          "post_anon_huge_pages_kib": 10240,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 65224,
+          "post_thp_enabled": 1,
+          "round": 1,
+          "set_requests_per_second": 63816.21,
+          "success": true,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.217812505,
+          "combined_effective_requests_per_second": 62154.02534772609,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [
+            "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5"
+          ],
+          "get_requests_per_second": 62932.66,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 9640,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12052,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12052,
+          "post_thp_enabled": 1,
+          "round": 2,
+          "set_requests_per_second": 61766.52,
+          "success": true,
+          "variant": "tcmalloc_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.170860133,
+          "combined_effective_requests_per_second": 63074.36834521518,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 63572.79,
+          "idle_anon_huge_pages_kib": 6144,
+          "idle_rss_kib": 10048,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 69912,
+          "post_anon_huge_pages_kib": 61440,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 69468,
+          "post_thp_enabled": 1,
+          "round": 2,
+          "set_requests_per_second": 63051.7,
+          "success": true,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.253586709,
+          "combined_effective_requests_per_second": 61470.6223893663,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 60753.34,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 4360,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 11012,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 11012,
+          "post_thp_enabled": 0,
+          "round": 2,
+          "set_requests_per_second": 62617.41,
+          "success": true,
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.166457649,
+          "combined_effective_requests_per_second": 63162.063785429775,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 64102.57,
+          "idle_anon_huge_pages_kib": 6144,
+          "idle_rss_kib": 9984,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 70008,
+          "post_anon_huge_pages_kib": 38912,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 48904,
+          "post_thp_enabled": 1,
+          "round": 3,
+          "set_requests_per_second": 62617.41,
+          "success": true,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.159535163,
+          "combined_effective_requests_per_second": 63300.450756844446,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 62695.92,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 4312,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12100,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12100,
+          "post_thp_enabled": 0,
+          "round": 3,
+          "set_requests_per_second": 64267.35,
+          "success": true,
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.144151662,
+          "combined_effective_requests_per_second": 63610.1630901544,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [
+            "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5"
+          ],
+          "get_requests_per_second": 63694.27,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 9676,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12036,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12036,
+          "post_thp_enabled": 1,
+          "round": 3,
+          "set_requests_per_second": 63897.76,
+          "success": true,
+          "variant": "tcmalloc_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.147107265,
+          "combined_effective_requests_per_second": 63550.423661838555,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 63211.12,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 4372,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 10376,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 10376,
+          "post_thp_enabled": 0,
+          "round": 4,
+          "set_requests_per_second": 64267.35,
+          "success": true,
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.133986301,
+          "combined_effective_requests_per_second": 63816.488264860476,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [
+            "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5"
+          ],
+          "get_requests_per_second": 64226.07,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 9668,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12196,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12196,
+          "post_thp_enabled": 1,
+          "round": 4,
+          "set_requests_per_second": 63856.96,
+          "success": true,
+          "variant": "tcmalloc_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.165981845,
+          "combined_effective_requests_per_second": 63171.55618433434,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 64184.86,
+          "idle_anon_huge_pages_kib": 6144,
+          "idle_rss_kib": 10088,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 70032,
+          "post_anon_huge_pages_kib": 36864,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 63688,
+          "post_thp_enabled": 1,
+          "round": 4,
+          "set_requests_per_second": 62617.41,
+          "success": true,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.116633365,
+          "combined_effective_requests_per_second": 64171.80867214389,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": null,
+            "MIMALLOC_ALLOW_THP": null,
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": null,
+            "TCMALLOC_MEMFS_MALLOC_PATH": ""
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [
+            "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5"
+          ],
+          "get_requests_per_second": 64350.06,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 9608,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 12012,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 12012,
+          "post_thp_enabled": 1,
+          "round": 5,
+          "set_requests_per_second": 64391.5,
+          "success": true,
+          "variant": "tcmalloc_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.265264521,
+          "combined_effective_requests_per_second": 61250.78036212184,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 60569.35,
+          "idle_anon_huge_pages_kib": 6144,
+          "idle_rss_kib": 10032,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 70140,
+          "post_anon_huge_pages_kib": 36864,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 70140,
+          "post_thp_enabled": 1,
+          "round": 5,
+          "set_requests_per_second": 62305.3,
+          "success": true,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "benchmark_elapsed_seconds": 3.166032223,
+          "combined_effective_requests_per_second": 63170.550996631464,
+          "effective_allocator_environment": {
+            "GLIBC_TUNABLES": null,
+            "LD_PRELOAD": null,
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+            "TCMALLOC_MEMFS_MALLOC_PATH": null
+          },
+          "environment_contract_passed": true,
+          "exact_tcmalloc_mapped_paths": [],
+          "get_requests_per_second": 63856.96,
+          "idle_anon_huge_pages_kib": 0,
+          "idle_rss_kib": 4328,
+          "maps_proof_passed": true,
+          "peak_rss_kib": 10240,
+          "post_anon_huge_pages_kib": 0,
+          "post_hugetlb_kib": 0,
+          "post_rss_kib": 9100,
+          "post_thp_enabled": 0,
+          "round": 5,
+          "set_requests_per_second": 62893.08,
+          "success": true,
+          "variant": "mimalloc_thp_off"
+        }
+      ],
+      "paired_comparison_tcmalloc_vs_mimalloc_thp_off": {
+        "median_elapsed_delta_percent": -0.4868912737591824,
+        "median_elapsed_ratio": 0.9951310872624082,
+        "median_peak_rss_delta_percent": 15.819640810087886,
+        "median_peak_rss_ratio": 1.1581964081008789,
+        "median_throughput_delta_percent": 0.4892735037537843,
+        "median_throughput_ratio": 1.0048927350375378,
+        "paired_rounds": 5,
+        "per_round": [
+          {
+            "elapsed_ratio": 1.00633379583438,
+            "peak_rss_ratio": 1.1581964081008789,
+            "round": 1,
+            "throughput_ratio": 0.993706068641838
+          },
+          {
+            "elapsed_ratio": 0.9890046870731792,
+            "peak_rss_ratio": 1.0944424264438795,
+            "round": 2,
+            "throughput_ratio": 1.0111175539110535
+          },
+          {
+            "elapsed_ratio": 0.9951310872624082,
+            "peak_rss_ratio": 0.9947107438016529,
+            "round": 3,
+            "throughput_ratio": 1.0048927350375378
+          },
+          {
+            "elapsed_ratio": 0.9958307858947415,
+            "peak_rss_ratio": 1.1754047802621435,
+            "round": 4,
+            "throughput_ratio": 1.0041866692256483
+          },
+          {
+            "elapsed_ratio": 0.9843972346076783,
+            "peak_rss_ratio": 1.173046875,
+            "round": 5,
+            "throughput_ratio": 1.015850070320992
+          }
+        ],
+        "ratio_method": "median of same-round subject/reference ratios",
+        "reference": "mimalloc_thp_off",
+        "subject": "tcmalloc_default"
+      },
+      "paired_comparisons_vs_mimalloc_thp_default": [
+        {
+          "all_rounds_paired": true,
+          "baseline": "mimalloc_thp_default",
+          "median_elapsed_ratio": 0.9978138074885714,
+          "median_peak_rss_delta_percent": -85.0755631593955,
+          "median_peak_rss_ratio": 0.14924436840604505,
+          "median_post_anon_huge_pages_delta_kib": -36864.0,
+          "median_throughput_delta_percent": 0.21909824207897444,
+          "median_throughput_ratio": 1.0021909824207897,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "elapsed_ratio": 1.0027028716690571,
+              "peak_rss_ratio": 0.14924436840604505,
+              "post_anon_huge_pages_delta_kib": -10240.0,
+              "throughput_ratio": 0.9973044141535589
+            },
+            {
+              "elapsed_ratio": 1.0260896326328122,
+              "peak_rss_ratio": 0.15751230117862455,
+              "post_anon_huge_pages_delta_kib": -61440.0,
+              "throughput_ratio": 0.974573729425694
+            },
+            {
+              "elapsed_ratio": 0.9978138074885714,
+              "peak_rss_ratio": 0.17283739001256998,
+              "post_anon_huge_pages_delta_kib": -38912.0,
+              "throughput_ratio": 1.0021909824207897
+            },
+            {
+              "elapsed_ratio": 0.9940383170453714,
+              "peak_rss_ratio": 0.14816084075851038,
+              "post_anon_huge_pages_delta_kib": -36864.0,
+              "throughput_ratio": 1.0059974377771965
+            },
+            {
+              "elapsed_ratio": 0.9696097215518669,
+              "peak_rss_ratio": 0.1459937268320502,
+              "post_anon_huge_pages_delta_kib": -36864.0,
+              "throughput_ratio": 1.0313427947066096
+            }
+          ],
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "all_rounds_paired": true,
+          "baseline": "mimalloc_thp_default",
+          "median_elapsed_ratio": 0.9929555391315452,
+          "median_peak_rss_delta_percent": -82.7611854903307,
+          "median_peak_rss_ratio": 0.17238814509669298,
+          "median_post_anon_huge_pages_delta_kib": -36864.0,
+          "median_throughput_delta_percent": 0.7094437354784322,
+          "median_throughput_ratio": 1.0070944373547843,
+          "paired_rounds": 5,
+          "per_round": [
+            {
+              "elapsed_ratio": 1.0090537869407556,
+              "peak_rss_ratio": 0.17285429141716566,
+              "post_anon_huge_pages_delta_kib": -10240.0,
+              "throughput_ratio": 0.9910274486276843
+            },
+            {
+              "elapsed_ratio": 1.0148074560310478,
+              "peak_rss_ratio": 0.17238814509669298,
+              "post_anon_huge_pages_delta_kib": -61440.0,
+              "throughput_ratio": 0.9854086054028807
+            },
+            {
+              "elapsed_ratio": 0.9929555391315452,
+              "peak_rss_ratio": 0.17192320877613987,
+              "post_anon_huge_pages_delta_kib": -38912.0,
+              "throughput_ratio": 1.0070944373547843
+            },
+            {
+              "elapsed_ratio": 0.9898939584727783,
+              "peak_rss_ratio": 0.17414896047521133,
+              "post_anon_huge_pages_delta_kib": -36864.0,
+              "throughput_ratio": 1.0102092162910192
+            },
+            {
+              "elapsed_ratio": 0.9544811285443786,
+              "peak_rss_ratio": 0.17125748502994012,
+              "post_anon_huge_pages_delta_kib": -36864.0,
+              "throughput_ratio": 1.047689650527758
+            }
+          ],
+          "variant": "tcmalloc_default"
+        }
+      ],
+      "paper_method_exact": false,
+      "paper_source_exact": false,
+      "records_artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/rsedis/records.json",
+        "sha256": "49c4b7b8f7d33a4f5e8ca713bf711ab2a93cdfd9873dab1baf60a738b4e1d457"
+      },
+      "report_artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/rsedis/report.json",
+        "sha256": "8d5797484e4570b528097043ae3e9e2526d6aa91a65e6899861fc576dbf33bca"
+      },
+      "runner": {
+        "path": "evaluation/scripts/rsedis_thp_matrix.py",
+        "sha256": "ac9af755e7788f34492496734d6d7a377e4bb5b636f9b25d144e17eee5cb5c84"
+      },
+      "summaries": [
+        {
+          "all_successful": true,
+          "benchmark_elapsed_seconds_median": 3.166457649,
+          "combined_effective_rps_median": 63162.063785429775,
+          "get_rps_median": 63572.79,
+          "idle_anon_huge_pages_kib_median": 6144.0,
+          "idle_rss_kib_median": 10032.0,
+          "measured_repetitions": 5,
+          "peak_rss_kib_median": 70032.0,
+          "post_anon_huge_pages_kib_median": 36864.0,
+          "post_hugetlb_kib_median": 0.0,
+          "post_rss_kib_median": 65224.0,
+          "post_thp_enabled_median": 1.0,
+          "set_rps_median": 62617.41,
+          "successful_repetitions": 5,
+          "variant": "mimalloc_thp_default"
+        },
+        {
+          "all_successful": true,
+          "benchmark_elapsed_seconds_median": 3.166032223,
+          "combined_effective_rps_median": 63170.550996631464,
+          "get_rps_median": 62735.26,
+          "idle_anon_huge_pages_kib_median": 0.0,
+          "idle_rss_kib_median": 4360.0,
+          "measured_repetitions": 5,
+          "peak_rss_kib_median": 10468.0,
+          "post_anon_huge_pages_kib_median": 0.0,
+          "post_hugetlb_kib_median": 0.0,
+          "post_rss_kib_median": 10468.0,
+          "post_thp_enabled_median": 0.0,
+          "set_rps_median": 63938.62,
+          "successful_repetitions": 5,
+          "variant": "mimalloc_thp_off"
+        },
+        {
+          "all_successful": true,
+          "benchmark_elapsed_seconds_median": 3.144151662,
+          "combined_effective_rps_median": 63610.1630901544,
+          "get_rps_median": 64226.07,
+          "idle_anon_huge_pages_kib_median": 0.0,
+          "idle_rss_kib_median": 9640.0,
+          "measured_repetitions": 5,
+          "peak_rss_kib_median": 12052.0,
+          "post_anon_huge_pages_kib_median": 0.0,
+          "post_hugetlb_kib_median": 0.0,
+          "post_rss_kib_median": 12052.0,
+          "post_thp_enabled_median": 1.0,
+          "set_rps_median": 63856.96,
+          "successful_repetitions": 5,
+          "variant": "tcmalloc_default"
+        }
+      ],
+      "validation": {
+        "all_measured_cells_complete": true,
+        "all_paired_comparisons_complete": true,
+        "all_passed": true,
+        "all_runs_successful": true,
+        "exactly_three_runtime_cells": true
+      }
+    }
+  },
+  "generated_at": "2026-07-14T17:35:26.363154Z",
+  "host": {
+    "architecture": "x86_64",
+    "cpu_model": "AMD EPYC 9354 32-Core Processor",
+    "hugetlb": {
+      "free_pages_at_audit": 4096,
+      "page_size_kib": 2048,
+      "total_kib": 8388608,
+      "total_pages": 4096
+    },
+    "kernel": "6.8.0-111-generic",
+    "logical_cpu_count": 128,
+    "numa_nodes": 2,
+    "transparent_hugepage_defrag": "always defer defer+madvise [madvise] never",
+    "transparent_hugepage_enabled": "always [madvise] never"
+  },
+  "prior_evidence": {
+    "fixed_bitmap_page_allocator": {
+      "documentation": {
+        "path": "docs/bitmap-page-allocator.md",
+        "sha256": "022b6ee0e9baf70b8c945f07d1e61ae631c0a99f87a2c18a382ae3e23593666f"
+      },
+      "interpretation": "dedicated fixed-heap page-run microbenchmark evidence; excluded from the Oxipng feature aggregate"
+    },
+    "hosted_bitmap_page_allocator": {
+      "documentation": {
+        "path": "docs/hosted-bitmap-page-allocator.md",
+        "sha256": "d34845ca213436921c1d6ce5c4fc2a92f6d9c72a93fb8ae22727426c81513feb"
+      },
+      "interpretation": "dedicated page-run microbenchmark evidence; excluded from the Oxipng feature aggregate"
+    },
+    "lifetime_hugetlb": {
+      "canonical_documentation": {
+        "path": "docs/allocator-memory-and-mechanisms.md",
+        "section": "runtime-validation-and-explicit-hugetlb-evidence"
+      },
+      "interpretation": "dedicated explicit HugeTLB mechanism evidence; distinct from transparent huge pages",
+      "legacy_documentation": {
+        "path": "docs/lifetime-hugepage-production-evaluation.md",
+        "sha256": "8205d00edd7119e2601e2aa94f2286444534b0a57d7687d3b5642c432ddda102",
+        "status": "folded_into_canonical_documentation_2026-07-14"
+      },
+      "summary": {
+        "path": "docs/evidence/lifetime-hugepage-production-final-20260714/production-summary.json",
+        "sha256": "6a2818590c04af650ab37208ae2e2ffbf03d47d6418e59a919ed9613b85048ce"
+      }
+    },
+    "type_isolation_realworld": {
+      "aggregate": {
+        "campaign_count": 3,
+        "geomean_rss_ratio": 1.0003295682894322,
+        "geomean_throughput_ratio": 0.9822036146999731,
+        "geomean_total_cpu_ratio": 1.0211854347539135,
+        "geomean_wall_ratio": 1.0181188350701225,
+        "reference": "typed_plain",
+        "subject": "typeiso_perf"
+      },
+      "applications": 3,
+      "artifact": {
+        "path": "benchmark-results/realworld-rust-allocator-20260714.json",
+        "sha256": "7598e2b06143b7bd3a73d8c599402fd3c8dd6bdddb60706d46f987b3b4fd2741"
+      },
+      "canonical_documentation": {
+        "path": "docs/allocator-evaluation.md",
+        "section": "historical-allocator-comparison-cohort"
+      },
+      "interpretation": "actual MIR-rewrite Type Isolation policy compared with the typed plain rewrite control",
+      "legacy_documentation": {
+        "path": "docs/realworld-rust-allocator-evaluation.md",
+        "sha256": "c6b693187050f14e937718d5164ea89fa0395e94c0de87c1c491f8e4d324c4dc",
+        "status": "folded_into_canonical_documentation_2026-07-14"
+      },
+      "measured_repetitions_per_application": 7,
+      "per_application": [
+        {
+          "app": "ripgrep",
+          "ratio_method": {
+            "rss": "paired median",
+            "throughput": "inverse of paired wall median",
+            "total_cpu": "ratio of medians",
+            "wall": "paired median"
+          },
+          "reference": "typed_plain",
+          "rss_delta_percent": 0.0,
+          "rss_ratio": 1.0,
+          "subject": "typeiso_perf",
+          "throughput_delta_percent": 0.4607102531367868,
+          "throughput_ratio": 1.0046071025313679,
+          "total_cpu_ratio": 1.0,
+          "wall_delta_percent": -0.45859744767472455,
+          "wall_ratio": 0.9954140255232528
+        },
+        {
+          "app": "fd",
+          "ratio_method": {
+            "rss": "paired median",
+            "throughput": "inverse of paired wall median",
+            "total_cpu": "ratio of medians",
+            "wall": "paired median"
+          },
+          "reference": "typed_plain",
+          "rss_delta_percent": 0.0,
+          "rss_ratio": 1.0,
+          "subject": "typeiso_perf",
+          "throughput_delta_percent": -6.094813939108223,
+          "throughput_ratio": 0.9390518606089178,
+          "total_cpu_ratio": 1.0649122807017546,
+          "wall_delta_percent": 6.490391207101287,
+          "wall_ratio": 1.0649039120710129
+        },
+        {
+          "app": "oxipng",
+          "ratio_method": {
+            "rss": "paired median",
+            "throughput": "inverse of paired wall median",
+            "total_cpu": "ratio of medians",
+            "wall": "paired median"
+          },
+          "reference": "typed_plain",
+          "rss_delta_percent": 0.09890307498652273,
+          "rss_ratio": 1.0009890307498652,
+          "subject": "typeiso_perf",
+          "throughput_delta_percent": 0.4427888091313781,
+          "throughput_ratio": 1.0044278880913138,
+          "total_cpu_ratio": 1.0,
+          "wall_delta_percent": -0.4408368329684609,
+          "wall_ratio": 0.9955916316703154
+        }
+      ]
+    }
+  },
+  "repository": {
+    "dirty": true,
+    "head": "18bfc47b5711591a9573b762840c0fb9fbf8d5b2",
+    "implementation_sha256": "95b6c239bc2c2dd3dcde8625b39a2de7352e1149526bded9f4228f1b487900c4",
+    "toolchain": "nightly-2026-06-11",
+    "unialloc_manifest_sha256": "1efe6b0bd424123b0053ee36117c748bd406cb5c42c0c848e4d61ecfc28c8943",
+    "unialloc_version": "0.1.0"
+  },
+  "runtime_preflights": {
+    "mimalloc_and_tcmalloc": {
+      "all_outputs_equivalent": true,
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/preflight/preflight.json",
+        "sha256": "13e346c29be6c8825f7c59eb4d261ab17f9c135113cb0d08b50274f4bf6a0fe3"
+      },
+      "same_mimalloc_binary_for_on_and_off": true,
+      "variants": {
+        "mimalloc_thp_default": {
+          "environment": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "1",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "madv_hugepage_calls": 1,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 0,
+          "stderr_sha256": "8d3697b7a4574d7356532e6ca1702110b8f4fbd944c13d79bb78c7255702dd89",
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/preflight/strace-default.log",
+          "trace_sha256": "747ec52327dfc716608707788120713b172d9f7ba6dac62a88d46f73d74aff8a"
+        },
+        "mimalloc_thp_off": {
+          "environment": {
+            "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+            "MIMALLOC_ALLOW_THP": "0",
+            "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0"
+          },
+          "madv_hugepage_calls": 0,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 1,
+          "stderr_sha256": "f9cbf6850a22a4ce9f341f13c56249b86f6fedcaa10c720708df31a190e5e54d",
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/preflight/strace-off.log",
+          "trace_sha256": "1c56035b6391149dd6f4d115491558d2d77eb2a6a6a9df54195ad6b5552544c7"
+        },
+        "tcmalloc_default": {
+          "environment": {
+            "TCMALLOC_MEMFS_MALLOC_PATH": "unset"
+          },
+          "madv_hugepage_calls": 0,
+          "map_hugetlb_calls": 0,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/preflight/strace-tcmalloc-default.log",
+          "trace_sha256": "4c2e943447399ddd9bc0d4cf1199445161357fbdc1dd73e880233b11587fe2ab"
+        }
+      }
+    },
+    "unialloc_feature_activation": {
+      "all_outputs_equivalent": true,
+      "artifact": {
+        "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/preflight.json",
+        "sha256": "0d26bc8667628ffed03ad0143dda108ae2cdddda56fbd3fabfdb079d986b0fb0"
+      },
+      "process_memory_sampling": {
+        "artifact": {
+          "path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/process-memory-sampling.json",
+          "sha256": "e807924a64035d32de7102ca33d9cd858d1fcaac9f77d7feaf4eb6318a9c6387"
+        },
+        "interpretation": "The host reports explicit HugeTLB in HugetlbPages separately from VmRSS/VmHWM; retain both fields for footprint accounting.",
+        "sampling_interval_seconds": 0.002,
+        "variants": {
+          "unialloc_hugepage": {
+            "command": [
+              "numactl",
+              "--physcpubind=20-23",
+              "--membind=0",
+              "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-feature-thp-20260714/oxipng/binaries/oxipng/unialloc_hugepage/oxipng",
+              "--opt",
+              "2",
+              "--threads",
+              "4",
+              "--force",
+              "--quiet",
+              "--out",
+              "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_hugepage.sampled.png",
+              "/home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts/realworld-oxipng/tests/files/issue-141.png"
+            ],
+            "exit_code": 0,
+            "maxima": {
+              "AnonHugePages_kib": 0,
+              "HugetlbPages_kib": 8192,
+              "Pss_kib": 54699,
+              "Rss_kib": 56800,
+              "VmHWM_kib": 56740,
+              "VmRSS_kib": 56740
+            },
+            "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+            "sample_count": 227,
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "unialloc_no_optional": {
+            "command": [
+              "numactl",
+              "--physcpubind=20-23",
+              "--membind=0",
+              "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-feature-thp-20260714/oxipng/binaries/oxipng/unialloc_no_optional/oxipng",
+              "--opt",
+              "2",
+              "--threads",
+              "4",
+              "--force",
+              "--quiet",
+              "--out",
+              "/home/hanqing/alloc/UniAlloc/evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_no_optional.sampled.png",
+              "/home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts/realworld-oxipng/tests/files/issue-141.png"
+            ],
+            "exit_code": 0,
+            "maxima": {
+              "AnonHugePages_kib": 0,
+              "HugetlbPages_kib": 0,
+              "Pss_kib": 55783,
+              "Rss_kib": 57884,
+              "VmHWM_kib": 57812,
+              "VmRSS_kib": 57812
+            },
+            "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+            "sample_count": 229,
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "variants": {
+        "unialloc_hugepage": {
+          "madv_hugepage_calls": 0,
+          "madv_nohugepage_calls": 0,
+          "map_hugetlb_calls": 4,
+          "map_hugetlb_success_bytes": 8388608,
+          "map_hugetlb_successes": 4,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 0,
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_hugepage.strace",
+          "trace_sha256": "26a3a3e5c64aee14a187bee511b44b8929cd54e47491d344b20d06ec327033b9"
+        },
+        "unialloc_metadata_segregation": {
+          "madv_hugepage_calls": 0,
+          "madv_nohugepage_calls": 0,
+          "map_hugetlb_calls": 0,
+          "map_hugetlb_success_bytes": 0,
+          "map_hugetlb_successes": 0,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 0,
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_metadata_segregation.strace",
+          "trace_sha256": "039aee35afab38c8f7de231b34016c73a30e2c0c0e9771d3718bee7f1e3f684b"
+        },
+        "unialloc_no_optional": {
+          "madv_hugepage_calls": 0,
+          "madv_nohugepage_calls": 0,
+          "map_hugetlb_calls": 0,
+          "map_hugetlb_success_bytes": 0,
+          "map_hugetlb_successes": 0,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 0,
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_no_optional.strace",
+          "trace_sha256": "09bb2f4900041153f48ae159d7aa7e7d1e2a3bbb298eac0ba53b707e6455163b"
+        },
+        "unialloc_separate_sc": {
+          "madv_hugepage_calls": 0,
+          "madv_nohugepage_calls": 0,
+          "map_hugetlb_calls": 0,
+          "map_hugetlb_success_bytes": 0,
+          "map_hugetlb_successes": 0,
+          "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+          "pr_set_thp_disable_calls": 0,
+          "trace_path": "evaluation/raw/rust-alloc-paper-feature-thp-20260714/unialloc-feature-preflight/unialloc_separate_sc.strace",
+          "trace_sha256": "467e40299e9ec16a614b758dedb8b32201fe4017a993f35e7b6bc27c1fb8026d"
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "source": "unialloc-allocator-feature-thp-evaluation",
+  "status": "diagnostic-current-host-evidence"
+}

@@ -140,16 +140,20 @@ class RedbActixCampaignTests(unittest.TestCase):
             primary.unialloc_revision,
         )
         self.assertFalse(primary.current_working_tree)
+        self.assertEqual(5, primary.rounds)
         diagnostic = self.campaign.parse_args(
             [
                 "--targets",
                 "redb",
                 "--current-working-tree",
+                "--rounds",
+                "3",
                 "--required-cpus",
                 "96-99",
             ]
         )
         self.assertIsNone(diagnostic.unialloc_revision)
+        self.assertEqual(3, diagnostic.rounds)
         self.assertEqual("96-99", diagnostic.required_cpus)
         record = {"status": "complete"}
         with tempfile.TemporaryDirectory() as directory:
@@ -157,12 +161,26 @@ class RedbActixCampaignTests(unittest.TestCase):
                 record,
                 self.campaign.materialize_working_tree_implementation(Path(directory)),
                 required_cpus="96-99",
+                measured_rounds=3,
             )
         self.assertFalse(record["primary_eligible"])
         self.assertFalse(record["core_eligible"])
+        self.assertEqual(3, record["measured_rounds"])
         self.assertFalse(
             self.campaign.primary_publication_allowed(
                 record, diagnostic_current_worktree=True
+            )
+        )
+        self.assertFalse(
+            self.campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 3},
+                diagnostic_current_worktree=False,
+            )
+        )
+        self.assertTrue(
+            self.campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 5},
+                diagnostic_current_worktree=False,
             )
         )
         with self.assertRaises(SystemExit):
@@ -172,6 +190,12 @@ class RedbActixCampaignTests(unittest.TestCase):
                     self.campaign.PINNED_IMPLEMENTATION_REVISION,
                     "--current-working-tree",
                 ]
+            )
+        with self.assertRaises(SystemExit):
+            self.campaign.parse_args(["--targets", "redb", "--rounds", "3"])
+        with self.assertRaises(SystemExit):
+            self.campaign.parse_args(
+                ["--targets", "redb", "--current-working-tree", "--rounds", "4"]
             )
 
     def test_redb_manifest_uses_the_copied_allocator_path(self) -> None:
@@ -284,6 +308,62 @@ class RedbActixCampaignTests(unittest.TestCase):
         with self.assertRaises(self.campaign.CampaignError):
             parse("Benchmarking without a complete estimate")
 
+    def test_actix_failed_requests_are_a_correctness_failure_at_exit_zero(self) -> None:
+        spec = self.campaign.TARGETS["actix_web"]
+        harness = next(
+            row for row in spec.harnesses if row.id == "get_body_async_burst"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "measurement.json"
+            result = {
+                "stdout": b"time:   [1.0 us 1.1 us 1.2 us]\n",
+                "stderr": b"failed 28 requests (might be bench timeout)\n",
+                "exit_code": 0,
+                "timed_out": False,
+            }
+            with self.assertRaises(
+                self.campaign.HarnessCorrectnessError
+            ) as captured:
+                self.campaign.persist_measurement(
+                    result,
+                    path=path,
+                    spec=spec,
+                    harness=harness,
+                    variant="typeiso_perf",
+                    round_index=1,
+                    build={},
+                )
+
+            self.assertEqual(harness.id, captured.exception.harness_id)
+            self.assertIn("failed 28 requests", str(captured.exception))
+            self.assertEqual(result["stdout"], path.with_suffix(".stdout").read_bytes())
+            self.assertEqual(result["stderr"], path.with_suffix(".stderr").read_bytes())
+
+            record = self.campaign.empty_target_result(spec, Path(directory))
+            for row in record["harnesses"]:
+                row["gates"] = {
+                    gate: True for gate in self.campaign.REQUIRED_GATES
+                }
+            record["harnesses"][0]["measurements"] = [{"round": 1}]
+            self.campaign.mark_target_ineligible(
+                record,
+                str(captured.exception),
+                retain_measurements=True,
+                correctness_harness_id=captured.exception.harness_id,
+            )
+            failed_harness = next(
+                row for row in record["harnesses"] if row["id"] == harness.id
+            )
+            self.assertEqual("ineligible", record["status"])
+            self.assertFalse(failed_harness["gates"]["correctness"])
+
+        self.assertEqual(
+            0,
+            self.campaign.actix_failed_request_count(
+                "failed 0 requests (might be bench timeout)"
+            ),
+        )
+
     def test_cpu_set_parser_expands_ranges(self) -> None:
         self.assertEqual({1, 3, 4, 5, 8}, self.campaign.parse_cpu_set("1,3-5,8"))
         with self.assertRaises(self.campaign.CampaignError):
@@ -314,6 +394,38 @@ class RedbActixCampaignTests(unittest.TestCase):
                 ]
             self.campaign.validate_target_result(record)
             record["harnesses"][0]["measurements"].pop()
+            with self.assertRaises(self.campaign.CampaignError):
+                self.campaign.validate_target_result(record)
+
+    def test_diagnostic_result_validator_accepts_three_complete_paired_rounds(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            raw = Path(directory)
+            record = self.campaign.empty_target_result(
+                self.campaign.TARGETS["redb"], raw
+            )
+            self.add_warmup_evidence(record, raw)
+            gates = {gate: True for gate in self.campaign.REQUIRED_GATES}
+            for harness in record["harnesses"]:
+                harness["gates"] = dict(gates)
+                harness["measurements"] = [
+                    {
+                        "round": round_index,
+                        "variant": variant,
+                        "performance": 1.0,
+                        "peak_rss_mib": 2.0,
+                    }
+                    for round_index in range(1, 4)
+                    for variant in self.campaign.VARIANTS
+                ]
+            self.campaign.validate_target_result(record, measured_rounds=3)
+            for harness in record["harnesses"]:
+                passed, ratio = self.campaign.compiler_route_equivalence(
+                    harness["measurements"], measured_rounds=3
+                )
+                self.assertTrue(passed)
+                self.assertEqual(1.0, ratio)
             with self.assertRaises(self.campaign.CampaignError):
                 self.campaign.validate_target_result(record)
 

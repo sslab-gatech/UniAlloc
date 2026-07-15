@@ -2,10 +2,11 @@
 """Run exact-pin redb and Actix Web Type Isolation campaigns.
 
 The adapter fails closed on source pins, allocator activation, actual-MIR
-compiler provenance, correctness, or incomplete five-round pairing. Raw build,
+compiler provenance, correctness, or incomplete primary five-round pairing. Raw build,
 audit, command, stdout, stderr, and GNU time artifacts remain under the selected
 raw directory. A compiler-route miss retains the complete target as an explicit
 attribution limit rather than discarding otherwise eligible measurements.
+Current-working-tree diagnostics may select three paired rounds.
 """
 
 from __future__ import annotations
@@ -73,6 +74,7 @@ CORE_REQUIRED_GATES = tuple(
 )
 RESULT_PREFIX = "UNIALLOC_REDB_ACTIX_RESULT="
 ROUNDS = 5
+DIAGNOSTIC_ROUNDS = 3
 BASELINE_FORCE_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
 """Force-load a baseline UniAlloc rlib into selected Cargo rustc invocations."""
 
@@ -136,6 +138,14 @@ os.execv(str(rustc), [str(rustc), *arguments])
 
 class CampaignError(RuntimeError):
     """A fail-closed source, build, provenance, or measurement error."""
+
+
+class HarnessCorrectnessError(CampaignError):
+    """A benchmark completed at the process level but failed its workload."""
+
+    def __init__(self, harness_id: str, message: str) -> None:
+        super().__init__(message)
+        self.harness_id = harness_id
 
 
 @dataclasses.dataclass(frozen=True)
@@ -977,6 +987,20 @@ def parse_criterion_estimate_seconds(text: str) -> float:
     if not math.isfinite(value) or value <= 0:
         raise CampaignError(f"invalid Criterion estimate: {value}")
     return value
+
+
+def actix_failed_request_count(text: str) -> int:
+    """Return the largest nonzero workload-failure count emitted by Actix benches."""
+
+    counts = [
+        int(value)
+        for value in re.findall(
+            r"\bfailed\s+([0-9]+)\s+requests?\s*\(might be bench timeout\)",
+            text,
+            flags=re.IGNORECASE,
+        )
+    ]
+    return max(counts, default=0)
 
 
 def parse_redb_result(text: str, harness_id: str) -> float:
@@ -2039,8 +2063,8 @@ def build_gates(spec: TargetSpec, builds: dict[str, dict[str, Any]]) -> dict[str
         "allocator_activation": activation,
         "actual_mir_provenance": provenance,
         "stats_disabled": stats_disabled,
-        # Measurement equivalence is decided per harness from the five paired
-        # typed_plain/unialloc execution-cost ratios after collection.
+        # Measurement equivalence is decided per harness from the configured
+        # paired typed_plain/unialloc execution-cost ratios after collection.
         "compiler_route_equivalent": False,
         "source_audit_retained": source_audit and consistent_snapshot,
     }
@@ -2078,19 +2102,22 @@ def build_records_succeeded(
 
 def compiler_route_equivalence(
     measurements: Sequence[dict[str, Any]],
+    *,
+    measured_rounds: int = ROUNDS,
 ) -> tuple[bool, float]:
     by_pair = {
         (int(row["round"]), str(row["variant"])): float(row["performance"])
         for row in measurements
     }
     ratios: list[float] = []
-    for round_index in range(1, ROUNDS + 1):
+    for round_index in range(1, measured_rounds + 1):
         try:
             reference = by_pair[(round_index, "unialloc")]
             subject = by_pair[(round_index, "typed_plain")]
         except KeyError as error:
             raise CampaignError(
-                "compiler-route gate requires five complete typed_plain/unialloc pairs"
+                "compiler-route gate requires "
+                f"{measured_rounds} complete typed_plain/unialloc pairs"
             ) from error
         if reference <= 0 or subject <= 0:
             raise CampaignError("compiler-route gate received non-positive timing")
@@ -2144,6 +2171,17 @@ def persist_measurement(
     stderr_path.write_bytes(result["stderr"])
     stdout = result["stdout"].decode("utf-8", errors="replace")
     stderr = result["stderr"].decode("utf-8", errors="replace")
+    failed_requests = (
+        actix_failed_request_count(stdout + "\n" + stderr)
+        if spec.id == "actix_web"
+        else 0
+    )
+    if failed_requests:
+        raise HarnessCorrectnessError(
+            harness.id,
+            f"{spec.id}/{harness.id}/{variant} correctness failure: "
+            f"failed {failed_requests} requests (might be bench timeout)",
+        )
     if result["exit_code"] != 0 or result["timed_out"]:
         raise CampaignError(
             f"{spec.id}/{harness.id}/{variant} failed: {stderr[-4000:]}"
@@ -2310,7 +2348,11 @@ def empty_target_result(spec: TargetSpec, raw_dir: pathlib.Path) -> dict[str, An
 
 
 def mark_target_ineligible(
-    record: dict[str, Any], blocker: str, *, retain_measurements: bool = False
+    record: dict[str, Any],
+    blocker: str,
+    *,
+    retain_measurements: bool = False,
+    correctness_harness_id: str | None = None,
 ) -> dict[str, Any]:
     record["status"] = "ineligible"
     record["core_eligible"] = False
@@ -2320,16 +2362,26 @@ def mark_target_ineligible(
             harness["gates"] = {gate: False for gate in REQUIRED_GATES}
             harness["warmup_evidence"] = {variant: [] for variant in VARIANTS}
             harness["measurements"] = []
+    if correctness_harness_id is not None:
+        for harness in record["harnesses"]:
+            if harness.get("id") == correctness_harness_id:
+                harness["gates"]["correctness"] = False
+                break
     return record
 
 
 def validate_target_result(
-    record: dict[str, Any], *, allow_attribution_limits: bool = False
+    record: dict[str, Any],
+    *,
+    allow_attribution_limits: bool = False,
+    measured_rounds: int = ROUNDS,
 ) -> None:
     if record.get("schema_version") != 1:
         raise CampaignError("result schema version must be 1")
     expected_pairs = {
-        (round_index, variant) for round_index in range(1, 6) for variant in VARIANTS
+        (round_index, variant)
+        for round_index in range(1, measured_rounds + 1)
+        for variant in VARIANTS
     }
     for harness in record.get("harnesses", []):
         gates = harness.get("gates", {})
@@ -2388,7 +2440,8 @@ def validate_target_result(
         observed = {(row.get("round"), row.get("variant")) for row in rows}
         if observed != expected_pairs or len(rows) != len(expected_pairs):
             raise CampaignError(
-                f"{harness.get('id')} does not contain five complete paired rounds"
+                f"{harness.get('id')} does not contain "
+                f"{measured_rounds} complete paired rounds"
             )
         for row in rows:
             for field in ("performance", "peak_rss_mib"):
@@ -2399,10 +2452,16 @@ def validate_target_result(
                     )
 
 
-def classify_complete_result(record: dict[str, Any]) -> str:
+def classify_complete_result(
+    record: dict[str, Any], *, measured_rounds: int = ROUNDS
+) -> str:
     """Classify a core-eligible result while retaining route attribution limits."""
 
-    validate_target_result(record, allow_attribution_limits=True)
+    validate_target_result(
+        record,
+        allow_attribution_limits=True,
+        measured_rounds=measured_rounds,
+    )
     limited_harnesses = [
         str(harness["id"])
         for harness in record["harnesses"]
@@ -2427,7 +2486,10 @@ def mark_diagnostic_current_worktree(
     implementation: ImplementationSnapshot,
     *,
     required_cpus: str | None,
+    measured_rounds: int,
 ) -> None:
+    if measured_rounds not in {DIAGNOSTIC_ROUNDS, ROUNDS}:
+        raise CampaignError("working-tree diagnostics require three or five rounds")
     manifest = verify_implementation_snapshot(implementation)
     if manifest.get("source_kind") != "working_tree":
         raise CampaignError("diagnostic result does not use a working-tree snapshot")
@@ -2446,6 +2508,7 @@ def mark_diagnostic_current_worktree(
             "campaign_snapshot_file_count": manifest["campaign_snapshot_file_count"],
             "campaign_snapshot_size_bytes": manifest["campaign_snapshot_size_bytes"],
             "required_cpus": required_cpus,
+            "measured_rounds": measured_rounds,
         }
     )
     record["core_eligible"] = False
@@ -2458,6 +2521,7 @@ def primary_publication_allowed(
         not diagnostic_current_worktree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
+        and record.get("measured_rounds") == ROUNDS
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2479,7 +2543,15 @@ def run_target(
     measure_only: bool,
     diagnostic_current_worktree: bool = False,
     required_cpus: str | None = None,
+    measured_rounds: int = ROUNDS,
 ) -> dict[str, Any]:
+    if diagnostic_current_worktree and measured_rounds not in {
+        DIAGNOSTIC_ROUNDS,
+        ROUNDS,
+    }:
+        raise CampaignError("working-tree diagnostics require three or five rounds")
+    if not diagnostic_current_worktree and measured_rounds != ROUNDS:
+        raise CampaignError("primary results require exactly five measured rounds")
     result = empty_target_result(spec, raw_dir)
     result["source"] = source_record
     result.update(
@@ -2490,6 +2562,7 @@ def run_target(
             "implementation_manifest_path": str(implementation.manifest_path),
             "implementation_file_count": implementation.file_count,
             "implementation_size_bytes": implementation.size_bytes,
+            "measured_rounds": measured_rounds,
         }
     )
     output_path = raw_dir / "results" / f"{spec.id}.json"
@@ -2555,11 +2628,14 @@ def run_target(
                 result["status"] = "preflight_passed"
                 if diagnostic_current_worktree:
                     mark_diagnostic_current_worktree(
-                        result, implementation, required_cpus=required_cpus
+                        result,
+                        implementation,
+                        required_cpus=required_cpus,
+                        measured_rounds=measured_rounds,
                     )
                 write_json(output_path, result)
                 return result
-            for round_index in range(1, ROUNDS + 1):
+            for round_index in range(1, measured_rounds + 1):
                 rotation = (round_index - 1) % len(VARIANTS)
                 variant_order = VARIANTS[rotation:] + VARIANTS[:rotation]
                 for harness in spec.harnesses:
@@ -2577,14 +2653,16 @@ def run_target(
                         harness_results[harness.id]["measurements"].append(measurement)
         for harness_result in result["harnesses"]:
             equivalent, ratio = compiler_route_equivalence(
-                harness_result["measurements"]
+                harness_result["measurements"], measured_rounds=measured_rounds
             )
             harness_result["gates"]["compiler_route_equivalent"] = equivalent
             harness_result["compiler_route_median_ratio"] = ratio
         verify_implementation_snapshot(implementation)
         result["implementation_recomputed_sha256"] = implementation.sha256
         result["implementation_verification_passed"] = True
-        result["status"] = classify_complete_result(result)
+        result["status"] = classify_complete_result(
+            result, measured_rounds=measured_rounds
+        )
     except (
         CampaignError,
         matrix.MatrixError,
@@ -2595,11 +2673,21 @@ def run_target(
             harness.get("measurements") for harness in result["harnesses"]
         )
         mark_target_ineligible(
-            result, str(error), retain_measurements=retain_measurements
+            result,
+            str(error),
+            retain_measurements=retain_measurements,
+            correctness_harness_id=(
+                error.harness_id
+                if isinstance(error, HarnessCorrectnessError)
+                else None
+            ),
         )
     if diagnostic_current_worktree:
         mark_diagnostic_current_worktree(
-            result, implementation, required_cpus=required_cpus
+            result,
+            implementation,
+            required_cpus=required_cpus,
+            measured_rounds=measured_rounds,
         )
     write_json(output_path, result)
     if primary_publication_allowed(
@@ -2643,6 +2731,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--build-timeout", type=int, default=3600)
     parser.add_argument("--run-timeout", type=int, default=900)
     parser.add_argument(
+        "--rounds",
+        type=int,
+        default=ROUNDS,
+        help="paired rounds: five primary; three or five working-tree diagnostic",
+    )
+    parser.add_argument(
         "--required-cpus",
         help="fail unless the campaign process has exactly this CPU affinity",
     )
@@ -2668,6 +2762,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         )
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if args.current_working_tree:
+        if args.rounds not in {DIAGNOSTIC_ROUNDS, ROUNDS}:
+            parser.error("working-tree diagnostics require three or five rounds")
+    elif args.rounds != ROUNDS:
+        parser.error("the primary campaign requires exactly five rounds")
     return args
 
 
@@ -2726,6 +2825,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 measure_only=args.measure_only,
                 diagnostic_current_worktree=args.current_working_tree,
                 required_cpus=args.required_cpus,
+                measured_rounds=args.rounds,
             )
         )
     summary = {
@@ -2734,6 +2834,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "implementation_revision": implementation.revision,
         "implementation_sha256": implementation.sha256,
         "implementation_manifest_path": str(implementation.manifest_path),
+        "measured_rounds": args.rounds,
         "targets": [
             {
                 "target_id": result["target_id"],
@@ -2752,6 +2853,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "campaign_classification": "diagnostic_current_worktree",
                 "primary_eligible": False,
+                "core_eligible": False,
                 "implementation_source_kind": "working_tree",
                 "repository_head": manifest["repository_head"],
                 "repository_status": manifest["repository_status"],

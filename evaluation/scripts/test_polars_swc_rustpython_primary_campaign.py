@@ -138,6 +138,8 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 "--phase",
                 "build",
                 "--current-working-tree",
+                "--rounds",
+                "3",
                 "--cpu-list",
                 "96-99",
                 "--numa-node",
@@ -145,6 +147,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             ]
         )
         self.assertIsNone(diagnostic.allocator_revision)
+        self.assertEqual(3, diagnostic.rounds)
         self.assertEqual("96-99", diagnostic.cpu_list)
         self.assertFalse(
             campaign.primary_publication_allowed(
@@ -154,6 +157,18 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                     "primary_eligible": False,
                 },
                 current_working_tree=True,
+            )
+        )
+        self.assertFalse(
+            campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 3},
+                current_working_tree=False,
+            )
+        )
+        self.assertTrue(
+            campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 5},
+                current_working_tree=False,
             )
         )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -166,6 +181,12 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             campaign.parse_args(["--cpu-list", "96-99"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            campaign.parse_args(["--targets", "swc", "--rounds", "3"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            campaign.parse_args(
+                ["--targets", "swc", "--current-working-tree", "--rounds", "4"]
+            )
 
     def test_specs_match_current_suite_pins_and_harness_order(self) -> None:
         campaign.validate_specs_against_suite()
@@ -382,8 +403,11 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             },
             cpu_list="96-99",
             numa_node="3",
+            measured_rounds=3,
         )
+        self.assertIs(record["primary_eligible"], False)
         self.assertIs(record["core_eligible"], False)
+        self.assertEqual(3, record["measured_rounds"])
 
     def test_warmup_evidence_is_variant_keyed_and_digest_bound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

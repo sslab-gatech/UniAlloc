@@ -165,6 +165,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             ]
         )
         self.assertEqual(IMPLEMENTATION_REVISION, args.implementation_revision)
+        self.assertEqual(5, args.rounds)
 
     def test_primary_implementation_requires_preregistered_f5_pin(self) -> None:
         self.runner.validate_primary_implementation(
@@ -184,6 +185,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
         legacy = self.runner.parse_args(["--targets", "collections"])
         self.assertTrue(legacy.diagnostic_current_worktree)
         self.assertIsNone(legacy.implementation_revision)
+        self.assertEqual(5, legacy.rounds)
 
         with (
             mock.patch.object(
@@ -252,6 +254,8 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 "--targets",
                 "collections",
                 "--current-working-tree",
+                "--rounds",
+                "3",
                 "--cpu-list",
                 "96-99",
                 "--numa-node",
@@ -259,8 +263,29 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             ]
         )
         self.assertTrue(diagnostic.diagnostic_current_worktree)
+        self.assertEqual(3, diagnostic.rounds)
         self.assertEqual("96-99", diagnostic.cpu_list)
         self.assertEqual(1, diagnostic.numa_node)
+        metadata = self.runner.diagnostic_result_metadata(
+            {
+                "source_kind": "working_tree",
+                "primary_eligible": False,
+                "repository_head": "a" * 40,
+                "repository_status": " M unialloc/src/lib.rs",
+                "repository_status_sha256": "b" * 64,
+                "implementation_revision": "a" * 40,
+                "unialloc_implementation_sha256": "c" * 64,
+                "campaign_snapshot_sha256": "d" * 64,
+                "campaign_snapshot_file_count": 5,
+                "campaign_snapshot_size_bytes": 1234,
+            },
+            cpu_list="96-99",
+            numa_node=1,
+            measured_rounds=3,
+        )
+        self.assertIs(metadata["primary_eligible"], False)
+        self.assertIs(metadata["core_eligible"], False)
+        self.assertEqual(3, metadata["measured_rounds"])
         diagnostic_path = self.runner.target_result_path(
             Path("/tmp/raw"),
             "collections",
@@ -283,10 +308,74 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 [
                     "--implementation-revision",
                     IMPLEMENTATION_REVISION,
+                    "--rounds",
+                    "3",
+                ]
+            )
+        with self.assertRaises(SystemExit):
+            self.runner.parse_args(
+                ["--current-working-tree", "--rounds", "4"]
+            )
+        with self.assertRaises(SystemExit):
+            self.runner.parse_args(
+                [
+                    "--implementation-revision",
+                    IMPLEMENTATION_REVISION,
                     "--cpu-list",
                     "96-99",
                 ]
             )
+
+    def test_diagnostic_result_accepts_three_complete_paired_rounds(self) -> None:
+        spec = self.runner.TARGETS["oxipng"]
+        measurements = {
+            harness.id: [
+                {
+                    "round": round_number,
+                    "variant": variant,
+                    "performance": (
+                        float(round_number)
+                        if variant == "typed_plain"
+                        else 1.0
+                    ),
+                    "peak_rss_mib": 2.0,
+                }
+                for round_number in range(1, 4)
+                for variant in self.runner.VARIANTS
+            ]
+            for harness in spec.harnesses
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_root = Path(temporary)
+            result = self.runner.build_target_result(
+                spec,
+                implementation_revision=IMPLEMENTATION_REVISION,
+                implementation_sha256=IMPLEMENTATION_SHA256,
+                warmup_evidence=warmup_evidence(
+                    self.runner, spec, raw_root / "warmups"
+                ),
+                measurements=measurements,
+                build_gates={
+                    "build_success": True,
+                    "allocator_activation": True,
+                    "actual_mir_provenance": True,
+                    "stats_disabled": True,
+                    "source_audit_retained": True,
+                },
+                raw_root=raw_root,
+                source_audit_path=raw_root / "source-audit.json",
+                build_records={variant: {} for variant in self.runner.VARIANTS},
+                raw_records={harness.id: [] for harness in spec.harnesses},
+                measured_rounds=3,
+            )
+        self.assertEqual(3, result["measured_rounds"])
+        self.assertEqual(9, len(result["harnesses"][0]["measurements"]))
+        self.assertEqual(
+            2.0,
+            result["harnesses"][0]["evidence"][
+                "compiler_route_median_cost_ratio"
+            ],
+        )
 
     def test_target_result_keeps_false_gates_and_all_raw_evidence(self) -> None:
         spec = self.runner.TARGETS["collections"]
@@ -423,6 +512,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             return {
                 "schema_version": 1,
                 "target_id": target_id,
+                "measured_rounds": 5,
                 "implementation_revision": IMPLEMENTATION_REVISION,
                 "implementation_sha256": IMPLEMENTATION_SHA256,
                 "harnesses": [
@@ -481,6 +571,16 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             )
             first.write_text(json.dumps(diagnostic), encoding="utf-8")
             with self.assertRaisesRegex(self.runner.CampaignError, "diagnostic"):
+                self.runner.publish_target_results(
+                    (first, second), destination=destination
+                )
+
+            three_round = record(
+                "collections", eligible=True, evidence_root=root / "warmups"
+            )
+            three_round["measured_rounds"] = 3
+            first.write_text(json.dumps(three_round), encoding="utf-8")
+            with self.assertRaisesRegex(self.runner.CampaignError, "five measured"):
                 self.runner.publish_target_results(
                     (first, second), destination=destination
                 )

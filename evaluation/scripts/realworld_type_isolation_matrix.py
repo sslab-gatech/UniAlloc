@@ -120,7 +120,7 @@ if selected:
 
 os.execv(str(driver), [str(driver), *arguments])
 '''
-VARIANTS = (
+BASE_VARIANTS = (
     "native",
     "system",
     "jemalloc",
@@ -131,8 +131,43 @@ VARIANTS = (
     "typeiso_perf",
     "typeiso_coverage",
 )
-DEFAULT_VARIANTS = tuple(variant for variant in VARIANTS if variant != "tcmalloc")
+UNIALLOC_FEATURE_VARIANTS = {
+    "unialloc_no_optional": (),
+    "unialloc_rseq": ("rseq",),
+    "unialloc_pthread_dtor": ("pthread_dtor",),
+    "unialloc_hugepage": ("hugepage",),
+    "unialloc_separate_sc": ("separate_sc_backend",),
+    "unialloc_metadata_segregation": ("metadata_segregation",),
+    "unialloc_type_isolation": ("type_isolation",),
+    "unialloc_pac": ("pac",),
+}
+VARIANTS = (
+    "native",
+    "system",
+    "jemalloc",
+    "mimalloc",
+    "mimalloc_no_thp",
+    "tcmalloc",
+    "unialloc",
+    *UNIALLOC_FEATURE_VARIANTS,
+    "typed_plain",
+    "typeiso_perf",
+    "typeiso_coverage",
+)
+# Feature-isolation and runtime-policy variants are opt-in so existing invocations
+# retain the same default matrix and cost.
+DEFAULT_VARIANTS = tuple(
+    variant for variant in BASE_VARIANTS if variant != "tcmalloc"
+)
 TYPEISO_VARIANTS = frozenset(("typed_plain", "typeiso_perf", "typeiso_coverage"))
+MIMALLOC_VARIANTS = frozenset(("mimalloc", "mimalloc_no_thp"))
+UNIALLOC_VARIANTS = frozenset(
+    ("unialloc", *UNIALLOC_FEATURE_VARIANTS, *TYPEISO_VARIANTS)
+)
+MIMALLOC_COMMON_RUNTIME_OVERRIDES = {
+    "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
+    "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
+}
 
 
 class MatrixError(RuntimeError):
@@ -283,6 +318,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="repeat the fd search path within one process",
     )
     parser.add_argument(
+        "--oxipng-threads",
+        type=int,
+        default=1,
+        help="worker threads used by the Oxipng workload",
+    )
+    parser.add_argument(
         "--tcmalloc-library",
         type=pathlib.Path,
         help="absolute gperftools libtcmalloc shared library used with LD_PRELOAD",
@@ -321,6 +362,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--ripgrep-path-repetitions must be positive")
     if args.fd_path_repetitions < 1:
         parser.error("--fd-path-repetitions must be positive")
+    if args.oxipng_threads < 1:
+        parser.error("--oxipng-threads must be positive")
     if "tcmalloc" in args.variants and args.tcmalloc_library is None:
         parser.error("--tcmalloc-library is required for the tcmalloc variant")
     return args
@@ -491,12 +534,23 @@ def copy_checkout(source: pathlib.Path, destination: pathlib.Path) -> None:
     )
 
 
-def cargo_path_dependency(path: pathlib.Path, features: Sequence[str] = ()) -> str:
+def cargo_path_dependency(
+    path: pathlib.Path,
+    features: Sequence[str] = (),
+    *,
+    default_features_enabled: bool = True,
+) -> str:
     quoted_path = str(path.resolve()).replace("\\", "\\\\").replace('"', '\\"')
-    feature_text = ""
+    options = [f'path = "{quoted_path}"']
+    if not default_features_enabled:
+        options.append("default-features = false")
     if features:
-        feature_text = ", features = [" + ", ".join(json.dumps(value) for value in features) + "]"
-    return f'unialloc = {{ path = "{quoted_path}"{feature_text} }}'
+        options.append(
+            "features = ["
+            + ", ".join(json.dumps(value) for value in features)
+            + "]"
+        )
+    return "unialloc = { " + ", ".join(options) + " }"
 
 
 def add_dependency(manifest: pathlib.Path, dependency: str) -> None:
@@ -623,9 +677,9 @@ def add_spin_patch(manifest: pathlib.Path, spin_path: pathlib.Path) -> None:
 def allocator_source(variant: str) -> str:
     if variant == "jemalloc":
         body = "static ALLOCATOR: jemallocator::Jemalloc = jemallocator::Jemalloc;"
-    elif variant == "mimalloc":
+    elif variant in MIMALLOC_VARIANTS:
         body = "static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;"
-    elif variant in {"unialloc", "typed_plain", "typeiso_perf"}:
+    elif variant in UNIALLOC_VARIANTS - {"typeiso_coverage"}:
         body = "static ALLOCATOR: unialloc::UniAlloc = unialloc::UniAlloc;"
     elif variant == "typeiso_coverage":
         return f'''\n\n{INSTRUMENTATION_MARKER}
@@ -708,6 +762,32 @@ def runtime_environment(
     return env
 
 
+def allocator_runtime_environment_overrides(variant: str) -> dict[str, str]:
+    if variant not in MIMALLOC_VARIANTS:
+        return {}
+    return {
+        **MIMALLOC_COMMON_RUNTIME_OVERRIDES,
+        "MIMALLOC_ALLOW_THP": "0" if variant == "mimalloc_no_thp" else "1",
+    }
+
+
+def allocator_runtime_environment(
+    base: dict[str, str], variant: str
+) -> dict[str, str]:
+    env = dict(base)
+    env.update(allocator_runtime_environment_overrides(variant))
+    return env
+
+
+def allocator_thp_mode(variant: str) -> str | None:
+    if variant == "mimalloc":
+        return "mimalloc-thp-explicitly-allowed"
+    if variant == "mimalloc_no_thp":
+        # mimalloc v3 maps MIMALLOC_ALLOW_THP=0 to Linux PR_SET_THP_DISABLE.
+        return "process-wide-pr-set-thp-disable"
+    return None
+
+
 def measurement_command_prefix(
     cpu_list: str | None, numa_node: int | None
 ) -> list[str]:
@@ -766,6 +846,12 @@ def tcmalloc_runtime_evidence(library: pathlib.Path) -> dict[str, Any]:
 def allocator_runtime_prefix(
     variant: str, tcmalloc_runtime: dict[str, Any] | None
 ) -> list[str]:
+    runtime_overrides = allocator_runtime_environment_overrides(variant)
+    if runtime_overrides:
+        return [
+            "env",
+            *(f"{name}={value}" for name, value in runtime_overrides.items()),
+        ]
     if variant != "tcmalloc":
         return []
     if not isinstance(tcmalloc_runtime, dict):
@@ -783,6 +869,24 @@ def allocator_runtime_prefix(
         "MALLOCSTATS",
         f"LD_PRELOAD={library}",
     ]
+
+
+def mimalloc_no_thp_build_record(
+    mimalloc_build: dict[str, Any]
+) -> dict[str, Any]:
+    if mimalloc_build.get("variant") != "mimalloc" or not mimalloc_build.get(
+        "success"
+    ):
+        raise MatrixError("mimalloc_no_thp requires a successful mimalloc build")
+    return {
+        **mimalloc_build,
+        "variant": "mimalloc_no_thp",
+        "base_build_variant": "mimalloc",
+        "runtime_environment_overrides": allocator_runtime_environment_overrides(
+            "mimalloc_no_thp"
+        ),
+        "thp_mode": allocator_thp_mode("mimalloc_no_thp"),
+    }
 
 
 def tcmalloc_build_record(
@@ -942,6 +1046,10 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
     semantic_rewrites = 0
     scope_rewrites = 0
     drop_rewrites = 0
+    semantic_ownership_rewrites = 0
+    semantic_deallocation_like_rewrites = 0
+    direct_allocator_rewrites = 0
+    direct_layout_allocator_rewrites = 0
     unresolved_files = 0
     claim_grade_files = 0
     crate_names: set[str] = set()
@@ -961,10 +1069,18 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
                 if isinstance(value, str) and value.startswith("--crate-name="):
                     crate_names.add(value.split("=", 1)[1].replace("-", "_"))
                     break
+        direct_allocator = int(summary.get("rewrite_applied_count", compiler.get("rewrite_applied_count", 0)) or 0)
+        direct_layout = int(summary.get("direct_layout_allocator_rewrite_applied_count", compiler.get("direct_layout_allocator_rewrite_applied_count", 0)) or 0)
         scope = int(summary.get("semantic_scope_rewrite_applied_count", compiler.get("semantic_scope_rewrite_applied_count", 0)) or 0)
         drops = int(summary.get("semantic_scope_drop_rewrite_applied_count", compiler.get("semantic_scope_drop_rewrite_applied_count", 0)) or 0)
+        ownership = int(summary.get("semantic_ownership_transfer_rewrite_applied_count", compiler.get("semantic_ownership_transfer_rewrite_applied_count", 0)) or 0)
+        deallocation_like = int(summary.get("semantic_scope_deallocation_like_rewrite_applied_count", compiler.get("semantic_scope_deallocation_like_rewrite_applied_count", 0)) or 0)
+        direct_allocator_rewrites += direct_allocator
+        direct_layout_allocator_rewrites += direct_layout
         scope_rewrites += scope
         drop_rewrites += drops
+        semantic_ownership_rewrites += ownership
+        semantic_deallocation_like_rewrites += deallocation_like
         semantic_rewrites += scope + drops
         resolution = str(summary.get("semantic_scope_replacement_resolution_status", compiler.get("semantic_scope_replacement_resolution_status", "")))
         if "not_resolved" in resolution:
@@ -973,9 +1089,19 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
             claim_grade_files += 1
     return {
         "audit_file_count": len(files),
+        "direct_allocator_rewrites_applied": direct_allocator_rewrites,
+        "direct_layout_allocator_rewrites_applied": direct_layout_allocator_rewrites,
         "semantic_scope_rewrites_applied": scope_rewrites,
         "semantic_drop_rewrites_applied": drop_rewrites,
+        "semantic_ownership_transfer_rewrites_applied": semantic_ownership_rewrites,
+        "semantic_deallocation_like_rewrites_applied": semantic_deallocation_like_rewrites,
         "semantic_rewrites_applied": semantic_rewrites,
+        "total_compiler_rewrites_applied": (
+            direct_allocator_rewrites
+            + scope_rewrites
+            + drop_rewrites
+            + semantic_ownership_rewrites
+        ),
         "unresolved_file_count": unresolved_files,
         "claim_grade_file_count": claim_grade_files,
         "crate_names": sorted(crate_names),
@@ -985,13 +1111,11 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
     }
 
 
-def validate_typeiso_audits(
+def validate_typeiso_audit_presence(
     audit: dict[str, Any], target_crates: Sequence[str] = ()
 ) -> None:
     if int(audit.get("audit_file_count", 0)) <= 0:
         raise MatrixError("Type Isolation build emitted no compiler audit files")
-    if int(audit.get("semantic_rewrites_applied", 0)) <= 0:
-        raise MatrixError("Type Isolation build applied zero semantic rewrites")
     expected = {name.replace("-", "_") for name in target_crates}
     observed = {
         str(name).replace("-", "_") for name in audit.get("crate_names", [])
@@ -1002,6 +1126,14 @@ def validate_typeiso_audits(
             "Type Isolation build emitted no audit for selected crates: "
             + ",".join(missing)
         )
+
+
+def validate_typeiso_audits(
+    audit: dict[str, Any], target_crates: Sequence[str] = ()
+) -> None:
+    validate_typeiso_audit_presence(audit, target_crates)
+    if int(audit.get("semantic_rewrites_applied", 0)) <= 0:
+        raise MatrixError("Type Isolation build applied zero semantic rewrites")
 
 
 def validate_typeiso_coverage(audit: dict[str, Any], stats: dict[str, Any] | None) -> None:
@@ -1094,18 +1226,52 @@ def rustc_sysroot(toolchain: str) -> pathlib.Path:
     return pathlib.Path(result["stdout"].decode().strip()).resolve()
 
 
+def unialloc_configuration_for_variant(
+    variant: str,
+) -> tuple[tuple[str, ...], bool]:
+    if variant == "unialloc":
+        return (), True
+    if variant in UNIALLOC_FEATURE_VARIANTS:
+        return UNIALLOC_FEATURE_VARIANTS[variant], False
+    if variant in {"typed_plain", "typeiso_perf"}:
+        return ("type_isolation",), True
+    if variant == "typeiso_coverage":
+        return ("stats", "type_isolation"), True
+    raise MatrixError(f"UniAlloc configuration requested for {variant}")
+
+
+def unialloc_build_evidence(variant: str) -> dict[str, Any]:
+    if variant not in UNIALLOC_VARIANTS:
+        return {
+            "unialloc_features": None,
+            "default_features_enabled": None,
+        }
+    features, default_features_enabled = unialloc_configuration_for_variant(
+        variant
+    )
+    return {
+        "unialloc_features": list(features),
+        "default_features_enabled": default_features_enabled,
+    }
+
+
 def dependency_for_variant(variant: str) -> tuple[str, tuple[str, ...]]:
     if variant == "jemalloc":
         return 'jemallocator = "=0.5.4"', ()
-    if variant == "mimalloc":
+    if variant in MIMALLOC_VARIANTS:
         return 'mimalloc = { version = "=0.1.25", default-features = false }', ()
-    if variant == "unialloc":
-        return cargo_path_dependency(ROOT / "unialloc"), ()
-    if variant in {"typed_plain", "typeiso_perf"}:
-        return cargo_path_dependency(ROOT / "unialloc", ("type_isolation",)), ("type_isolation",)
-    if variant == "typeiso_coverage":
-        features = ("stats", "type_isolation")
-        return cargo_path_dependency(ROOT / "unialloc", features), features
+    if variant in UNIALLOC_VARIANTS:
+        features, default_features_enabled = unialloc_configuration_for_variant(
+            variant
+        )
+        return (
+            cargo_path_dependency(
+                ROOT / "unialloc",
+                features,
+                default_features_enabled=default_features_enabled,
+            ),
+            features,
+        )
     raise MatrixError(f"no dependency is required for variant {variant}")
 
 
@@ -1223,7 +1389,7 @@ def uses_original_jemalloc(spec: AppSpec, variant: str) -> bool:
 
 
 def uses_unialloc(variant: str) -> bool:
-    return variant == "unialloc" or variant in TYPEISO_VARIANTS
+    return variant in UNIALLOC_VARIANTS
 
 
 def reset_target_dir_before_rebuild(target_dir: pathlib.Path, variant: str) -> None:
@@ -1345,7 +1511,7 @@ def build_variant(
         else:
             dependency, _features = dependency_for_variant(variant)
             add_dependency(root_manifest, dependency)
-            if variant == "mimalloc":
+            if variant in MIMALLOC_VARIANTS:
                 add_dependency(root_manifest, MIMALLOC_SYS_DEPENDENCY)
             patched_manifests = [root_manifest]
             if uses_unialloc(variant):
@@ -1409,6 +1575,11 @@ def build_variant(
         "compiler_wrapper_sha256": compiler_wrapper_sha256,
         "force_load_wrapper_sha256": force_load_wrapper_sha256,
         "force_load": force_load,
+        **unialloc_build_evidence(variant),
+        "runtime_environment_overrides": allocator_runtime_environment_overrides(
+            variant
+        ),
+        "thp_mode": allocator_thp_mode(variant),
         "original_allocator": (
             "system"
             if variant == "system"
@@ -1465,7 +1636,7 @@ def build_variant(
                 "binary_size_bytes": output_binary.stat().st_size,
             }
         )
-        if variant == "mimalloc":
+        if variant in MIMALLOC_VARIANTS:
             record["allocator_provenance"] = mimalloc_build_provenance(
                 worktree / "Cargo.lock", target_dir
             )
@@ -1551,9 +1722,12 @@ def workload_command(
     run_dir: pathlib.Path,
     quick: bool,
     path_repetitions: int = 1,
+    oxipng_threads: int = 1,
 ) -> tuple[list[str], pathlib.Path, pathlib.Path | None]:
     if path_repetitions < 1:
         raise MatrixError("path repetitions must be positive")
+    if oxipng_threads < 1:
+        raise MatrixError("Oxipng thread count must be positive")
     if spec.name == "ripgrep":
         return (
             [
@@ -1598,7 +1772,7 @@ def workload_command(
             "--opt",
             "2",
             "--threads",
-            "1",
+            str(oxipng_threads),
             "--force",
             "--quiet",
             "--out",
@@ -1774,6 +1948,10 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
                 "work_unit": rows[0]["work_unit"],
                 "output_sha256": rows[0]["output_sha256"],
                 "stats": rows[-1].get("stats"),
+                "runtime_environment_overrides": rows[0].get(
+                    "runtime_environment_overrides", {}
+                ),
+                "thp_mode": rows[0].get("thp_mode"),
                 "performance_eligible": variant != "typeiso_coverage",
             }
         )
@@ -1856,7 +2034,8 @@ def workload_evidence(
     input_name = "issue-141.png" if args.quick else "issue-167.png"
     input_path = source_checkout / "tests" / "files" / input_name
     return {
-        "description": "single-thread lossless PNG optimization",
+        "description": "lossless PNG optimization",
+        "threads": args.oxipng_threads,
         "input": str(input_path.resolve()),
         "input_sha256": sha256_file(input_path),
         "work_amount": input_path.stat().st_size,
@@ -1921,6 +2100,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             "command_prefix": affinity_prefix,
         },
         "tcmalloc_runtime": tcmalloc_runtime,
+        "allocator_runtime_configurations": {
+            variant: {
+                "environment_overrides": allocator_runtime_environment_overrides(
+                    variant
+                ),
+                "thp_mode": allocator_thp_mode(variant),
+            }
+            for variant in args.variants
+        },
         "glibc_rseq_mode": (
             "disabled_for_self_registration_testing"
             if args.disable_glibc_rseq
@@ -1955,7 +2143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     base_builds: dict[tuple[str, str], dict[str, Any]] = {}
     for app in args.apps:
         for variant in args.variants:
-            base_variant = "system" if variant == "tcmalloc" else variant
+            base_variant = {
+                "tcmalloc": "system",
+                "mimalloc_no_thp": "mimalloc",
+            }.get(variant, variant)
             base_key = (app, base_variant)
             if base_key not in base_builds:
                 base_builds[base_key] = build_variant(
@@ -1981,6 +2172,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 persist_result(
                     raw_dir / "binaries" / app / "tcmalloc" / "build.json", build
+                )
+            elif variant == "mimalloc_no_thp":
+                build = mimalloc_no_thp_build_record(build)
+                persist_result(
+                    raw_dir
+                    / "binaries"
+                    / app
+                    / "mimalloc_no_thp"
+                    / "build.json",
+                    build,
                 )
             builds[(app, variant)] = build
             result["builds"].append(build)
@@ -2017,6 +2218,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     run_dir=run_dir,
                     quick=args.quick,
                     path_repetitions=path_repetitions_for_app(spec, args),
+                    oxipng_threads=args.oxipng_threads,
                 )
                 command_prefix = [
                     *affinity_prefix,
@@ -2025,7 +2227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 measured = run_measured(
                     command,
                     cwd=cwd,
-                    env=runtime_env,
+                    env=allocator_runtime_environment(runtime_env, variant),
                     time_binary=args.time_binary,
                     rss_path=run_dir / "peak-rss-kib.txt",
                     timeout=args.run_timeout,
@@ -2058,6 +2260,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "measurement_index": measured_index,
                     "output_sha256": output_sha,
                     "stats": stats,
+                    "runtime_environment_overrides": (
+                        allocator_runtime_environment_overrides(variant)
+                    ),
+                    "thp_mode": allocator_thp_mode(variant),
                     "performance_eligible": variant != "typeiso_coverage",
                     "work_amount": result["workloads"][app]["work_amount"],
                     "work_unit": result["workloads"][app]["work_unit"],
