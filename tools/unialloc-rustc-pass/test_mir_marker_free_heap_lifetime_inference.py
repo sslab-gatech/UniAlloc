@@ -25,6 +25,19 @@ BRANCH_UNKNOWN_BASIS = "automatic_heap_nonlinear_control_flow_unknown"
 MISSING_UNKNOWN_BASIS = "automatic_heap_missing_terminal_unknown"
 REFCOUNTED_UNKNOWN_BASIS = "automatic_heap_refcounted_owner_unknown"
 CLEANUP_UNKNOWN_BASIS = "automatic_heap_cleanup_or_unwind_unknown"
+RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS = (
+    "automatic_rust_lifetime_prior_all_path_local_release_short"
+)
+RUST_PRIOR_RECEIVER_SHORT_BASIS = (
+    "automatic_rust_lifetime_prior_receiver_owned_short"
+)
+RUST_PRIOR_RETURN_LONG_BASIS = "automatic_rust_lifetime_prior_return_long"
+RUST_PRIOR_CLEANUP_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_cleanup_or_unwind_unknown"
+)
+RUST_PRIOR_OWNER_LIVE_CALL_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_owner_live_call_unknown"
+)
 
 
 class MirMarkerFreeHeapLifetimeInferenceTest(unittest.TestCase):
@@ -268,6 +281,13 @@ fn box_may_unwind_then_drop(flag: bool) {
 }
 
 #[inline(never)]
+fn box_drop_then_may_unwind(flag: bool) {
+    let owner = Box::new([12_u8; PAYLOAD_BYTES]);
+    drop(owner);
+    may_unwind(flag);
+}
+
+#[inline(never)]
 fn box_may_unwind_then_forget(flag: bool) {
     let owner = Box::new([8_u8; PAYLOAD_BYTES]);
     may_unwind(flag);
@@ -289,6 +309,25 @@ fn return_box() -> Box<[u8; PAYLOAD_BYTES]> {
     owner
 }
 
+struct Holder(Box<[u8; PAYLOAD_BYTES]>);
+
+#[inline(never)]
+fn return_owner_through_aggregate() -> Holder {
+    let owner = Box::new([11_u8; PAYLOAD_BYTES]);
+    let holder = Holder(owner);
+    holder
+}
+
+#[inline(never)]
+fn return_nonowner_projection_from_pair() -> String {
+    let pair = (
+        Box::new([13_u8; PAYLOAD_BYTES]),
+        String::from("hello"),
+    );
+    let result = pair.1;
+    result
+}
+
 #[inline(never)]
 fn store_box() {
     let owner = Box::new([10_u8; PAYLOAD_BYTES]);
@@ -303,6 +342,24 @@ fn receiver_owned_reserve() {
     std::hint::black_box(owner.capacity());
 }
 
+#[inline(never)]
+fn receiver_owned_reserve_then_release() {
+    let mut owner = Vec::<u8>::new();
+    owner.reserve(256);
+    drop(owner);
+}
+
+#[inline(never)]
+fn receiver_conditional(mut owner: Vec<u8>, flag: bool) -> Option<Vec<u8>> {
+    owner.reserve(384);
+    if flag {
+        Some(owner)
+    } else {
+        drop(owner);
+        None
+    }
+}
+
 fn main() {
     box_local_drop();
     box_move_chain_drop();
@@ -312,15 +369,47 @@ fn main() {
     box_branch_abstains(true);
     box_long_work_then_drop();
     box_may_unwind_then_drop(false);
+    box_drop_then_may_unwind(false);
     box_may_unwind_then_forget(false);
     box_in_loop(2);
     drop(return_box());
+    drop(return_owner_through_aggregate());
+    drop(return_nonowner_projection_from_pair());
     store_box();
     receiver_owned_reserve();
+    receiver_owned_reserve_then_release();
+    drop(receiver_conditional(Vec::new(), true));
     let observed = unialloc::observed_hints();
     println!("observed_hints={observed}");
     assert_eq!(observed & 0b0011, 0b0010);
     assert_eq!(observed & 0b1100, 0);
+}
+""",
+            encoding="utf-8",
+        )
+
+        cls.prior_transport_fixture = cls.tmp / "rust_lifetime_prior_transport.rs"
+        cls.prior_transport_fixture.write_text(
+            """extern crate unialloc;
+
+#[inline(never)]
+fn all_path_local_release() {
+    let owner = Box::new([2_u8; 4096]);
+    drop(owner);
+}
+
+#[inline(never)]
+fn returned_owner() -> Box<[u8; 4096]> {
+    let owner = Box::new([1_u8; 4096]);
+    owner
+}
+
+fn main() {
+    all_path_local_release();
+    drop(returned_owner());
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed & 0b1100, 0b1100);
 }
 """,
             encoding="utf-8",
@@ -336,10 +425,14 @@ fn main() {
         *,
         automatic: bool = False,
         automatic_from_env: bool = False,
+        rust_prior: bool = False,
+        rust_prior_from_env: bool = False,
         actual_rewrite: bool = False,
         global_hint: int | None = None,
+        lifetime_profile: Path | None = None,
         fixture: Path | None = None,
         release_optimized: bool = False,
+        panic_abort: bool = False,
     ) -> dict[str, object]:
         audit = self.tmp / f"{label}.json"
         command = [
@@ -350,15 +443,21 @@ fn main() {
         ]
         if automatic and not automatic_from_env:
             command.append("--unialloc-auto-heap-lifetime-inference")
+        if rust_prior and not rust_prior_from_env:
+            command.append("--unialloc-auto-rust-lifetime-prior")
         if actual_rewrite:
             command.append("--unialloc-actual-semantic-scope-rewrite")
         if global_hint is not None:
             command.extend(["--unialloc-lifetime-hint", str(global_hint)])
+        if lifetime_profile is not None:
+            command.extend(["--unialloc-lifetime-profile", str(lifetime_profile)])
         command.extend(["--", "--sysroot", str(self.sysroot)])
         if release_optimized:
             command.extend(["-C", "opt-level=3"])
         else:
             command.append("-Zmir-opt-level=0")
+        if panic_abort:
+            command.extend(["-C", "panic=abort"])
         command.extend(
             [
                 "--edition=2021",
@@ -371,8 +470,11 @@ fn main() {
         )
         env = os.environ.copy()
         env.pop("UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE", None)
+        env.pop("UNIALLOC_AUTO_RUST_LIFETIME_PRIOR", None)
         if automatic and automatic_from_env:
             env["UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE"] = "1"
+        if rust_prior and rust_prior_from_env:
+            env["UNIALLOC_AUTO_RUST_LIFETIME_PRIOR"] = "1"
         library_path = str(self.sysroot / "lib")
         env["LD_LIBRARY_PATH"] = library_path
         env["DYLD_LIBRARY_PATH"] = library_path
@@ -416,13 +518,27 @@ fn main() {
         self.assertEqual(row["lifetime_hint_basis"], basis, row)
         return row
 
+    def receiver_allocation_row(
+        self, audit: dict[str, object], function: str
+    ) -> dict[str, object]:
+        rows = [
+            row
+            for row in audit.get("rewrite_candidates", [])  # type: ignore[union-attr]
+            if isinstance(row, dict)
+            and str(row.get("mir_function") or "").endswith(function)
+            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and "reserve" in str(row.get("callee") or "")
+        ]
+        self.assertEqual(len(rows), 1, rows)
+        return rows[0]
+
     def test_exact_drop_move_forget_and_leak_proofs(self) -> None:
         audit = self.run_pass("heap-inference", automatic=True)
         local = self.assert_hint(
-            audit, "exact_local_drop", 0, 0, CLEANUP_UNKNOWN_BASIS
+            audit, "exact_local_drop", 0, 0, LOCAL_DROP_BASIS
         )
         moved = self.assert_hint(
-            audit, "exact_move_chain_drop", 0, 0, CLEANUP_UNKNOWN_BASIS
+            audit, "exact_move_chain_drop", 0, 0, MOVE_DROP_BASIS
         )
         self.assertTrue(local["lifetime_analysis_features"]["exact_drop_path"])
         self.assertTrue(moved["lifetime_analysis_features"]["exact_drop_path"])
@@ -463,7 +579,7 @@ fn main() {
             "heap-inference-env", automatic=True, automatic_from_env=True
         )
         self.assert_hint(
-            environment, "exact_local_drop", 0, 0, CLEANUP_UNKNOWN_BASIS
+            environment, "exact_local_drop", 0, 0, LOCAL_DROP_BASIS
         )
 
         manual = self.run_pass(
@@ -551,9 +667,9 @@ fn main() {
             self.assertEqual(
                 features["allocation_source_span"], row["source_span"]
             )
-        self.assert_hint(audit, "box_local_drop", 0, 0, CLEANUP_UNKNOWN_BASIS)
+        self.assert_hint(audit, "box_local_drop", 0, 0, LOCAL_DROP_BASIS)
         self.assert_hint(
-            audit, "box_move_chain_drop", 0, 0, CLEANUP_UNKNOWN_BASIS
+            audit, "box_move_chain_drop", 0, 0, MOVE_DROP_BASIS
         )
         self.assert_hint(audit, "box_mem_forget", 0xA102, 100, FORGET_BASIS)
         self.assert_hint(audit, "box_leak", 0xA102, 100, LEAK_BASIS)
@@ -648,6 +764,229 @@ fn main() {
             "box_may_unwind_then_forget",
         ):
             self.assert_hint(audit, function, 0, 0, CLEANUP_UNKNOWN_BASIS)
+
+    def test_rust_lifetime_prior_is_separate_opt_in_with_manual_precedence(self) -> None:
+        baseline = self.run_pass(
+            "rust-prior-disabled",
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(baseline, "box_local_drop", 0, 0, "default_unknown")
+
+        environment = self.run_pass(
+            "rust-prior-env",
+            rust_prior=True,
+            rust_prior_from_env=True,
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(
+            environment,
+            "box_local_drop",
+            1,
+            85,
+            RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS,
+        )
+        compiler_pass = environment["compiler_pass"]
+        self.assertTrue(compiler_pass["automatic_rust_lifetime_prior_enabled"])
+        self.assertFalse(compiler_pass["automatic_heap_lifetime_inference_enabled"])
+        audit_text = (self.tmp / "rust-prior-env.json").read_text(encoding="utf-8")
+        self.assertEqual(
+            1,
+            audit_text.count('"automatic_rust_lifetime_prior_enabled":'),
+            "the audit must bind the prior mode with one unambiguous JSON key",
+        )
+
+        manual = self.run_pass(
+            "rust-prior-manual",
+            rust_prior=True,
+            global_hint=2,
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(
+            manual, "box_local_drop", 2, 100, "manual_global_lifetime_hint"
+        )
+
+        seed_row = self.allocation_row(environment, "box_local_drop")
+        profile = self.tmp / "rust-prior-precedence.profile"
+        profile.write_text(
+            "\n".join(
+                [
+                    "unialloc-lifetime-profile-v2",
+                    f"{seed_row['callsite']} {seed_row['type_id']} "
+                    f"{seed_row['module_id']} long-lived 99",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        profiled = self.run_pass(
+            "rust-prior-profile",
+            rust_prior=True,
+            lifetime_profile=profile,
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(
+            profiled, "box_local_drop", 2, 99, "profile_exact_match"
+        )
+
+    def test_rust_lifetime_prior_uses_owner_live_ranges_and_carriers(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-ownership",
+            rust_prior=True,
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(
+            audit,
+            "box_local_drop",
+            1,
+            85,
+            RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS,
+        )
+        self.assert_hint(
+            audit,
+            "box_long_work_then_drop",
+            0,
+            0,
+            RUST_PRIOR_OWNER_LIVE_CALL_UNKNOWN_BASIS,
+        )
+        returned = self.assert_hint(
+            audit,
+            "return_owner_through_aggregate",
+            2,
+            70,
+            RUST_PRIOR_RETURN_LONG_BASIS,
+        )
+        self.assertTrue(returned["lifetime_analysis_features"]["return_sink"])
+        self.assertGreaterEqual(
+            returned["lifetime_analysis_features"]["owner_move_count"], 2
+        )
+        self.assertTrue(
+            returned["lifetime_analysis_features"]["classification_rule_applied"]
+        )
+
+        nonowner_projection = self.assert_hint(
+            audit,
+            "return_nonowner_projection_from_pair",
+            0,
+            0,
+            RUST_PRIOR_OWNER_LIVE_CALL_UNKNOWN_BASIS,
+        )
+        self.assertFalse(
+            nonowner_projection["lifetime_analysis_features"]["return_sink"],
+            nonowner_projection,
+        )
+        self.assertTrue(
+            nonowner_projection["lifetime_analysis_features"]["store_sink"],
+            nonowner_projection,
+        )
+        self.assertFalse(
+            nonowner_projection["lifetime_analysis_features"][
+                "classification_rule_applied"
+            ],
+            nonowner_projection,
+        )
+
+        receiver = self.receiver_allocation_row(
+            audit, "receiver_owned_reserve_then_release"
+        )
+        self.assertEqual(receiver["lifetime_hint"], 1, receiver)
+        self.assertEqual(receiver["lifetime_hint_confidence"], 85, receiver)
+        self.assertEqual(
+            receiver["lifetime_hint_basis"], RUST_PRIOR_RECEIVER_SHORT_BASIS, receiver
+        )
+
+        conditional = self.receiver_allocation_row(audit, "receiver_conditional")
+        self.assertEqual(conditional["lifetime_hint"], 0, conditional)
+        self.assertEqual(conditional["lifetime_hint_basis"], "default_unknown", conditional)
+        conditional_features = conditional["lifetime_analysis_features"]
+        self.assertTrue(conditional_features["return_sink"], conditional)
+        self.assertTrue(conditional_features["store_sink"], conditional)
+        self.assertTrue(conditional_features["conditional_drop_path"], conditional)
+
+    def test_rust_lifetime_prior_abstains_on_owner_live_cleanup_and_pressure(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-cleanup",
+            rust_prior=True,
+            fixture=self.release_box_fixture,
+            release_optimized=False,
+        )
+        for function in (
+            "box_long_work_then_drop",
+            "box_may_unwind_then_drop",
+            "box_may_unwind_then_forget",
+        ):
+            self.assert_hint(
+                audit, function, 0, 0, RUST_PRIOR_CLEANUP_UNKNOWN_BASIS
+            )
+
+        # Cleanup reached only after the owner was released cannot shorten its
+        # lifetime.  The prior must use owner liveness, rather than the mere
+        # presence of a later cleanup block, when deciding whether to abstain.
+        self.assert_hint(
+            audit,
+            "box_drop_then_may_unwind",
+            1,
+            85,
+            RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS,
+        )
+
+        receiver = self.receiver_allocation_row(audit, "receiver_owned_reserve")
+        self.assertEqual(receiver["lifetime_hint"], 0, receiver)
+        self.assertEqual(receiver["lifetime_hint_confidence"], 0, receiver)
+        self.assertEqual(
+            receiver["lifetime_hint_basis"],
+            RUST_PRIOR_CLEANUP_UNKNOWN_BASIS,
+            receiver,
+        )
+
+    def test_rust_lifetime_prior_preserves_exact_process_long_oracle(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-exact-oracle",
+            rust_prior=True,
+            fixture=self.release_box_fixture,
+            panic_abort=True,
+        )
+        self.assert_hint(audit, "box_mem_forget", 0xA102, 100, FORGET_BASIS)
+        self.assert_hint(audit, "box_leak", 0xA102, 100, LEAK_BASIS)
+
+    def test_rust_lifetime_prior_transports_advisory_hint_in_actual_rewrite(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-actual-transport",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.prior_transport_fixture,
+            panic_abort=True,
+        )
+        row = self.assert_hint(
+            audit,
+            "returned_owner",
+            2,
+            70,
+            RUST_PRIOR_RETURN_LONG_BASIS,
+        )
+        self.assertTrue(str(row["rewrite_status"]).endswith("_applied"), row)
+        short_row = self.assert_hint(
+            audit,
+            "all_path_local_release",
+            1,
+            85,
+            RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS,
+        )
+        self.assertTrue(str(short_row["rewrite_status"]).endswith("_applied"), short_row)
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-actual-transport")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=", completed.stdout)
 
 
 if __name__ == "__main__":
