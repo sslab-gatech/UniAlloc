@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
@@ -86,6 +87,52 @@ class GoogleTcmallocSupportTest(unittest.TestCase):
         self.assertNotEqual(builder.parse_bazel_version("bazel 8.4.20"), "8.4.2")
         with self.assertRaisesRegex(RuntimeError, "unrecognized Bazel"):
             builder.parse_bazel_version("bazelisk version: 8.4.2")
+
+    def test_live_build_gate_is_required_and_rejects_skip(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=(
+                "test_live_artifact_passes_full_authentication ... ok\n"
+                "test_preloaded_process_proves_runtime_identity ... ok\n"
+                "Ran 3 tests\n\nOK\n"
+            ),
+        )
+        with mock.patch.object(
+            builder.subprocess, "run", return_value=completed
+        ) as run_live:
+            output = builder.verify_live_artifact(Path("/tmp/google-tcmalloc"))
+
+        self.assertEqual(output, completed.stdout)
+        call = run_live.call_args
+        self.assertEqual(call.kwargs["env"][builder.LIVE_REQUIRE_ENV], "1")
+        self.assertEqual(
+            call.kwargs["env"][builder.LIVE_PREFIX_ENV],
+            "/tmp/google-tcmalloc",
+        )
+        self.assertTrue(call.kwargs["check"])
+
+        skipped = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="OK (skipped=1)\n"
+        )
+        with mock.patch.object(builder.subprocess, "run", return_value=skipped):
+            with self.assertRaisesRegex(RuntimeError, "reported a skip"):
+                builder.verify_live_artifact(Path("/tmp/google-tcmalloc"))
+
+        empty = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="Ran 0 tests\n\nOK\n"
+        )
+        with mock.patch.object(builder.subprocess, "run", return_value=empty):
+            with self.assertRaisesRegex(RuntimeError, "did not execute"):
+                builder.verify_live_artifact(Path("/tmp/google-tcmalloc"))
+
+    def test_preload_prefix_rejects_loader_separators(self) -> None:
+        builder.ensure_preload_safe_prefix(Path("/tmp/google-tcmalloc"))
+        for value in ("/tmp/google tcmalloc", "/tmp/google:tcmalloc"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                RuntimeError, "LD_PRELOAD separators"
+            ):
+                builder.ensure_preload_safe_prefix(Path(value))
 
     def test_dynamic_symbol_parser_rejects_undefined_local_and_substrings(self) -> None:
         table = """

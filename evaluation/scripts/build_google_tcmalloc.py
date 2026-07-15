@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import google_tcmalloc_support as support
@@ -31,6 +32,13 @@ LOCKFILE_SHA256 = "42848061424c8601d033e55157d9d1114c980343347b56e2af7bc6ac10070
 LIBRARY_NAME = support.LIBRARY_NAME
 REVISION_SYMBOL = support.REVISION_SYMBOL
 REQUIRED_SYMBOLS = support.REQUIRED_SYMBOLS
+LIVE_GATE = ROOT / "evaluation/scripts/test_google_tcmalloc_live_integration.py"
+LIVE_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+LIVE_REQUIRE_ENV = "UNIALLOC_REQUIRE_LIVE_GOOGLE_TCMALLOC"
+REQUIRED_LIVE_GATE_TESTS = (
+    "test_live_artifact_passes_full_authentication",
+    "test_preloaded_process_proves_runtime_identity",
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -59,6 +67,39 @@ def parse_bazel_version(output: str) -> str:
     if match is None:
         raise RuntimeError(f"unrecognized Bazel version output: {output!r}")
     return match.group(1)
+
+
+def ensure_preload_safe_prefix(prefix: Path) -> None:
+    value = str(prefix)
+    if os.pathsep in value or any(char.isspace() for char in value):
+        raise RuntimeError(
+            "google/tcmalloc prefix cannot contain LD_PRELOAD separators"
+        )
+
+
+def verify_live_artifact(prefix: Path) -> str:
+    env = os.environ.copy()
+    env[LIVE_PREFIX_ENV] = str(prefix)
+    env[LIVE_REQUIRE_ENV] = "1"
+    result = subprocess.run(
+        [sys.executable, str(LIVE_GATE), "-v"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if "skipped=" in result.stdout:
+        raise RuntimeError("required live Google TCMalloc gate reported a skip")
+    missing_tests = [
+        name for name in REQUIRED_LIVE_GATE_TESTS if name not in result.stdout
+    ]
+    if missing_tests:
+        raise RuntimeError(
+            f"required live Google TCMalloc tests did not execute: {missing_tests}"
+        )
+    return result.stdout
 
 
 def ensure_source(source: Path) -> None:
@@ -221,6 +262,7 @@ def materialize_integration(source: Path) -> None:
 def build(args: argparse.Namespace) -> dict[str, object]:
     if sys.platform != "linux" or platform.machine() not in {"x86_64", "aarch64"}:
         raise RuntimeError("modern google/tcmalloc baseline requires Linux x86_64/aarch64")
+    ensure_preload_safe_prefix(args.prefix)
     source = args.cache_dir / f"google-tcmalloc-{UPSTREAM_REVISION}"
     ensure_source(source)
     materialize_integration(source)
@@ -273,16 +315,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError(f"shared artifact is missing symbols: {missing}")
 
     lib_dir = args.prefix / "lib"
-    lib_dir.mkdir(parents=True, exist_ok=True)
     installed = lib_dir / LIBRARY_NAME
-    staged = lib_dir / f".{LIBRARY_NAME}.tmp"
-    staged.unlink(missing_ok=True)
-    shutil.copy2(built_library, staged)
-    staged.chmod(0o755)
-    staged.replace(installed)
-    # Never publish a generic libtcmalloc.so alias.  Old gperftools adapters
-    # require different `tc_*` symbols and must stay on the explicit legacy path.
-    (lib_dir / "libtcmalloc.so").unlink(missing_ok=True)
     provenance = {
         "schema_version": 1,
         "allocator_family": "google/tcmalloc",
@@ -303,11 +336,53 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         "hpaa_probe_output": probe_output.splitlines(),
         "library": str(installed.resolve()),
         "canonical_prefix": str(args.prefix),
-        "library_sha256": sha256_file(installed),
+        "library_sha256": sha256_file(built_library),
         "required_symbols": list(REQUIRED_SYMBOLS),
     }
+
+    # Prove the exact DSO in a disposable prefix before replacing a previously
+    # valid installation.  A failed live gate therefore leaves the published
+    # artifact untouched.
+    with tempfile.TemporaryDirectory(
+        prefix="unialloc-google-tcmalloc-live-"
+    ) as staging_directory:
+        staging_prefix = Path(staging_directory)
+        staging_lib_dir = staging_prefix / "lib"
+        staging_lib_dir.mkdir()
+        staging_library = staging_lib_dir / LIBRARY_NAME
+        shutil.copy2(built_library, staging_library)
+        staging_library.chmod(0o755)
+        staging_provenance = dict(provenance)
+        staging_provenance["canonical_prefix"] = str(staging_prefix)
+        staging_provenance["library"] = str(staging_library.resolve(strict=True))
+        (staging_prefix / support.PROVENANCE_NAME).write_text(
+            json.dumps(staging_provenance, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        live_output = verify_live_artifact(staging_prefix)
+
+    provenance["live_integration_gate"] = {
+        "required": True,
+        "test": str(LIVE_GATE.relative_to(ROOT)),
+        "output_sha256": hashlib.sha256(live_output.encode()).hexdigest(),
+    }
+
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    staged = lib_dir / f".{LIBRARY_NAME}.tmp"
+    staged.unlink(missing_ok=True)
+    shutil.copy2(built_library, staged)
+    staged.chmod(0o755)
+    staged.replace(installed)
+    # Never publish a generic libtcmalloc.so alias.  Old gperftools adapters
+    # require different `tc_*` symbols and must stay on the explicit legacy path.
+    (lib_dir / "libtcmalloc.so").unlink(missing_ok=True)
     provenance_path = args.prefix / "google-tcmalloc-provenance.json"
-    provenance_path.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
+    staged_provenance_path = args.prefix / f".{support.PROVENANCE_NAME}.tmp"
+    staged_provenance_path.write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    staged_provenance_path.replace(provenance_path)
     return provenance
 
 
