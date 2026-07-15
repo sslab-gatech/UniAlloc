@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -718,6 +719,174 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         with self.assertRaises(campaign.CampaignContractError):
             campaign.compiler_build_environment_provenance(
                 {campaign.RELEASE_STRIP_ENV: "true"}
+            )
+
+    def test_target_snapshot_dependency_rewrites_are_isolated_and_provenanced(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline_root = root / "frozen-unialloc"
+            (baseline_root / "unialloc").mkdir(parents=True)
+            pass_source = (
+                baseline_root
+                / "tools"
+                / "unialloc-rustc-pass"
+                / "unialloc-rustc-mir-rewrite-dry-run.rs"
+            )
+            pass_source.parent.mkdir(parents=True)
+            pass_source.write_text("fn main() {}\n", encoding="utf-8")
+            (baseline_root / "Cargo.toml").write_text(
+                '[workspace]\nmembers=["unialloc"]\n', encoding="utf-8"
+            )
+            baseline_lock = baseline_root / "Cargo.lock"
+            baseline_lock.write_text(
+                (
+                    "version = 4\n\n"
+                    '[[package]]\nname = "libc"\nversion = "0.2.183"\n\n'
+                    '[[package]]\nname = "num_cpus"\nversion = "1.13.0"\n'
+                ),
+                encoding="utf-8",
+            )
+            baseline_manifest = baseline_root / "unialloc" / "Cargo.toml"
+            baseline_manifest.write_text(
+                (
+                    '[package]\nname="unialloc"\nversion="0.0.0"\n'
+                    '\n[dependencies]\nlibc = { version = "=0.2.183", '
+                    "default-features = false }\n"
+                    '\n[build-dependencies]\nnum_cpus = "=1.13.0"\n'
+                    'libc = "=0.2.183"\n'
+                ),
+                encoding="utf-8",
+            )
+            checkout = root / "swc"
+            checkout.mkdir()
+            (checkout / "Cargo.lock").write_text(
+                (
+                    "version = 4\n\n"
+                    '[[package]]\nname = "num_cpus"\nversion = "1.16.0"\n'
+                ),
+                encoding="utf-8",
+            )
+            baseline = {
+                "path": str(baseline_root),
+                "pass_source": str(pass_source),
+                "campaign_snapshot_sha256": "a" * 64,
+                "unialloc_implementation_sha256": "b" * 64,
+            }
+            production_paths = (
+                campaign.ROOT / "Cargo.toml",
+                campaign.ROOT / "Cargo.lock",
+                campaign.ROOT / "unialloc" / "Cargo.toml",
+            )
+            production_hashes = {
+                path: campaign.sha256_file(path) for path in production_paths
+            }
+            baseline_manifest_sha = campaign.sha256_file(baseline_manifest)
+            baseline_lock_sha = campaign.sha256_file(baseline_lock)
+
+            def execute(command, *, cwd, env, timeout):
+                command = list(map(str, command))
+                if "update" in command:
+                    package = command[command.index("-p") + 1]
+                    version = command[command.index("--precise") + 1]
+                    lock = Path(cwd) / "Cargo.lock"
+                    text_value = lock.read_text(encoding="utf-8")
+                    pattern = (
+                        rf'(name = "{re.escape(package)}"\nversion = ")'
+                        r'[^\"]+(\")'
+                    )
+                    text_value, count = re.subn(
+                        pattern, rf"\g<1>{version}\g<2>", text_value
+                    )
+                    self.assertEqual(1, count)
+                    lock.write_text(text_value, encoding="utf-8")
+                return {
+                    "command": command,
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "stdout": b"",
+                    "stderr": b"",
+                }
+
+            with mock.patch.object(campaign.matrix, "execute", side_effect=execute):
+                compatible = campaign.prepare_target_compatible_allocator_snapshot(
+                    "swc",
+                    checkout=checkout,
+                    raw_dir=root / "raw",
+                    baseline=baseline,
+                    timeout=60,
+                )
+            compatible_root = Path(compatible["path"])
+            provenance = compatible["dependency_compatibility"]
+            self.assertNotEqual(baseline_root, compatible_root)
+            self.assertTrue(compatible_root.is_relative_to(root / "raw"))
+            self.assertIn(
+                'num_cpus = "=1.16.0"',
+                (compatible_root / "unialloc" / "Cargo.toml").read_text(
+                    encoding="utf-8"
+                ),
+            )
+            self.assertEqual(
+                "1.16.0",
+                campaign._locked_package_version(
+                    compatible_root / "Cargo.lock", "num_cpus"
+                ),
+            )
+            self.assertEqual("rewritten-target-snapshot", provenance["status"])
+            self.assertEqual(1, len(provenance["rewrites"]))
+            self.assertEqual(
+                "=1.16.0", provenance["rewrites"][0]["new_requirement"]
+            )
+            self.assertEqual(
+                campaign.sha256_file(compatible_root / "unialloc" / "Cargo.toml"),
+                provenance["post_rewrite_manifest_sha256"],
+            )
+            self.assertEqual(
+                campaign.sha256_file(compatible_root / "Cargo.lock"),
+                provenance["post_rewrite_lock_sha256"],
+            )
+            self.assertEqual(baseline_manifest_sha, campaign.sha256_file(baseline_manifest))
+            self.assertEqual(baseline_lock_sha, campaign.sha256_file(baseline_lock))
+            self.assertEqual(
+                production_hashes,
+                {path: campaign.sha256_file(path) for path in production_paths},
+            )
+            with mock.patch.object(
+                campaign.matrix,
+                "execute",
+                side_effect=AssertionError("cached snapshot executed Cargo"),
+            ):
+                cached = campaign.prepare_target_compatible_allocator_snapshot(
+                    "swc",
+                    checkout=checkout,
+                    raw_dir=root / "raw",
+                    baseline=baseline,
+                    timeout=60,
+                )
+            self.assertEqual(
+                provenance["provenance_digest"],
+                cached["dependency_compatibility"]["provenance_digest"],
+            )
+
+    def test_rustpython_snapshot_rewrites_both_libc_requirements(self) -> None:
+        rules = campaign.TARGET_SNAPSHOT_DEPENDENCY_REWRITES["rustpython"]
+        manifest = (
+            '[dependencies]\nlibc = { version = "=0.2.183", '
+            "default-features = false }\n"
+            '\n[build-dependencies]\nlibc = "=0.2.183"\n'
+        )
+        rewritten, records = campaign._rewrite_snapshot_dependency_requirements(
+            manifest, rules, {"libc": "0.2.186"}
+        )
+        self.assertEqual(2, len(records))
+        self.assertEqual(2, rewritten.count('"=0.2.186"'))
+        self.assertNotIn('"=0.2.183"', rewritten)
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign._rewrite_snapshot_dependency_requirements(
+                '[dependencies]\nlibc = "^0.2"\n',
+                rules,
+                {"libc": "0.2.186"},
             )
 
     def test_post_injection_manifests_and_lock_are_retained_by_hash(self) -> None:

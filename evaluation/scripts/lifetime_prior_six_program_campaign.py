@@ -34,6 +34,7 @@ import signal
 import subprocess
 import sys
 import time
+import tomllib
 from typing import Any, Mapping, Sequence
 
 
@@ -105,6 +106,32 @@ APPLIED_ALLOCATION_SCOPE_STATUSES = frozenset(
         "actual_semantic_scope_generic_type_rewrite_applied",
     }
 )
+TARGET_SNAPSHOT_DEPENDENCY_REWRITES: dict[str, tuple[dict[str, Any], ...]] = {
+    "swc": (
+        {
+            "package": "num_cpus",
+            "old_version": "1.13.0",
+            "sections": ("build-dependencies",),
+            "expected_occurrences": 1,
+        },
+    ),
+    "actix_web": (
+        {
+            "package": "num_cpus",
+            "old_version": "1.13.0",
+            "sections": ("build-dependencies",),
+            "expected_occurrences": 1,
+        },
+    ),
+    "rustpython": (
+        {
+            "package": "libc",
+            "old_version": "0.2.183",
+            "sections": ("dependencies", "build-dependencies"),
+            "expected_occurrences": 2,
+        },
+    ),
+}
 
 
 class CampaignContractError(RuntimeError):
@@ -1671,6 +1698,335 @@ def _stage_a_dependency(snapshot: Mapping[str, Any]) -> str:
     )
 
 
+def _locked_package_version(lock_path: Path, package: str) -> str:
+    if not lock_path.is_file():
+        raise CampaignContractError(f"Cargo lock is missing: {lock_path}")
+    try:
+        document = tomllib.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise CampaignContractError(f"Cargo lock is invalid: {lock_path}") from error
+    versions = {
+        str(row.get("version"))
+        for row in document.get("package", [])
+        if isinstance(row, dict) and row.get("name") == package
+    }
+    if len(versions) != 1:
+        raise CampaignContractError(
+            f"target Cargo lock must resolve exactly one {package} version; "
+            f"observed {sorted(versions)}"
+        )
+    version = next(iter(versions))
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version) is None:
+        raise CampaignContractError(
+            f"target Cargo lock has invalid {package} version: {version}"
+        )
+    return version
+
+
+def _rewrite_snapshot_dependency_requirements(
+    manifest_text: str,
+    rules: Sequence[Mapping[str, Any]],
+    resolved_versions: Mapping[str, str],
+) -> tuple[str, list[dict[str, Any]]]:
+    counts = [0 for _rule in rules]
+    records: list[dict[str, Any]] = []
+    section = ""
+    output: list[str] = []
+    for line_number, original_line in enumerate(manifest_text.splitlines(), start=1):
+        line = original_line
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1]
+        for index, rule in enumerate(rules):
+            package = str(rule["package"])
+            allowed_sections = tuple(str(value) for value in rule["sections"])
+            if section not in allowed_sections or re.match(
+                rf"^\s*{re.escape(package)}\s*=", line
+            ) is None:
+                continue
+            old_requirement = f'"={rule["old_version"]}"'
+            new_requirement = f'"={resolved_versions[package]}"'
+            if line.count(old_requirement) != 1:
+                raise CampaignContractError(
+                    f"snapshot {package} requirement drifted in [{section}]"
+                )
+            before = line
+            line = line.replace(old_requirement, new_requirement, 1)
+            counts[index] += 1
+            records.append(
+                {
+                    "package": package,
+                    "section": section,
+                    "line_number": line_number,
+                    "old_requirement": f'={rule["old_version"]}',
+                    "new_requirement": f'={resolved_versions[package]}',
+                    "target_resolved_version": resolved_versions[package],
+                    "before": before.strip(),
+                    "after": line.strip(),
+                }
+            )
+        output.append(line)
+    for index, rule in enumerate(rules):
+        expected = int(rule["expected_occurrences"])
+        if counts[index] != expected:
+            raise CampaignContractError(
+                f"snapshot {rule['package']} rewrite count changed: "
+                f"expected {expected}, observed {counts[index]}"
+            )
+    suffix = "\n" if manifest_text.endswith("\n") else ""
+    return "\n".join(output) + suffix, records
+
+
+def _compatible_snapshot_mapping(
+    baseline: Mapping[str, Any], root: Path, provenance: Mapping[str, Any]
+) -> dict[str, Any]:
+    compatible = dict(baseline)
+    compatible.update(
+        {
+            "path": str(root.resolve()),
+            "pass_source": str(
+                (
+                    root
+                    / "tools"
+                    / "unialloc-rustc-pass"
+                    / "unialloc-rustc-mir-rewrite-dry-run.rs"
+                ).resolve()
+            ),
+            "campaign_snapshot_sha256": provenance[
+                "target_campaign_snapshot_sha256"
+            ],
+            "base_campaign_snapshot_sha256": baseline.get(
+                "campaign_snapshot_sha256"
+            ),
+            "dependency_compatibility": dict(provenance),
+        }
+    )
+    return compatible
+
+
+def prepare_target_compatible_allocator_snapshot(
+    target_id: str,
+    *,
+    checkout: Path,
+    raw_dir: Path,
+    baseline: Mapping[str, Any],
+    timeout: int,
+) -> dict[str, Any]:
+    """Rewrite dependency pins only inside a copied, target-specific snapshot."""
+    rules = TARGET_SNAPSHOT_DEPENDENCY_REWRITES.get(target_id, ())
+    baseline_root = Path(str(baseline["path"])).resolve()
+    baseline_manifest = baseline_root / "unialloc" / "Cargo.toml"
+    baseline_lock = baseline_root / "Cargo.lock"
+    if not baseline_manifest.is_file() or not baseline_lock.is_file():
+        raise CampaignContractError("frozen allocator snapshot lacks Cargo inputs")
+    baseline_manifest_sha = sha256_file(baseline_manifest)
+    baseline_lock_sha = sha256_file(baseline_lock)
+    if not rules:
+        provenance = {
+            "source": "unialloc-target-snapshot-dependency-compatibility-v1",
+            "success": True,
+            "status": "not-required",
+            "target_id": target_id,
+            "rewrites": [],
+            "base_campaign_snapshot_sha256": baseline.get(
+                "campaign_snapshot_sha256"
+            ),
+            "pre_rewrite_manifest_sha256": baseline_manifest_sha,
+            "post_rewrite_manifest_sha256": baseline_manifest_sha,
+            "pre_rewrite_lock_sha256": baseline_lock_sha,
+            "post_rewrite_lock_sha256": baseline_lock_sha,
+            "target_campaign_snapshot_sha256": baseline.get(
+                "campaign_snapshot_sha256"
+            ),
+        }
+        provenance["provenance_digest"] = canonical_json_sha256(provenance)
+        compatible = dict(baseline)
+        compatible["dependency_compatibility"] = provenance
+        return compatible
+
+    target_lock = checkout / "Cargo.lock"
+    resolved_versions = {
+        str(rule["package"]): _locked_package_version(
+            target_lock, str(rule["package"])
+        )
+        for rule in rules
+    }
+    input_identity = {
+        "target_id": target_id,
+        "base_campaign_snapshot_sha256": baseline.get("campaign_snapshot_sha256"),
+        "base_implementation_sha256": baseline.get(
+            "unialloc_implementation_sha256"
+        ),
+        "baseline_manifest_sha256": baseline_manifest_sha,
+        "baseline_lock_sha256": baseline_lock_sha,
+        "target_lock_sha256": sha256_file(target_lock),
+        "rules": [dict(rule) for rule in rules],
+        "resolved_versions": resolved_versions,
+    }
+    input_digest = canonical_json_sha256(input_identity)
+    compatibility_root = raw_dir / "allocator-compatibility" / target_id
+    snapshot_root = compatibility_root / "snapshot"
+    record_path = compatibility_root / "provenance.json"
+    if record_path.is_file() and snapshot_root.is_dir():
+        cached = json.loads(record_path.read_text(encoding="utf-8"))
+        cached_manifest = snapshot_root / "unialloc" / "Cargo.toml"
+        cached_lock = snapshot_root / "Cargo.lock"
+        cached_payload = dict(cached)
+        cached_provenance_digest = cached_payload.pop("provenance_digest", None)
+        expected_target_digest = canonical_json_sha256(
+            {
+                "base_campaign_snapshot_sha256": baseline.get(
+                    "campaign_snapshot_sha256"
+                ),
+                "manifest_sha256": cached.get("post_rewrite_manifest_sha256"),
+                "lock_sha256": cached.get("post_rewrite_lock_sha256"),
+                "input_digest": input_digest,
+            }
+        )
+        if (
+            cached.get("success") is True
+            and cached.get("input_digest") == input_digest
+            and cached_provenance_digest == canonical_json_sha256(cached_payload)
+            and cached.get("target_campaign_snapshot_sha256")
+            == expected_target_digest
+            and cached_manifest.is_file()
+            and cached_lock.is_file()
+            and cached.get("post_rewrite_manifest_sha256")
+            == sha256_file(cached_manifest)
+            and cached.get("post_rewrite_lock_sha256") == sha256_file(cached_lock)
+        ):
+            return _compatible_snapshot_mapping(baseline, snapshot_root, cached)
+    shutil.rmtree(compatibility_root, ignore_errors=True)
+    compatibility_root.mkdir(parents=True)
+    shutil.copytree(baseline_root, snapshot_root)
+    copied_manifest = snapshot_root / "unialloc" / "Cargo.toml"
+    copied_lock = snapshot_root / "Cargo.lock"
+    if (
+        sha256_file(copied_manifest) != baseline_manifest_sha
+        or sha256_file(copied_lock) != baseline_lock_sha
+    ):
+        raise CampaignContractError("target snapshot copy changed before rewriting")
+    rewritten, rewrite_records = _rewrite_snapshot_dependency_requirements(
+        copied_manifest.read_text(encoding="utf-8"), rules, resolved_versions
+    )
+    copied_manifest.write_text(rewritten, encoding="utf-8")
+    cargo_commands: list[dict[str, Any]] = []
+    cargo_env = os.environ.copy()
+    cargo_env["CARGO_NET_OFFLINE"] = "true"
+    for package, version in sorted(resolved_versions.items()):
+        command = [
+            "cargo",
+            f"+{TOOLCHAIN}",
+            "update",
+            "--offline",
+            "--manifest-path",
+            str((snapshot_root / "Cargo.toml").resolve()),
+            "-p",
+            package,
+            "--precise",
+            version,
+        ]
+        result = matrix.execute(
+            command, cwd=snapshot_root, env=cargo_env, timeout=min(timeout, 600)
+        )
+        stdout_path = compatibility_root / f"cargo-update-{package}.stdout"
+        stderr_path = compatibility_root / f"cargo-update-{package}.stderr"
+        stdout_path.write_bytes(result["stdout"])
+        stderr_path.write_bytes(result["stderr"])
+        cargo_commands.append(
+            {
+                "command": result["command"],
+                "exit_code": result["exit_code"],
+                "timed_out": result["timed_out"],
+                "stdout_sha256": sha256_file(stdout_path),
+                "stderr_sha256": sha256_file(stderr_path),
+            }
+        )
+        if result["exit_code"] != 0 or result["timed_out"]:
+            raise BuildBlocked(
+                f"{target_id} compatibility lock update failed for {package}: "
+                + result["stderr"].decode(errors="replace")[-8000:]
+            )
+    metadata_command = [
+        "cargo",
+        f"+{TOOLCHAIN}",
+        "metadata",
+        "--locked",
+        "--offline",
+        "--format-version",
+        "1",
+        "--no-deps",
+        "--manifest-path",
+        str((snapshot_root / "Cargo.toml").resolve()),
+    ]
+    metadata = matrix.execute(
+        metadata_command,
+        cwd=snapshot_root,
+        env=cargo_env,
+        timeout=min(timeout, 600),
+    )
+    (compatibility_root / "cargo-metadata.stdout").write_bytes(metadata["stdout"])
+    (compatibility_root / "cargo-metadata.stderr").write_bytes(metadata["stderr"])
+    if metadata["exit_code"] != 0 or metadata["timed_out"]:
+        raise BuildBlocked(
+            f"{target_id} compatibility snapshot metadata failed: "
+            + metadata["stderr"].decode(errors="replace")[-8000:]
+        )
+    post_resolved = {
+        package: _locked_package_version(copied_lock, package)
+        for package in resolved_versions
+    }
+    if post_resolved != resolved_versions:
+        raise CampaignContractError(
+            f"{target_id} compatibility lock does not match target resolution"
+        )
+    post_manifest_sha = sha256_file(copied_manifest)
+    post_lock_sha = sha256_file(copied_lock)
+    target_campaign_digest = canonical_json_sha256(
+        {
+            "base_campaign_snapshot_sha256": baseline.get(
+                "campaign_snapshot_sha256"
+            ),
+            "manifest_sha256": post_manifest_sha,
+            "lock_sha256": post_lock_sha,
+            "input_digest": input_digest,
+        }
+    )
+    provenance = {
+        "source": "unialloc-target-snapshot-dependency-compatibility-v1",
+        "success": True,
+        "status": "rewritten-target-snapshot",
+        "target_id": target_id,
+        "input_identity": input_identity,
+        "input_digest": input_digest,
+        "snapshot_path": str(snapshot_root.resolve()),
+        "production_root": str(ROOT.resolve()),
+        "production_inputs_modified": False,
+        "target_lock": str(target_lock.resolve()),
+        "target_lock_sha256": input_identity["target_lock_sha256"],
+        "resolved_versions": resolved_versions,
+        "post_rewrite_resolved_versions": post_resolved,
+        "rewrites": rewrite_records,
+        "cargo_update_commands": cargo_commands,
+        "cargo_metadata_command": metadata["command"],
+        "cargo_metadata_stdout_sha256": sha256_file(
+            compatibility_root / "cargo-metadata.stdout"
+        ),
+        "cargo_metadata_stderr_sha256": sha256_file(
+            compatibility_root / "cargo-metadata.stderr"
+        ),
+        "base_campaign_snapshot_sha256": baseline.get("campaign_snapshot_sha256"),
+        "pre_rewrite_manifest_sha256": baseline_manifest_sha,
+        "post_rewrite_manifest_sha256": post_manifest_sha,
+        "pre_rewrite_lock_sha256": baseline_lock_sha,
+        "post_rewrite_lock_sha256": post_lock_sha,
+        "target_campaign_snapshot_sha256": target_campaign_digest,
+    }
+    provenance["provenance_digest"] = canonical_json_sha256(provenance)
+    write_json(record_path, provenance)
+    return _compatible_snapshot_mapping(baseline, snapshot_root, provenance)
+
+
 def _inject_workspace_dependencies(
     root: Path, target_crates: Sequence[str], dependency: str
 ) -> list[str]:
@@ -2152,6 +2508,14 @@ def build_stage_a_binary(
 ) -> dict[str, Any]:
     build_dir = raw_dir / "builds" / target_id / build_group
     record_path = build_dir / "build.json"
+    snapshot = prepare_target_compatible_allocator_snapshot(
+        target_id,
+        checkout=checkout,
+        raw_dir=raw_dir,
+        baseline=snapshot,
+        timeout=timeout,
+    )
+    dependency_compatibility = snapshot["dependency_compatibility"]
     instrumentation_sha256 = hashlib.sha256(
         allocator_instrumentation_source().encode()
     ).hexdigest()
@@ -2197,6 +2561,12 @@ def build_stage_a_binary(
             cached.get("success") is True
             and cached.get("implementation_sha256")
             == snapshot["unialloc_implementation_sha256"]
+            and cached.get("campaign_snapshot_sha256")
+            == snapshot.get("campaign_snapshot_sha256")
+            and cached.get("allocator_dependency_compatibility", {}).get(
+                "provenance_digest"
+            )
+            == dependency_compatibility.get("provenance_digest")
             and cached.get("source_commit") == TARGETS[target_id].source_commit
             and cached.get("toolchain") == TOOLCHAIN
             and cached.get("runtime_instrumentation_sha256")
@@ -2350,6 +2720,11 @@ def build_stage_a_binary(
         "implementation_revision": snapshot.get("allocator_revision"),
         "implementation_sha256": snapshot["unialloc_implementation_sha256"],
         "campaign_snapshot_sha256": snapshot.get("campaign_snapshot_sha256"),
+        "base_campaign_snapshot_sha256": snapshot.get(
+            "base_campaign_snapshot_sha256",
+            snapshot.get("campaign_snapshot_sha256"),
+        ),
+        "allocator_dependency_compatibility": dependency_compatibility,
         "prepared": prepared,
         "post_injection_build_inputs": post_injection_inputs,
         "post_injection_build_inputs_path": str(
