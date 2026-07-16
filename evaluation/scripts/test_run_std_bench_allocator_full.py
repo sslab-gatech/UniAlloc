@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -76,6 +79,51 @@ def process_record(
     if ns_per_iter is not None:
         record["ns_per_iter"] = ns_per_iter
     return record
+
+
+def canonical_lock_evidence(
+    output: Path,
+    *,
+    acquired: float,
+    released: float,
+    wait: float = 0.0,
+    pid: int = 1234,
+) -> dict[str, object]:
+    return {
+        "lock_path": str(campaign.suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK),
+        "runner": campaign.SCRIPT_PATH.name,
+        "raw_root": str(output.resolve()),
+        "target_id": None,
+        "phase": "warmup-and-measured",
+        "pid": pid,
+        "wait_seconds": wait,
+        "acquired_unix": acquired,
+        "released_unix": released,
+    }
+
+
+def two_lock_attempts(
+    output: Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    config: dict[str, object] = {"schema_version": 2}
+    provenance: dict[str, object] = {"schema_version": 2}
+    campaign.persist_measurement_lock_attempt(
+        output,
+        config=config,
+        provenance=provenance,
+        evidence=canonical_lock_evidence(
+            output, acquired=60.0, released=61.0, pid=6000
+        ),
+    )
+    binding = campaign.persist_measurement_lock_attempt(
+        output,
+        config=config,
+        provenance=provenance,
+        evidence=canonical_lock_evidence(
+            output, acquired=70.0, released=71.0, pid=7000
+        ),
+    )
+    return config, provenance, binding
 
 
 class FullCampaignTest(unittest.TestCase):
@@ -193,6 +241,467 @@ class FullCampaignTest(unittest.TestCase):
             validate_source.assert_not_called()
             popen.assert_not_called()
             run.assert_not_called()
+
+    def test_same_selection_config_drift_starts_no_external_process(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            output = root / "raw"
+            selected = campaign.selected_variants(("unialloc", "jemalloc"))
+            selection = campaign.bind_campaign_selection(output, selected)
+            config = {
+                "schema_version": 2,
+                "source_root": str(root),
+                "runner_sha256": campaign.base.sha256_file(campaign.SCRIPT_PATH),
+                "base_runner_sha256": campaign.base.sha256_file(
+                    campaign.BASE_SCRIPT
+                ),
+                "variant_ids": [variant.allocator for variant in selected],
+                "variants": [variant.__dict__ for variant in selected],
+                "selection_sha256": selection["selection_sha256"],
+                "warmups": 1,
+                "measured_rounds": campaign.MEASURED_ROUNDS,
+                "timeout_seconds": 30,
+                "jobs": 2,
+                "cpus": [0],
+                "numa_node": 0,
+                "ratio_floor_ns_per_iter": campaign.RATIO_FLOOR_NS,
+            }
+            campaign.base.write_json(output / "campaign-config.json", config)
+            args = campaign.parse_args(
+                [
+                    "--source-root",
+                    str(root),
+                    "--output-dir",
+                    str(output),
+                    "--jobs",
+                    "1",
+                    "--cpus",
+                    "0",
+                    "--variants",
+                    "unialloc,jemalloc",
+                ]
+            )
+            with mock.patch.object(
+                campaign.base, "ensure_host_tools"
+            ) as ensure_tools, mock.patch.object(
+                campaign.subprocess, "Popen"
+            ) as popen, mock.patch.object(
+                campaign.subprocess, "run"
+            ) as run:
+                with self.assertRaisesRegex(RuntimeError, "before build: jobs"):
+                    campaign.run_campaign(args)
+            ensure_tools.assert_not_called()
+            popen.assert_not_called()
+            run.assert_not_called()
+
+    def test_timed_lane_pool_holds_canonical_lock_and_persists_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            events: list[str] = []
+            held = threading.Event()
+
+            @contextlib.contextmanager
+            def fake_primary_measurement_lock(**kwargs: object):
+                self.assertEqual(campaign.SCRIPT_PATH.name, kwargs["runner"])
+                self.assertEqual(output, kwargs["raw_root"])
+                self.assertEqual("warmup-and-measured", kwargs["phase"])
+                evidence = canonical_lock_evidence(
+                    output, acquired=10.0, released=12.0, wait=0.25
+                )
+                evidence.pop("released_unix")
+                events.append("lock-acquired")
+                held.set()
+                try:
+                    yield evidence
+                finally:
+                    self.assertTrue(held.is_set())
+                    held.clear()
+                    evidence["released_unix"] = 12.0
+                    events.append("lock-released")
+
+            def process_start(lane: campaign.Lane) -> None:
+                self.assertTrue(held.is_set(), "benchmark process started without lock")
+                self.assertEqual(0, lane.index)
+                events.append("process-start")
+
+            config = {"schema_version": 2}
+            provenance = {"schema_version": 2}
+            with mock.patch.object(
+                campaign.suite_contract,
+                "primary_measurement_lock",
+                side_effect=fake_primary_measurement_lock,
+            ):
+                binding = campaign.run_timed_lane_pool(
+                    output_dir=output,
+                    lanes=(campaign.Lane(0, 0, ("vec::bench",)),),
+                    jobs=1,
+                    run_lane=process_start,
+                    stop_event=threading.Event(),
+                    attempt_sink=lambda evidence: (
+                        campaign.persist_measurement_lock_attempt(
+                            output,
+                            config=config,
+                            provenance=provenance,
+                            evidence=evidence,
+                        )
+                    ),
+                )
+
+            self.assertEqual(
+                ["lock-acquired", "process-start", "lock-released"], events
+            )
+            self.assertEqual(
+                0.25, binding["latest_attempt"]["evidence"]["wait_seconds"]
+            )
+
+            records = [
+                process_record(
+                    benchmark="vec::bench",
+                    allocator="unialloc",
+                    phase="warmup",
+                    round_index=0,
+                    ns_per_iter=100.0,
+                ),
+                *[
+                    process_record(
+                        benchmark="vec::bench",
+                        allocator="unialloc",
+                        phase="measured",
+                        round_index=round_index,
+                        ns_per_iter=100.0 + round_index,
+                    )
+                    for round_index in range(1, 4)
+                ],
+            ]
+            summary = campaign.summarize(
+                records,
+                benchmarks=("vec::bench",),
+                measured_rounds=3,
+                output_dir=output,
+                require_terminal=True,
+                variants=(campaign.VARIANT_BY_ID["unialloc"],),
+                measurement_lock=binding,
+            )
+            self.assertEqual(
+                binding,
+                json.loads((output / "campaign-config.json").read_text())[
+                    "measurement_lock"
+                ],
+            )
+            self.assertEqual(
+                binding,
+                json.loads((output / "provenance.json").read_text())[
+                    "measurement_lock"
+                ],
+            )
+            self.assertEqual(binding, summary["measurement_lock"])
+
+    def test_lane_pool_persists_attempt_and_stops_on_base_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            stop = threading.Event()
+            events: list[str] = []
+            config = {"schema_version": 2}
+            provenance = {"schema_version": 2}
+            first: Future[None] = Future()
+            first.set_exception(KeyboardInterrupt())
+
+            test = self
+
+            class PendingFuture(Future[None]):
+                def cancel(self) -> bool:
+                    test.assertTrue(stop.is_set())
+                    events.append("pending-cancelled")
+                    return super().cancel()
+
+            second = PendingFuture()
+
+            class FakePool:
+                def __init__(self, **kwargs: object) -> None:
+                    test.assertEqual(1, kwargs["max_workers"])
+                    self.futures = iter((first, second))
+
+                def __enter__(self) -> "FakePool":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def submit(self, *args: object) -> Future[None]:
+                    del args
+                    return next(self.futures)
+
+            @contextlib.contextmanager
+            def fake_primary_measurement_lock(**kwargs: object):
+                del kwargs
+                evidence = canonical_lock_evidence(
+                    output, acquired=20.0, released=21.0
+                )
+                evidence.pop("released_unix")
+                events.append("lock-acquired")
+                try:
+                    yield evidence
+                finally:
+                    evidence["released_unix"] = 21.0
+                    events.append("lock-released")
+
+            def sink(evidence: dict[str, object]) -> dict[str, object]:
+                events.append("attempt-persisted")
+                return campaign.persist_measurement_lock_attempt(
+                    output,
+                    config=config,
+                    provenance=provenance,
+                    evidence=evidence,
+                )
+
+            with mock.patch.object(
+                campaign.suite_contract,
+                "primary_measurement_lock",
+                side_effect=fake_primary_measurement_lock,
+            ), mock.patch.object(campaign, "ThreadPoolExecutor", FakePool):
+                with self.assertRaises(KeyboardInterrupt):
+                    campaign.run_timed_lane_pool(
+                        output_dir=output,
+                        lanes=(
+                            campaign.Lane(0, 0, ("vec::first",)),
+                            campaign.Lane(1, 1, ("vec::second",)),
+                        ),
+                        jobs=1,
+                        run_lane=lambda lane: self.fail(
+                            f"fake pool executed {lane}"
+                        ),
+                        stop_event=stop,
+                        attempt_sink=sink,
+                    )
+
+            self.assertTrue(stop.is_set())
+            self.assertTrue(second.cancelled())
+            self.assertEqual(
+                [
+                    "lock-acquired",
+                    "pending-cancelled",
+                    "lock-released",
+                    "attempt-persisted",
+                ],
+                events,
+            )
+            attempts = campaign.load_measurement_lock_attempts(output)
+            self.assertEqual(1, len(attempts))
+            self.assertEqual(21.0, attempts[0]["evidence"]["released_unix"])
+
+    def test_partial_resume_appends_canonical_lock_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            config = {"schema_version": 2}
+            provenance = {"schema_version": 2}
+            first = campaign.persist_measurement_lock_attempt(
+                output,
+                config=config,
+                provenance=provenance,
+                evidence=canonical_lock_evidence(
+                    output, acquired=30.0, released=31.0, pid=3000
+                ),
+            )
+            campaign.write_or_validate_campaign_config(
+                output / "campaign-config.json", {"schema_version": 2}
+            )
+            first_log = (output / campaign.MEASUREMENT_LOCK_ATTEMPTS_FILE).read_bytes()
+
+            @contextlib.contextmanager
+            def second_lock(**kwargs: object):
+                del kwargs
+                evidence = canonical_lock_evidence(
+                    output, acquired=40.0, released=41.0, pid=4000
+                )
+                evidence.pop("released_unix")
+                try:
+                    yield evidence
+                finally:
+                    evidence["released_unix"] = 41.0
+
+            starts: list[int] = []
+            with mock.patch.object(
+                campaign.suite_contract,
+                "primary_measurement_lock",
+                side_effect=second_lock,
+            ):
+                second = campaign.run_or_reuse_timed_lane_pool(
+                    has_pending=True,
+                    existing_binding=first,
+                    output_dir=output,
+                    lanes=(campaign.Lane(0, 0, ("vec::pending",)),),
+                    jobs=1,
+                    run_lane=lambda lane: starts.append(lane.index),
+                    stop_event=threading.Event(),
+                    attempt_sink=lambda evidence: (
+                        campaign.persist_measurement_lock_attempt(
+                            output,
+                            config=config,
+                            provenance=provenance,
+                            evidence=evidence,
+                        )
+                    ),
+                )
+
+            log = (output / campaign.MEASUREMENT_LOCK_ATTEMPTS_FILE).read_bytes()
+            self.assertTrue(log.startswith(first_log))
+            self.assertEqual([0], starts)
+            self.assertEqual(2, second["attempt_count"])
+            self.assertEqual(first["attempt_ids"], second["attempt_ids"][:1])
+            self.assertEqual(
+                second,
+                json.loads((output / "provenance.json").read_text())[
+                    "measurement_lock"
+                ],
+            )
+
+    def test_complete_resume_skips_empty_lock_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            config = {"schema_version": 2}
+            provenance = {"schema_version": 2}
+            binding = campaign.persist_measurement_lock_attempt(
+                output,
+                config=config,
+                provenance=provenance,
+                evidence=canonical_lock_evidence(
+                    output, acquired=50.0, released=51.0, pid=5000
+                ),
+            )
+            log_path = output / campaign.MEASUREMENT_LOCK_ATTEMPTS_FILE
+            original_log = log_path.read_bytes()
+
+            with mock.patch.object(
+                campaign.suite_contract, "primary_measurement_lock"
+            ) as acquire:
+                observed = campaign.run_or_reuse_timed_lane_pool(
+                    has_pending=False,
+                    existing_binding=binding,
+                    output_dir=output,
+                    lanes=(campaign.Lane(0, 0, ("vec::complete",)),),
+                    jobs=1,
+                    run_lane=lambda lane: self.fail(f"executed {lane}"),
+                    stop_event=threading.Event(),
+                    attempt_sink=lambda evidence: self.fail(
+                        f"persisted empty attempt {evidence}"
+                    ),
+                )
+
+            acquire.assert_not_called()
+            self.assertEqual(binding, observed)
+            self.assertEqual(original_log, log_path.read_bytes())
+            self.assertEqual(1, len(campaign.load_measurement_lock_attempts(output)))
+
+    def test_complete_resume_rejects_truncated_lock_attempt_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            _, _, binding = two_lock_attempts(output)
+            config_path = output / "campaign-config.json"
+            provenance_path = output / "provenance.json"
+            original_config = config_path.read_bytes()
+            original_provenance = provenance_path.read_bytes()
+            log_path = output / campaign.MEASUREMENT_LOCK_ATTEMPTS_FILE
+            lines = log_path.read_bytes().splitlines(keepends=True)
+            self.assertEqual(2, len(lines))
+            log_path.write_bytes(lines[0])
+
+            with mock.patch.object(
+                campaign.suite_contract, "primary_measurement_lock"
+            ) as acquire:
+                with self.assertRaisesRegex(RuntimeError, "attempt_log_sha256"):
+                    campaign.run_or_reuse_timed_lane_pool(
+                        has_pending=False,
+                        existing_binding=binding,
+                        output_dir=output,
+                        lanes=(),
+                        jobs=1,
+                        run_lane=lambda lane: self.fail(f"executed {lane}"),
+                        stop_event=threading.Event(),
+                        attempt_sink=lambda evidence: self.fail(
+                            f"persisted {evidence}"
+                        ),
+                    )
+
+            acquire.assert_not_called()
+            self.assertEqual(original_config, config_path.read_bytes())
+            self.assertEqual(original_provenance, provenance_path.read_bytes())
+
+    def test_partial_resume_rejects_reordered_lock_attempt_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            _, _, binding = two_lock_attempts(output)
+            config_path = output / "campaign-config.json"
+            provenance_path = output / "provenance.json"
+            original_config = config_path.read_bytes()
+            original_provenance = provenance_path.read_bytes()
+            log_path = output / campaign.MEASUREMENT_LOCK_ATTEMPTS_FILE
+            lines = log_path.read_bytes().splitlines(keepends=True)
+            self.assertEqual(2, len(lines))
+            log_path.write_bytes(lines[1] + lines[0])
+            reordered_sha256 = campaign.base.sha256_file(log_path)
+            for path in (config_path, provenance_path):
+                document = json.loads(path.read_text())
+                document["measurement_lock"][
+                    "attempt_log_sha256"
+                ] = reordered_sha256
+                campaign.base.write_json(path, document)
+            reordered_config = config_path.read_bytes()
+            reordered_provenance = provenance_path.read_bytes()
+
+            with mock.patch.object(
+                campaign.suite_contract, "primary_measurement_lock"
+            ) as acquire:
+                with self.assertRaisesRegex(RuntimeError, "attempt_ids"):
+                    campaign.run_or_reuse_timed_lane_pool(
+                        has_pending=True,
+                        existing_binding=binding,
+                        output_dir=output,
+                        lanes=(campaign.Lane(0, 0, ("vec::pending",)),),
+                        jobs=1,
+                        run_lane=lambda lane: self.fail(f"executed {lane}"),
+                        stop_event=threading.Event(),
+                        attempt_sink=lambda evidence: self.fail(
+                            f"persisted {evidence}"
+                        ),
+                    )
+
+            acquire.assert_not_called()
+            self.assertNotEqual(original_config, reordered_config)
+            self.assertNotEqual(original_provenance, reordered_provenance)
+            self.assertEqual(reordered_config, config_path.read_bytes())
+            self.assertEqual(reordered_provenance, provenance_path.read_bytes())
+
+    def test_resumed_record_artifacts_are_rehashed(self) -> None:
+        record = process_record(
+            benchmark="vec::bench",
+            allocator="unialloc",
+            phase="warmup",
+            round_index=0,
+            ns_per_iter=100.0,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            artifacts = {
+                "stdout": b"vec::bench: 100 ns/iter\n",
+                "stderr": b"",
+                "time": b"Maximum resident set size (kbytes): 1\n",
+            }
+            for prefix, payload in artifacts.items():
+                relative = Path("runs/warmup/0/unialloc/vec-bench") / prefix
+                path = output / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(payload)
+                record[f"{prefix}_path"] = str(relative)
+                record[f"{prefix}_sha256"] = campaign.sha256_bytes(payload)
+                if prefix != "time":
+                    record[f"{prefix}_bytes"] = len(payload)
+            stdout = output / str(record["stdout_path"])
+            campaign.base.write_json(stdout.parent / "record.json", record)
+
+            campaign.validate_resumed_record_artifacts(record, output_dir=output)
+            stdout.write_bytes(b"tampered\n")
+            with self.assertRaisesRegex(RuntimeError, "stdout artifact digest"):
+                campaign.validate_resumed_record_artifacts(record, output_dir=output)
 
     def test_mimalloc_thp_runtime_sets_and_proves_process_policy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

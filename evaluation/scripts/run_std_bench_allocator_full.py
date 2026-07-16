@@ -35,7 +35,16 @@ from typing import Any, Iterator, Mapping, Sequence
 
 
 SCRIPT_PATH = Path(__file__).resolve()
+ROOT = SCRIPT_PATH.parents[2]
 BASE_SCRIPT = SCRIPT_PATH.with_name("run_std_bench_allocator_variants.py")
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from evaluation.scripts import (  # noqa: E402
+    type_isolation_suite_contract as suite_contract,
+)
+
+
 EXPECTED_CANONICAL_BENCHMARK_COUNT = 468
 MEASURED_ROUNDS = 3
 RATIO_FLOOR_NS = 100.0
@@ -76,6 +85,8 @@ EXTRA_VARIANTS = (
 SUPPORTED_VARIANTS = (*VARIANTS, *EXTRA_VARIANTS)
 VARIANT_BY_ID = {variant.allocator: variant for variant in SUPPORTED_VARIANTS}
 SELECTION_SCHEMA_VERSION = 1
+MEASUREMENT_LOCK_ATTEMPT_SCHEMA_VERSION = 1
+MEASUREMENT_LOCK_ATTEMPTS_FILE = "measurement-lock-attempts.jsonl"
 MIMALLOC_THP_RUNTIME_SOURCE = r'''#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
@@ -250,6 +261,52 @@ def bind_campaign_selection(output_dir: Path, variants: Sequence[Any]) -> dict[s
         )
     base.write_json(path, expected)
     return expected
+
+
+def validate_existing_campaign_request(
+    output_dir: Path,
+    *,
+    source_root: Path,
+    args: argparse.Namespace,
+    variants: Sequence[Any],
+    selection: Mapping[str, Any],
+) -> None:
+    """Reject known campaign drift before any helper or build process starts."""
+
+    path = output_dir / "campaign-config.json"
+    if not path.exists():
+        return
+    try:
+        observed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("existing campaign configuration is unreadable") from error
+    if not isinstance(observed, dict):
+        raise RuntimeError("existing campaign configuration is not an object")
+    expected = {
+        "schema_version": 2,
+        "source_root": str(source_root),
+        "runner_sha256": base.sha256_file(SCRIPT_PATH),
+        "base_runner_sha256": base.sha256_file(BASE_SCRIPT),
+        "variant_ids": [variant.allocator for variant in variants],
+        "variants": [variant.__dict__ for variant in variants],
+        "selection_sha256": selection["selection_sha256"],
+        "warmups": 1,
+        "measured_rounds": MEASURED_ROUNDS,
+        "timeout_seconds": args.timeout_seconds,
+        "jobs": args.jobs,
+        "cpus": list(args.cpus),
+        "numa_node": args.numa_node,
+        "ratio_floor_ns_per_iter": RATIO_FLOOR_NS,
+    }
+    drift = [
+        field for field, value in expected.items() if observed.get(field) != value
+    ]
+    if drift:
+        raise RuntimeError(
+            "existing full campaign configuration differs before build: "
+            + ", ".join(drift)
+            + "; choose a new output directory"
+        )
 
 
 def ensure_mimalloc_thp_runtime(output_dir: Path) -> dict[str, Any]:
@@ -539,6 +596,52 @@ def load_completed_records(
     return completed
 
 
+def validate_resumed_record_artifacts(
+    record: Mapping[str, Any], *, output_dir: Path
+) -> None:
+    """Rehash every persisted process artifact before reusing its record."""
+
+    root = output_dir.resolve()
+    key = record_key(record)
+    for prefix, require_size in (
+        ("stdout", True),
+        ("stderr", True),
+        ("time", False),
+    ):
+        raw_path = record.get(f"{prefix}_path")
+        expected_sha256 = record.get(f"{prefix}_sha256")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise RuntimeError(f"resumed record lacks {prefix} path: {key}")
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+            raise RuntimeError(f"resumed record lacks {prefix} digest: {key}")
+        path = (root / raw_path).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as error:
+            raise RuntimeError(
+                f"resumed record {prefix} path escapes the campaign: {key}"
+            ) from error
+        if not path.is_file() or base.sha256_file(path) != expected_sha256:
+            raise RuntimeError(
+                f"resumed record {prefix} artifact digest mismatch: {key}"
+            )
+        if require_size and record.get(f"{prefix}_bytes") != path.stat().st_size:
+            raise RuntimeError(
+                f"resumed record {prefix} artifact size mismatch: {key}"
+            )
+
+    stdout_path = (root / str(record["stdout_path"])).resolve()
+    record_path = stdout_path.parent / "record.json"
+    try:
+        persisted = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"resumed process record artifact is unreadable: {key}"
+        ) from error
+    if persisted != record:
+        raise RuntimeError(f"resumed process record artifact differs: {key}")
+
+
 def append_record(output_dir: Path, record: Mapping[str, Any]) -> None:
     with (output_dir / "records.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
@@ -649,6 +752,7 @@ def summarize(
     jobs: int | None = None,
     cpus: Sequence[int] | None = None,
     variants: Sequence[Any] = VARIANTS,
+    measurement_lock: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     benchmark_order = tuple(benchmarks)
     selected = tuple(variants)
@@ -870,6 +974,9 @@ def summarize(
         "generated_utc": base.utc_now(),
         "diagnostic_label": DIAGNOSTIC_LABEL,
         "claim_grade": False,
+        "measurement_lock": (
+            dict(measurement_lock) if measurement_lock is not None else None
+        ),
         "methodology": {
             "benchmarks": list(benchmark_order),
             "allocators": [variant.allocator for variant in selected],
@@ -1240,6 +1347,325 @@ def exclusive_campaign_lock(output_dir: Path) -> Iterator[None]:
             handle.close()
 
 
+def write_or_validate_campaign_config(
+    path: Path, config: Mapping[str, Any]
+) -> None:
+    """Keep append-only lock evidence dynamic while campaign inputs stay fixed."""
+
+    expected = dict(config)
+    if path.exists():
+        try:
+            observed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError(
+                "existing campaign configuration is unreadable"
+            ) from error
+        if not isinstance(observed, dict):
+            raise RuntimeError("existing campaign configuration is not an object")
+        observed.pop("measurement_lock", None)
+        if observed != expected:
+            raise RuntimeError(
+                "existing full campaign configuration differs; "
+                "choose a new output directory"
+            )
+        return
+    base.write_json(path, expected)
+
+
+def validate_measurement_lock_evidence(
+    value: Mapping[str, Any], *, output_dir: Path
+) -> dict[str, Any]:
+    """Validate the canonical lock record after its protected scope exits."""
+
+    evidence = dict(value)
+    expected = {
+        "lock_path": str(suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK),
+        "runner": SCRIPT_PATH.name,
+        "raw_root": str(output_dir.resolve()),
+        "target_id": None,
+        "phase": "warmup-and-measured",
+    }
+    for field, expected_value in expected.items():
+        if evidence.get(field) != expected_value:
+            raise RuntimeError(f"measurement lock evidence has invalid {field}")
+    for field in ("pid", "wait_seconds", "acquired_unix", "released_unix"):
+        value = evidence.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise RuntimeError(f"measurement lock evidence lacks numeric {field}")
+    if evidence["pid"] <= 0 or evidence["wait_seconds"] < 0:
+        raise RuntimeError("measurement lock evidence has invalid process or wait data")
+    if evidence["released_unix"] < evidence["acquired_unix"]:
+        raise RuntimeError("measurement lock release predates acquisition")
+    return evidence
+
+
+def measurement_lock_attempt(
+    evidence: Mapping[str, Any], *, output_dir: Path
+) -> dict[str, Any]:
+    """Give one completed canonical lock scope a content-derived identity."""
+
+    validated = validate_measurement_lock_evidence(evidence, output_dir=output_dir)
+    payload = {
+        "schema_version": MEASUREMENT_LOCK_ATTEMPT_SCHEMA_VERSION,
+        "evidence": validated,
+    }
+    return {
+        **payload,
+        "attempt_id": sha256_bytes(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ),
+    }
+
+
+def load_measurement_lock_attempts(output_dir: Path) -> list[dict[str, Any]]:
+    """Revalidate the complete append-only host-lock attempt history."""
+
+    path = output_dir / MEASUREMENT_LOCK_ATTEMPTS_FILE
+    if not path.exists():
+        return []
+    attempts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                raise RuntimeError(
+                    f"measurement lock attempt log has blank line {line_number}"
+                )
+            try:
+                observed = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise RuntimeError(
+                    f"invalid measurement lock attempt line {line_number}"
+                ) from error
+            if not isinstance(observed, dict) or not isinstance(
+                observed.get("evidence"), dict
+            ):
+                raise RuntimeError(
+                    f"invalid measurement lock attempt record {line_number}"
+                )
+            expected = measurement_lock_attempt(
+                observed["evidence"], output_dir=output_dir
+            )
+            if observed != expected:
+                raise RuntimeError(
+                    f"measurement lock attempt identity mismatch at line {line_number}"
+                )
+            attempt_id = str(observed["attempt_id"])
+            if attempt_id in seen:
+                raise RuntimeError("measurement lock attempt log contains a duplicate")
+            seen.add(attempt_id)
+            attempts.append(observed)
+    return attempts
+
+
+def measurement_lock_binding(
+    output_dir: Path, attempts: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """Bind an ordered lock-attempt history to a campaign artifact."""
+
+    path = output_dir / MEASUREMENT_LOCK_ATTEMPTS_FILE
+    normalized = [dict(attempt) for attempt in attempts]
+    return {
+        "lock_path": str(suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK),
+        "attempt_log": str(path.resolve()),
+        "attempt_log_sha256": base.sha256_file(path) if path.is_file() else None,
+        "attempt_count": len(normalized),
+        "attempt_ids": [attempt["attempt_id"] for attempt in normalized],
+        "attempts": normalized,
+        "latest_attempt": normalized[-1] if normalized else None,
+    }
+
+
+def validate_preexisting_measurement_lock_bindings(
+    output_dir: Path,
+    *,
+    attempts: Sequence[Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Reject attempt-log truncation or reordering before replacing bindings."""
+
+    history = (
+        load_measurement_lock_attempts(output_dir)
+        if attempts is None
+        else [dict(attempt) for attempt in attempts]
+    )
+    expected = measurement_lock_binding(output_dir, history)
+    for name in ("campaign-config.json", "provenance.json"):
+        path = output_dir / name
+        if not path.exists():
+            if history:
+                raise RuntimeError(
+                    f"{name} is missing its measurement lock attempt binding"
+                )
+            continue
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError(f"{name} is unreadable") from error
+        if not isinstance(document, dict):
+            raise RuntimeError(f"{name} is not an object")
+        observed = document.get("measurement_lock")
+        if observed is None:
+            if history:
+                raise RuntimeError(
+                    f"{name} is missing its measurement lock attempt binding"
+                )
+            continue
+        if not isinstance(observed, dict):
+            raise RuntimeError(f"{name} has an invalid measurement lock binding")
+        required = (
+            "attempt_log_sha256",
+            "attempt_count",
+            "attempt_ids",
+            "attempts",
+        )
+        for field in required:
+            if observed.get(field) != expected[field]:
+                raise RuntimeError(
+                    f"{name} measurement lock {field} differs from the attempt log"
+                )
+        if observed != expected:
+            raise RuntimeError(
+                f"{name} measurement lock binding differs from the attempt log"
+            )
+    return history
+
+
+def bind_measurement_lock_attempts(
+    output_dir: Path,
+    *,
+    config: dict[str, Any],
+    provenance: dict[str, Any],
+    attempts: Sequence[Mapping[str, Any]] | None = None,
+    validate_existing: bool = True,
+) -> dict[str, Any]:
+    """Bind the full validated attempt history into campaign artifacts."""
+
+    history = (
+        load_measurement_lock_attempts(output_dir)
+        if attempts is None
+        else [dict(attempt) for attempt in attempts]
+    )
+    if validate_existing:
+        validate_preexisting_measurement_lock_bindings(
+            output_dir, attempts=history
+        )
+    binding = measurement_lock_binding(output_dir, history)
+    config["measurement_lock"] = binding
+    provenance["measurement_lock"] = binding
+    base.write_json(output_dir / "campaign-config.json", config)
+    base.write_json(output_dir / "provenance.json", provenance)
+    return binding
+
+
+def persist_measurement_lock_attempt(
+    output_dir: Path,
+    *,
+    config: dict[str, Any],
+    provenance: dict[str, Any],
+    evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Append one completed lock attempt and refresh its campaign bindings."""
+
+    attempt = measurement_lock_attempt(evidence, output_dir=output_dir)
+    existing = validate_preexisting_measurement_lock_bindings(output_dir)
+    if attempt["attempt_id"] in {item["attempt_id"] for item in existing}:
+        raise RuntimeError("measurement lock attempt was already persisted")
+    path = output_dir / MEASUREMENT_LOCK_ATTEMPTS_FILE
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(attempt, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    history = load_measurement_lock_attempts(output_dir)
+    if history != [*existing, attempt]:
+        raise RuntimeError("measurement lock attempt log did not append exactly once")
+    return bind_measurement_lock_attempts(
+        output_dir,
+        config=config,
+        provenance=provenance,
+        attempts=history,
+        validate_existing=False,
+    )
+
+
+def run_timed_lane_pool(
+    *,
+    output_dir: Path,
+    lanes: Sequence[Lane],
+    jobs: int,
+    run_lane: Any,
+    stop_event: threading.Event,
+    attempt_sink: Any,
+) -> dict[str, Any]:
+    """Run every warm-up and measured lane inside the suite-wide host lock."""
+
+    measurement_lock: Mapping[str, Any] | None = None
+    binding: dict[str, Any] | None = None
+    try:
+        with suite_contract.primary_measurement_lock(
+            runner=SCRIPT_PATH.name,
+            raw_root=output_dir,
+            phase="warmup-and-measured",
+        ) as measurement_lock:
+            with ThreadPoolExecutor(
+                max_workers=jobs, thread_name_prefix="std-bench-lane"
+            ) as pool:
+                futures = []
+                try:
+                    for lane in lanes:
+                        futures.append(pool.submit(run_lane, lane))
+                    for future in as_completed(futures):
+                        future.result()
+                except BaseException:
+                    stop_event.set()
+                    for pending in futures:
+                        pending.cancel()
+                    raise
+    finally:
+        if measurement_lock is not None:
+            evidence = validate_measurement_lock_evidence(
+                measurement_lock, output_dir=output_dir
+            )
+            binding = attempt_sink(evidence)
+    if binding is None:
+        raise RuntimeError("measurement lock completed without persisted evidence")
+    return binding
+
+
+def run_or_reuse_timed_lane_pool(
+    *,
+    has_pending: bool,
+    existing_binding: Mapping[str, Any],
+    output_dir: Path,
+    lanes: Sequence[Lane],
+    jobs: int,
+    run_lane: Any,
+    stop_event: threading.Event,
+    attempt_sink: Any,
+) -> dict[str, Any]:
+    """Skip an empty lock scope when a complete campaign already has evidence."""
+
+    history = validate_preexisting_measurement_lock_bindings(output_dir)
+    validated_binding = measurement_lock_binding(output_dir, history)
+    if dict(existing_binding) != validated_binding:
+        raise RuntimeError(
+            "selected measurement lock binding differs from the attempt log"
+        )
+    if not has_pending:
+        if validated_binding.get("attempt_count") in (None, 0):
+            raise RuntimeError(
+                "complete campaign has no canonical measurement lock attempt"
+            )
+        return validated_binding
+    return run_timed_lane_pool(
+        output_dir=output_dir,
+        lanes=lanes,
+        jobs=jobs,
+        run_lane=run_lane,
+        stop_event=stop_event,
+        attempt_sink=attempt_sink,
+    )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path.cwd())
@@ -1288,6 +1714,14 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     variants = selected_variants(variant_ids)
     with exclusive_campaign_lock(output_dir):
         selection = bind_campaign_selection(output_dir, variants)
+        validate_preexisting_measurement_lock_bindings(output_dir)
+        validate_existing_campaign_request(
+            output_dir,
+            source_root=source_root,
+            args=args,
+            variants=variants,
+            selection=selection,
+        )
         base.ensure_host_tools()
         return _run_campaign_locked(
             args, source_root, output_dir, variants=variants, selection=selection
@@ -1434,13 +1868,8 @@ def _run_campaign_locked(
         ),
         "mimalloc_thp_runtime_sha256": mimalloc_thp_runtime_sha256,
     }
-    config_bytes = (json.dumps(config, indent=2, sort_keys=True) + "\n").encode()
     config_path = output_dir / "campaign-config.json"
-    if config_path.exists() and config_path.read_bytes() != config_bytes:
-        raise RuntimeError(
-            "existing full campaign configuration differs; choose a new output directory"
-        )
-    config_path.write_bytes(config_bytes)
+    write_or_validate_campaign_config(config_path, config)
 
     provenance = {
         "schema_version": 2,
@@ -1484,7 +1913,13 @@ def _run_campaign_locked(
         "tcmalloc_runtime": tcmalloc_identity,
         "mimalloc_thp_runtime": mimalloc_thp_runtime,
     }
-    base.write_json(output_dir / "provenance.json", provenance)
+    existing_lock_attempts = load_measurement_lock_attempts(output_dir)
+    lock_binding = bind_measurement_lock_attempts(
+        output_dir,
+        config=config,
+        provenance=provenance,
+        attempts=existing_lock_attempts,
+    )
 
     completed = load_completed_records(output_dir)
     benchmark_indexes = {benchmark: index for index, benchmark in enumerate(benchmarks)}
@@ -1501,6 +1936,7 @@ def _run_campaign_locked(
     for key, record in completed.items():
         _, _, allocator, benchmark = key
         variant = variants_by_allocator[allocator]
+        validate_resumed_record_artifacts(record, output_dir=output_dir)
         validate_process_record_identity(
             record,
             variant=variant,
@@ -1511,12 +1947,14 @@ def _run_campaign_locked(
             scudo_runtime=scudo_runtime,
             mimalloc_thp_runtime_sha256=mimalloc_thp_runtime_sha256,
         )
+    has_pending = False
     for benchmark in benchmarks:
         for variant in selected:
-            classify_cell_history(
+            state = classify_cell_history(
                 _cell_records(list(completed.values()), variant.allocator, benchmark),
                 measured_rounds=MEASURED_ROUNDS,
             )
+            has_pending = has_pending or state.status == "pending"
 
     append_lock = threading.Lock()
     stop_event = threading.Event()
@@ -1627,16 +2065,21 @@ def _run_campaign_locked(
                             lane, benchmark, "measured", round_index, variant
                         )
 
-    with ThreadPoolExecutor(max_workers=args.jobs, thread_name_prefix="std-bench-lane") as pool:
-        futures = [pool.submit(run_lane, lane) for lane in lanes]
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception:
-                stop_event.set()
-                for pending in futures:
-                    pending.cancel()
-                raise
+    measurement_lock = run_or_reuse_timed_lane_pool(
+        has_pending=has_pending,
+        existing_binding=lock_binding,
+        output_dir=output_dir,
+        lanes=lanes,
+        jobs=args.jobs,
+        run_lane=run_lane,
+        stop_event=stop_event,
+        attempt_sink=lambda evidence: persist_measurement_lock_attempt(
+            output_dir,
+            config=config,
+            provenance=provenance,
+            evidence=evidence,
+        ),
+    )
 
     summary = summarize(
         list(completed.values()),
@@ -1648,6 +2091,7 @@ def _run_campaign_locked(
         jobs=args.jobs,
         cpus=args.cpus,
         variants=selected,
+        measurement_lock=measurement_lock,
     )
     base.write_json(
         output_dir / "campaign-state.json",
