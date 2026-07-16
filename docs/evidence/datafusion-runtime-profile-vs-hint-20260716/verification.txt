@@ -1,0 +1,63 @@
+$ cargo test -p unialloc --features lifetime_hugepage --lib runtime_profile_policy_masks_static_long_prior_and_regular_adaptive_restores_it -- --test-threads=1
+warning: unexpected `cfg` condition value: `typeiso_pointer_filter_bench`
+     --> unialloc/src/alloc_api/type_isolation.rs:13245:7
+      |
+13245 | #[cfg(feature = "typeiso_pointer_filter_bench")]
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: expected values for `feature` are: `adaptive_bitmap_page_allocator`, `allow_mem_leak`, `bench_gperftools_legacy`, `bench_jemalloc`, `bench_mimalloc`, `bench_ourself`, `bench_ptmalloc`, `bench_scudo`, `bench_snmalloc`, `bench_tcmalloc`, `bitmap_page_allocator`, `default`, `fixed_heap`, `force_initialize`, `gperftools-tcmalloc`, `guard_pages`, `hosted_bitmap_page_allocator`, `hugepage`, `jemallocator`, `lifetime_hugepage`, `metadata_segregation`, `mimalloc`, `mpk`, `mte`, `pac`, `pthread_dtor`, `quarantine`, `reclaim_checks`, `rseq`, `separate_sc_backend`, `snmalloc-rs`, `static_dtor`, `stats`, and `type_isolation`
+      = help: consider adding `typeiso_pointer_filter_bench` as a feature in `Cargo.toml`
+      = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+      = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `typeiso_pointer_filter_bench`
+     --> unialloc/src/alloc_api/type_isolation.rs:13251:7
+      |
+13251 | #[cfg(feature = "typeiso_pointer_filter_bench")]
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: expected values for `feature` are: `adaptive_bitmap_page_allocator`, `allow_mem_leak`, `bench_gperftools_legacy`, `bench_jemalloc`, `bench_mimalloc`, `bench_ourself`, `bench_ptmalloc`, `bench_scudo`, `bench_snmalloc`, `bench_tcmalloc`, `bitmap_page_allocator`, `default`, `fixed_heap`, `force_initialize`, `gperftools-tcmalloc`, `guard_pages`, `hosted_bitmap_page_allocator`, `hugepage`, `jemallocator`, `lifetime_hugepage`, `metadata_segregation`, `mimalloc`, `mpk`, `mte`, `pac`, `pthread_dtor`, `quarantine`, `reclaim_checks`, `rseq`, `separate_sc_backend`, `snmalloc-rs`, `static_dtor`, `stats`, and `type_isolation`
+      = help: consider adding `typeiso_pointer_filter_bench` as a feature in `Cargo.toml`
+      = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `typeiso_pointer_filter_bench`
+     --> unialloc/src/alloc_api/type_isolation.rs:13258:7
+      |
+13258 | #[cfg(feature = "typeiso_pointer_filter_bench")]
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: expected values for `feature` are: `adaptive_bitmap_page_allocator`, `allow_mem_leak`, `bench_gperftools_legacy`, `bench_jemalloc`, `bench_mimalloc`, `bench_ourself`, `bench_ptmalloc`, `bench_scudo`, `bench_snmalloc`, `bench_tcmalloc`, `bitmap_page_allocator`, `default`, `fixed_heap`, `force_initialize`, `gperftools-tcmalloc`, `guard_pages`, `hosted_bitmap_page_allocator`, `hugepage`, `jemallocator`, `lifetime_hugepage`, `metadata_segregation`, `mimalloc`, `mpk`, `mte`, `pac`, `pthread_dtor`, `quarantine`, `reclaim_checks`, `rseq`, `separate_sc_backend`, `snmalloc-rs`, `static_dtor`, `stats`, and `type_isolation`
+      = help: consider adding `typeiso_pointer_filter_bench` as a feature in `Cargo.toml`
+      = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `typeiso_pointer_filter_bench`
+     --> unialloc/src/alloc_api/type_isolation.rs:13277:7
+      |
+13277 | #[cfg(feature = "typeiso_pointer_filter_bench")]
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = note: expected values for `feature` are: `adaptive_bitmap_page_allocator`, `allow_mem_leak`, `bench_gperftools_legacy`, `bench_jemalloc`, `bench_mimalloc`, `bench_ourself`, `bench_ptmalloc`, `bench_scudo`, `bench_snmalloc`, `bench_tcmalloc`, `bitmap_page_allocator`, `default`, `fixed_heap`, `force_initialize`, `gperftools-tcmalloc`, `guard_pages`, `hosted_bitmap_page_allocator`, `hugepage`, `jemallocator`, `lifetime_hugepage`, `metadata_segregation`, `mimalloc`, `mpk`, `mte`, `pac`, `pthread_dtor`, `quarantine`, `reclaim_checks`, `rseq`, `separate_sc_backend`, `snmalloc-rs`, `static_dtor`, `stats`, and `type_isolation`
+      = help: consider adding `typeiso_pointer_filter_bench` as a feature in `Cargo.toml`
+      = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: `unialloc` (lib test) generated 4 warnings
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (target/debug/deps/unialloc-a0a10b0493ab249c)
+
+running 1 test
+test alloc_api::lifetime_hugepage::tests::runtime_profile_policy_masks_static_long_prior_and_regular_adaptive_restores_it ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 868 filtered out; finished in 0.00s
+
+
+$ uv run python -m py_compile evaluation/scripts/lifetime_datafusion_runtime_profile_vs_hint.py
+PASS: py_compile
+
+$ jq empty aggregate and both raw AB/BA results
+PASS: jq empty
+
+$ git diff --check
+PASS: unstaged diff check
+
+$ git diff --cached --check
+PASS: staged diff check

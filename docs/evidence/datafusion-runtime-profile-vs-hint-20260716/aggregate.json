@@ -1,0 +1,222 @@
+{
+  "aggregate": {
+    "compiler_hint_operation_speedup_percent_including_learning_median": 7.221356364273296,
+    "compiler_hint_peak_anonymous_change_percent_median": 6.827884073089457,
+    "compiler_hint_peak_pss_change_percent_median": 4.098981878340078,
+    "compiler_hint_peak_rss_change_percent_median": 4.05191797721693,
+    "compiler_hint_process_wall_speedup_percent_median": 7.233687317573372,
+    "compiler_hint_query_speedup_percent_median": 7.226199480391893,
+    "compiler_hint_query_speedup_percent_range": [
+      5.71755395594514,
+      8.734845004838645
+    ],
+    "direction_consistent_pairs": 2,
+    "pair_count": 2
+  },
+  "allocator_source_sha256": "7c5d70e2081684d4e67148a3baadfd6989a87fdf7a7e302ac3fbf2ab2e5f1a38",
+  "binary": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/cargo-target/release/unialloc-lifetime-resident-datafusion",
+  "binary_sha256": "8e405c386cc228b6ffd44afe31158e360d171b3ace520e5e8912f78ee49da615",
+  "causal_boundary": "whole policy11 online-classification/trailer/lock/density path versus policy9 direct compiler-hint admission/density/reuse path on the same binary; it does not isolate one individual runtime overhead",
+  "claim_boundary": "two AB/BA pairs are directional evidence without confidence intervals; concurrent host activity can widen timing variance, while both orderings agree",
+  "classification": "same-binary-policy11-naive-runtime-profile-vs-policy9-compiler-hint-ab-ba",
+  "experiment_script_sha256": "0bbaa84ff196977edbbac9e18758eeb21742e1bbb35591e32f084b67974b1ec5",
+  "force_loaded_unialloc_rlib_sha256": "d7e4e9311f37ab39e9cd7750f881b939196183ee7ce16148150bce439e308bdf",
+  "host_transparent_hugepage": {
+    "defrag": "always defer defer+madvise [madvise] never",
+    "enabled": "always [madvise] never",
+    "sysfs_modified": false
+  },
+  "lock_cost_ratio_policy11_lower_bound_over_policy9_routes": 4.078675406319754,
+  "pairs": [
+    {
+      "arms": [
+        {
+          "anon_hugepages_kib": {
+            "maximum": 0,
+            "median": 0,
+            "minimum": 0,
+            "positive_samples": 0,
+            "sample_count": 121
+          },
+          "current_thp_collapse_confirmed_extents": 0,
+          "label": "runtime-profile-first",
+          "operation_seconds_including_resident_build_and_learning": 22.074410728,
+          "peak_anonymous_kib": 70440,
+          "peak_pss_kib": 119990,
+          "peak_rss_kib": 122096,
+          "peak_thp_collapse_confirmed_extents": 5,
+          "policy": 11,
+          "process_wall_seconds": 22.23164161387831,
+          "query_seconds": 21.955669745,
+          "thp_collapse_attempts": 5,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 5
+        },
+        {
+          "anon_hugepages_kib": {
+            "maximum": 16384,
+            "median": 16384.0,
+            "minimum": 16384,
+            "positive_samples": 110,
+            "sample_count": 110
+          },
+          "current_thp_collapse_confirmed_extents": 8,
+          "label": "compiler-hint-second",
+          "operation_seconds_including_resident_build_and_learning": 20.139674194,
+          "peak_anonymous_kib": 75476,
+          "peak_pss_kib": 125478,
+          "peak_rss_kib": 127644,
+          "peak_thp_collapse_confirmed_extents": 8,
+          "policy": 9,
+          "process_wall_seconds": 20.313463226892054,
+          "query_seconds": 20.037876023,
+          "thp_collapse_attempts": 8,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 8
+        }
+      ],
+      "compiler_hint_operation_speedup_percent_including_learning": 8.764612373302937,
+      "compiler_hint_peak_anonymous_change_percent": 7.1493469619534356,
+      "compiler_hint_peak_pss_change_percent": 4.573714476206351,
+      "compiler_hint_peak_rss_change_percent": 4.543965404272048,
+      "compiler_hint_process_wall_speedup_percent": 8.628145506757427,
+      "compiler_hint_query_speedup_percent": 8.734845004838645,
+      "order": "runtime-first",
+      "raw_result": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/final-ab-runtime-first-r3/result.json"
+    },
+    {
+      "arms": [
+        {
+          "anon_hugepages_kib": {
+            "maximum": 16384,
+            "median": 16384,
+            "minimum": 16384,
+            "positive_samples": 105,
+            "sample_count": 105
+          },
+          "current_thp_collapse_confirmed_extents": 8,
+          "label": "compiler-hint-first",
+          "operation_seconds_including_resident_build_and_learning": 19.357404907,
+          "peak_anonymous_kib": 74972,
+          "peak_pss_kib": 124575,
+          "peak_rss_kib": 126720,
+          "peak_thp_collapse_confirmed_extents": 8,
+          "policy": 9,
+          "process_wall_seconds": 19.442293968051672,
+          "query_seconds": 19.244999597,
+          "thp_collapse_attempts": 8,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 8
+        },
+        {
+          "anon_hugepages_kib": {
+            "maximum": 0,
+            "median": 0.0,
+            "minimum": 0,
+            "positive_samples": 0,
+            "sample_count": 112
+          },
+          "current_thp_collapse_confirmed_extents": 0,
+          "label": "runtime-profile-second",
+          "operation_seconds_including_resident_build_and_learning": 20.522704674,
+          "peak_anonymous_kib": 70392,
+          "peak_pss_kib": 120218,
+          "peak_rss_kib": 122364,
+          "peak_thp_collapse_confirmed_extents": 5,
+          "policy": 11,
+          "process_wall_seconds": 20.64797663409263,
+          "query_seconds": 20.412070756,
+          "thp_collapse_attempts": 5,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 5
+        }
+      ],
+      "compiler_hint_operation_speedup_percent_including_learning": 5.678100355243656,
+      "compiler_hint_peak_anonymous_change_percent": 6.50642118422548,
+      "compiler_hint_peak_pss_change_percent": 3.624249280473806,
+      "compiler_hint_peak_rss_change_percent": 3.559870550161812,
+      "compiler_hint_process_wall_speedup_percent": 5.839229128389317,
+      "compiler_hint_query_speedup_percent": 5.71755395594514,
+      "order": "hint-first",
+      "raw_result": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/final-ba-hint-first/result.json"
+    }
+  ],
+  "performance_claim_eligible": false,
+  "policy11_runtime_profile": {
+    "adaptive_eligible_allocations": 3742201,
+    "arena_lock_acquisitions_lower_bound": 3742201,
+    "cold_bypassed_allocations": 988039,
+    "definition": "online allocator observation only; static lifetime hint normalized to Unknown for prediction and arena identity",
+    "demotions": 5,
+    "exported_observation_rows": 258,
+    "learned_sites": 192,
+    "learning_window": {
+      "between_thresholds": "censored",
+      "long_if_survives_later_pressure_bytes": 8388608,
+      "minimum_decisive_samples_without_prior": 8,
+      "short_if_released_before_later_pressure_bytes": 2097152
+    },
+    "live_survival_observations": 2221,
+    "live_survival_scans": 2875,
+    "live_survival_slots_examined": 5079,
+    "live_trailers_at_report": 47,
+    "long_routed_allocations": 16551,
+    "physical_thp_boundary": "five point-in-time collapse successes per arm, zero AHP in every conservative query-window sample, and zero current collapse-confirmed extents at report",
+    "pressure_bytes": 15976278432,
+    "pressure_epochs": 7618,
+    "promotions": 82,
+    "routed_allocations": 31807,
+    "routed_deallocations": 31760,
+    "runtime_validated_objects": 30528,
+    "short_bypassed_allocations": 2722355,
+    "short_routed_allocations": 10638,
+    "static_hint_abstained_objects": 30528,
+    "static_hint_classified_objects": 0,
+    "trailer_corruptions": 0,
+    "training_allocations": 4618
+  },
+  "policy9_compiler_hint": {
+    "adaptive_live_trailers": 0,
+    "adaptive_training_allocations": 0,
+    "arena_lock_acquisitions_lower_bound": 917504,
+    "physical_thp_boundary": "eight collapse successes, eight current collapse-confirmed extents, and 16 MiB AHP in every conservative query-window sample",
+    "routed_allocations": 917504,
+    "runtime_validated_objects": 0
+  },
+  "runner_source_sha256": "eecd3a0c62adf0011ea72c69d823a9a33d483f10b1ba491ce101fc6bfa9fe114",
+  "schema_version": 1,
+  "verdict": "keep: compiler hints beat cold online profiling in both orders by a median 7.23% query time while stabilizing 16 MiB physical THP; this comparator carries a median 4.05% peak-RSS cost",
+  "workload": {
+    "cpu_affinity": "120-123",
+    "fixed_work": {
+      "approx_distinct_accumulator_bytes": 16384,
+      "approx_distinct_digest": "1adb208ef1d74d50",
+      "approx_distinct_max_error_ppm": 10638,
+      "approx_distinct_reasonable": true,
+      "approx_distinct_stable": true,
+      "approx_distinct_total_estimate": 97701,
+      "approx_distinct_total_exact": 98236,
+      "batches_per_table": 256,
+      "columns_per_table": 4,
+      "correctness": true,
+      "group_count": 1024,
+      "materialized_digest": "e95377e3d282affb",
+      "materialized_rows": 786432,
+      "query_digest": "2934adc49496a3dd",
+      "query_iterations": 896,
+      "query_output_rows": 1024,
+      "resident_payload_bytes": 44040192,
+      "result_digest": "4755030829b353a5",
+      "routable_buffer_bytes": 24576,
+      "rows_per_batch": 3072,
+      "rows_per_table": 786432,
+      "table_count": 2,
+      "target_partitions": 1
+    },
+    "fixed_work_match_across_four_arms": true,
+    "fresh_process_per_arm": true,
+    "geometry": "g1024/p1/q896/batches256",
+    "program": "Apache DataFusion 54.0.0",
+    "warmup_iterations": 0
+  }
+}
