@@ -1,0 +1,1577 @@
+{
+  "implementation_revision": "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503",
+  "legacy_tcmalloc_included": false,
+  "micro": {
+    "claim_grade": false,
+    "evidence_class": "derived_existing_measurements",
+    "measurement_boundary": {
+      "performance": "existing measured campaigns: Type Isolation end-to-end plus external allocators on 236 common robust cases",
+      "rss": "diagnostic process peak RSS; startup and adaptive libtest work included"
+    },
+    "rows": [
+      {
+        "label": "UniAlloc (reference)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "unialloc"
+      },
+      {
+        "label": "UniAlloc + Type Isolation",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0034951072582805,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9985510229505493
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0150630799860747
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0017015941250225
+              },
+              {
+                "id": "slice",
+                "ratio": 1.001328610168179
+              },
+              {
+                "id": "str",
+                "ratio": 1.0011322753255292
+              },
+              {
+                "id": "string",
+                "ratio": 1.0011373463363442
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0036967772800418
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0054399488756642
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "type_isolation"
+      },
+      {
+        "label": "ptmalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.007242338133203,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9997844008804967
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0007697839141056
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0429057685417413
+              },
+              {
+                "id": "slice",
+                "ratio": 1.01028592079841
+              },
+              {
+                "id": "str",
+                "ratio": 1.0013780338148297
+              },
+              {
+                "id": "string",
+                "ratio": 0.9892418345868115
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0240569113502975
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 0.9906431506953186
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "ptmalloc"
+      },
+      {
+        "label": "jemalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0024193543233872,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9998062684199891
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0133522056445574
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0016001422348655
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0011034659509563
+              },
+              {
+                "id": "str",
+                "ratio": 1.0016571799120975
+              },
+              {
+                "id": "string",
+                "ratio": 1.0052143272363676
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0083089687382427
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 0.9884951040533345
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "jemalloc"
+      },
+      {
+        "label": "mimalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0005315138671966,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9990038834872734
+              },
+              {
+                "id": "btree",
+                "ratio": 1.009157449043227
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0192940339646128
+              },
+              {
+                "id": "slice",
+                "ratio": 0.9968710913366089
+              },
+              {
+                "id": "str",
+                "ratio": 0.9999736739052458
+              },
+              {
+                "id": "string",
+                "ratio": 0.9937038032275854
+              },
+              {
+                "id": "vec",
+                "ratio": 0.9867541684994499
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 0.9998321521820216
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "mimalloc"
+      },
+      {
+        "label": "mimalloc (THP off)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.9977924723656278,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0006256724257885
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0053095791829392
+              },
+              {
+                "id": "linked_list",
+                "ratio": 0.9982217480216946
+              },
+              {
+                "id": "slice",
+                "ratio": 0.995456773982677
+              },
+              {
+                "id": "str",
+                "ratio": 1.0021608171817706
+              },
+              {
+                "id": "string",
+                "ratio": 0.9938572070956435
+              },
+              {
+                "id": "vec",
+                "ratio": 0.9866028251366371
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0002236636099306
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "mimalloc_no_thp"
+      },
+      {
+        "label": "Google TCMalloc (modern)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0150167512741366,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9986718132215069
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0501221996545014
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0492575797990575
+              },
+              {
+                "id": "slice",
+                "ratio": 1.003673582295989
+              },
+              {
+                "id": "str",
+                "ratio": 1.0023062730627306
+              },
+              {
+                "id": "string",
+                "ratio": 1.0064850739853552
+              },
+              {
+                "id": "vec",
+                "ratio": 1.011058892564641
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.000147828518918
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 3.0397715152167395,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 3.333333333333334
+              },
+              {
+                "id": "btree",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "linked_list",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "slice",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "str",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "string",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "vec",
+                "ratio": 3.0000000000000004
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 3.0000000000000004
+              }
+            ]
+          }
+        },
+        "variant_id": "google_tcmalloc"
+      },
+      {
+        "label": "snmalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.997115271537572,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.003871713198517
+              },
+              {
+                "id": "btree",
+                "ratio": 1.009617385328435
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0246860485119558
+              },
+              {
+                "id": "slice",
+                "ratio": 0.9978007923219984
+              },
+              {
+                "id": "str",
+                "ratio": 0.9986397343825417
+              },
+              {
+                "id": "string",
+                "ratio": 0.9605669302666238
+              },
+              {
+                "id": "vec",
+                "ratio": 0.9954068813182246
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 0.9875432525951557
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.3710474590638528,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "btree",
+                "ratio": 1.6666666666666667
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "slice",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "str",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "string",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "vec",
+                "ratio": 1.3333333333333333
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.3333333333333333
+              }
+            ]
+          }
+        },
+        "variant_id": "snmalloc"
+      },
+      {
+        "label": "Scudo",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0312689408159252,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 0.9987200790460868
+              },
+              {
+                "id": "btree",
+                "ratio": 1.200753086419753
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0050161232533144
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0025778412177637
+              },
+              {
+                "id": "str",
+                "ratio": 1.0037535957342314
+              },
+              {
+                "id": "string",
+                "ratio": 1.0044045423348242
+              },
+              {
+                "id": "vec",
+                "ratio": 1.048702193399304
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0013800215344022
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "Rust benchmark family",
+            "details": [
+              {
+                "id": "binary_heap",
+                "ratio": 1.0
+              },
+              {
+                "id": "btree",
+                "ratio": 1.0
+              },
+              {
+                "id": "linked_list",
+                "ratio": 1.0
+              },
+              {
+                "id": "slice",
+                "ratio": 1.0
+              },
+              {
+                "id": "str",
+                "ratio": 1.0
+              },
+              {
+                "id": "string",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec",
+                "ratio": 1.0
+              },
+              {
+                "id": "vec_deque",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "scudo"
+      }
+    ]
+  },
+  "micro_input_identity": {
+    "common_robust_case_count": 236,
+    "common_selection_sha256": "e9e0591d546da26c4ff8da042d0cba10d04e715a7b1f9a568008c34de98c9586",
+    "main_campaign": {
+      "artifacts": {
+        "campaign-config.json": {
+          "bytes": 22492,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-config.json",
+          "sha256": "40762509ec0fb840bc732d183302c0ae323ba22d1893a17fa23c828cb4708d0a"
+        },
+        "campaign-selection.json": {
+          "bytes": 808,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-selection.json",
+          "sha256": "83b1f1cfc52beaf068c69bbb80911ec0156ecddb6cd93435dbe2349fe560ad19"
+        },
+        "campaign-state.json": {
+          "bytes": 404,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-state.json",
+          "sha256": "2adf447e223e0d2c8edbb7520fa85e089ac03ea87ed4653d9ffddeec57d1cd5d"
+        },
+        "provenance.json": {
+          "bytes": 29985,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/provenance.json",
+          "sha256": "9cadda6430a67e07be0ffc60ae0fd4b4ec12ba0d67bbeaea0294b98716590bac"
+        },
+        "records.jsonl": {
+          "bytes": 30779417,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/records.jsonl",
+          "sha256": "ead82ca48e902b09465ef692ff5b64fc4d8afaa50e0b8a8591db9b54e299a29e"
+        },
+        "summary.json": {
+          "bytes": 1564811,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/summary.json",
+          "sha256": "1c03a6332aa8427c6ece24a30936f7fd3bda0b5e76edf9a65aa7cc77f0ac232e"
+        }
+      },
+      "robust_case_count": 237,
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1",
+      "variant_ids": [
+        "unialloc",
+        "jemalloc",
+        "mimalloc",
+        "mimalloc_no_thp",
+        "google_tcmalloc"
+      ]
+    },
+    "supplemental_campaign": {
+      "artifacts": {
+        "campaign-config.json": {
+          "bytes": 22319,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-config.json",
+          "sha256": "a673f93fd2481ea5851f110a59106d0bf08587068454ef4a03c7724b22dbb17d"
+        },
+        "campaign-selection.json": {
+          "bytes": 630,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-selection.json",
+          "sha256": "7d1fc4e84a7c925865fa9c72b18cde67ed109fc06e9e30a7c612d0c2befe3726"
+        },
+        "campaign-state.json": {
+          "bytes": 404,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-state.json",
+          "sha256": "04ed09059ca7b0b480d1045caa3e5d77b0236fe6d0e3c9d51a8d595d59d86bb0"
+        },
+        "provenance.json": {
+          "bytes": 26252,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/provenance.json",
+          "sha256": "181e2a4e56cdedbfccd1250ceb09332919ea0aa606b90722947f113412981b2c"
+        },
+        "records.jsonl": {
+          "bytes": 22183406,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/records.jsonl",
+          "sha256": "d7ff9b9f3f38793d84aaa816bb2697cdf35deeed198964ce39b218ec45759790"
+        },
+        "summary.json": {
+          "bytes": 1259268,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/summary.json",
+          "sha256": "a286873e8d6375d0461330b73c899765ed3ef6e70be327227b8706c895094978"
+        }
+      },
+      "robust_case_count": 238,
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1",
+      "variant_ids": [
+        "unialloc",
+        "ptmalloc",
+        "snmalloc",
+        "scudo"
+      ]
+    },
+    "type_isolation_campaign": {
+      "comparison_family": "end_to_end",
+      "presentation_data": {
+        "bytes": 6060492,
+        "path": "/home/hanqing/alloc/UniAlloc/docs/figures/allocator-evaluation-20260716/presentation-data.json",
+        "sha256": "bfea6ef81c98a724175c7528524c8c7f141e1cacc42107b55ffa431ca6727338"
+      },
+      "reference_variant_id": "unialloc",
+      "source_artifact": {
+        "bytes": 4123119,
+        "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-feature-ce8af7b-v8-final/derived/primary-ce8af7b-v8/absolute-process-index.jsonl",
+        "sha256": "734c3089e3b2f5193e81acc1e1881790150eda979fbe0193bf851b9b00d2275c"
+      },
+      "subject_variant_id": "typeiso_perf"
+    },
+    "unialloc_cross_session_performance_anchor_ratio": 1.0023744457302985,
+    "unialloc_cross_session_rss_anchor_ratio": 1.0
+  },
+  "schema_version": 1,
+  "simulated_macro": {
+    "claim_grade": false,
+    "eligible_for_measured_comparison": false,
+    "evidence_class": "illustrative_static_model",
+    "required_badge": "ILLUSTRATIVE MODEL - NOT MEASURED",
+    "rows": [
+      {
+        "label": "UniAlloc (reference)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.0
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.0
+              },
+              {
+                "id": "redb",
+                "ratio": 1.0
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.0
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.0
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.0
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.0
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.0
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.0
+              },
+              {
+                "id": "redb",
+                "ratio": 1.0
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.0
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.0
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.0
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.0
+              }
+            ]
+          }
+        },
+        "variant_id": "unialloc"
+      },
+      {
+        "label": "UniAlloc + Type Isolation",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.2706845673688196,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.2
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.24
+              },
+              {
+                "id": "redb",
+                "ratio": 1.26
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.28
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.35
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.3
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.27
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.0996101137266332,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.05
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.08
+              },
+              {
+                "id": "redb",
+                "ratio": 1.1
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.12
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.15
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.11
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.09
+              }
+            ]
+          }
+        },
+        "variant_id": "type_isolation"
+      },
+      {
+        "label": "ptmalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.029726453797326,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.01
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.04
+              },
+              {
+                "id": "redb",
+                "ratio": 1.02
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.0
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.08
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.03
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.03
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.1167307905092154,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.08
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.12
+              },
+              {
+                "id": "redb",
+                "ratio": 1.1
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.09
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.18
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.13
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.12
+              }
+            ]
+          }
+        },
+        "variant_id": "ptmalloc"
+      },
+      {
+        "label": "jemalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.951241706299185,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 0.98
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 0.95
+              },
+              {
+                "id": "redb",
+                "ratio": 0.94
+              },
+              {
+                "id": "Polars",
+                "ratio": 0.92
+              },
+              {
+                "id": "SWC",
+                "ratio": 0.97
+              },
+              {
+                "id": "RustPython",
+                "ratio": 0.96
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 0.94
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.052564961889969,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.02
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.06
+              },
+              {
+                "id": "redb",
+                "ratio": 1.04
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.03
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.1
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.07
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.05
+              }
+            ]
+          }
+        },
+        "variant_id": "jemalloc"
+      },
+      {
+        "label": "mimalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.81192328153863,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 0.88
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 0.83
+              },
+              {
+                "id": "redb",
+                "ratio": 0.78
+              },
+              {
+                "id": "Polars",
+                "ratio": 0.76
+              },
+              {
+                "id": "SWC",
+                "ratio": 0.85
+              },
+              {
+                "id": "RustPython",
+                "ratio": 0.8
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 0.79
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.3648784289791687,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.22
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.35
+              },
+              {
+                "id": "redb",
+                "ratio": 1.42
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.48
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.31
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.4
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.39
+              }
+            ]
+          }
+        },
+        "variant_id": "mimalloc"
+      },
+      {
+        "label": "mimalloc (THP off)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.898085233223439,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 0.94
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 0.91
+              },
+              {
+                "id": "redb",
+                "ratio": 0.87
+              },
+              {
+                "id": "Polars",
+                "ratio": 0.85
+              },
+              {
+                "id": "SWC",
+                "ratio": 0.93
+              },
+              {
+                "id": "RustPython",
+                "ratio": 0.89
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 0.9
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.09115673540452,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.04
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.1
+              },
+              {
+                "id": "redb",
+                "ratio": 1.08
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.12
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.09
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.11
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.1
+              }
+            ]
+          }
+        },
+        "variant_id": "mimalloc_no_thp"
+      },
+      {
+        "label": "Google TCMalloc (modern)",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.9868563741615216,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.02
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 0.99
+              },
+              {
+                "id": "redb",
+                "ratio": 0.96
+              },
+              {
+                "id": "Polars",
+                "ratio": 0.95
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.01
+              },
+              {
+                "id": "RustPython",
+                "ratio": 0.98
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.0
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.1509908286496038,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.1
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.16
+              },
+              {
+                "id": "redb",
+                "ratio": 1.13
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.14
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.21
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.17
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.15
+              }
+            ]
+          }
+        },
+        "variant_id": "google_tcmalloc"
+      },
+      {
+        "label": "snmalloc",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 0.9425595037164813,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 0.97
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 0.95
+              },
+              {
+                "id": "redb",
+                "ratio": 0.92
+              },
+              {
+                "id": "Polars",
+                "ratio": 0.91
+              },
+              {
+                "id": "SWC",
+                "ratio": 0.98
+              },
+              {
+                "id": "RustPython",
+                "ratio": 0.93
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 0.94
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.078263891826247,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.04
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.08
+              },
+              {
+                "id": "redb",
+                "ratio": 1.06
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.07
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.13
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.09
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.08
+              }
+            ]
+          }
+        },
+        "variant_id": "snmalloc"
+      },
+      {
+        "label": "Scudo",
+        "metrics": {
+          "performance": {
+            "aggregate_ratio": 1.1807604126477038,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.12
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.18
+              },
+              {
+                "id": "redb",
+                "ratio": 1.15
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.16
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.25
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.2
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.21
+              }
+            ]
+          },
+          "rss": {
+            "aggregate_ratio": 1.2435907459986513,
+            "detail_kind": "simulated real-world target",
+            "details": [
+              {
+                "id": "Collections",
+                "ratio": 1.18
+              },
+              {
+                "id": "Oxipng",
+                "ratio": 1.24
+              },
+              {
+                "id": "redb",
+                "ratio": 1.21
+              },
+              {
+                "id": "Polars",
+                "ratio": 1.23
+              },
+              {
+                "id": "SWC",
+                "ratio": 1.32
+              },
+              {
+                "id": "RustPython",
+                "ratio": 1.27
+              },
+              {
+                "id": "Actix Web",
+                "ratio": 1.26
+              }
+            ]
+          }
+        },
+        "variant_id": "scudo"
+      }
+    ],
+    "targets": [
+      "Collections",
+      "Oxipng",
+      "redb",
+      "Polars",
+      "SWC",
+      "RustPython",
+      "Actix Web"
+    ],
+    "type_isolation_projection": {
+      "effective_cache_coverage": {
+        "central_estimate": 0.76,
+        "range": [
+          0.72,
+          0.8
+        ]
+      },
+      "execution_cost_overhead": {
+        "presentation_range": [
+          0.25,
+          0.3
+        ],
+        "range": [
+          0.2,
+          0.35
+        ]
+      },
+      "extreme_retained_cache_kib_per_thread": 2048,
+      "fixed_tls_kib_per_thread": 1.28,
+      "peak_rss_growth": {
+        "central_estimate": 0.1,
+        "range": [
+          0.05,
+          0.15
+        ]
+      },
+      "type_coverage": {
+        "central_estimate": 0.87,
+        "range": [
+          0.8,
+          0.9
+        ]
+      }
+    }
+  }
+}

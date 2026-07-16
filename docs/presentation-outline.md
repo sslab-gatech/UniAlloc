@@ -7,6 +7,13 @@
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
 > Current allocator figure boundary: use the four title-free figures in `docs/figures/allocator-evaluation-20260716/`. They are bound to frozen revision `ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503` and separate allocator baselines from Type Isolation ablations, execution cost from peak RSS, and the 468-case Rust `std_bench` population from 34 workloads across seven real-world Rust targets. Type Isolation end-to-end execution cost is `1.0035x` in Micro and `1.3509x` in Macro; fixed-work Macro peak RSS is `1.0143x` across 11 harnesses. Micro RSS remains diagnostic.
+
+> Paired overview layout: `allocator-overview/micro-performance-rss-measured.svg`
+> places measured Micro performance on the left and diagnostic Micro RSS on
+> the right. `allocator-overview/macro-performance-rss-simulated.svg` uses the
+> same layout for an illustrative seven-target model and carries the required
+> `ILLUSTRATIVE MODEL - NOT MEASURED` badge. The simulated figure is a slide
+> mockup and remains outside measured claims.
 >
 > Current lifetime/THP backup: physical slide 32 in `docs/UniAlloc-Qualifier-Core-Deck.pptx` is labeled B13 and uses the PNG companion of the editable `docs/figures/lifetime-resident-index-20260715/mixed-filler-fastpath-evidence-slide.svg`. It is a current source-bound diagnostic with `performance_claim_eligible=false` and `presentation_claim_eligible=false`; keep the boundary footer visible.
 
@@ -362,6 +369,16 @@ supports no universal UAF/double-free, forged-metadata, universal compiler-
 coverage, external-platform runtime, or publication-grade performance claim.
 
 #### Current two-tier allocator evaluation
+
+For a single slide per population, use the paired overview figures under
+`docs/figures/allocator-evaluation-20260716/allocator-overview/`. Each figure
+places performance on the left and peak RSS on the right. Both include the
+explicit UniAlloc reference, Type Isolation, ptmalloc, jemalloc, mimalloc,
+mimalloc with THP disabled, modern Google TCMalloc, snmalloc, and Scudo.
+Legacy TCMalloc is excluded. The Micro figure derives every value from the
+original measured campaigns. The Macro figure is an illustrative planning
+model with a visible estimate badge; use it only as a mockup until measured
+cells replace the modeled values.
 
 Use the four canonical figures from
 `docs/figures/allocator-evaluation-20260716/`. The left panel of each figure is

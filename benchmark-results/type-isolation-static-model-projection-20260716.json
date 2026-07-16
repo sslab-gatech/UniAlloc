@@ -1,0 +1,72 @@
+{
+  "created_date": "2026-07-16",
+  "evidence_class": "static_model_projection",
+  "feature": "type_isolation",
+  "measurement_status": "pending_current_digest_campaign",
+  "illustrative_realworld_placeholder": {
+    "peak_rss_ratio": 1.0996101137266332,
+    "performance_ratio": 1.2706845673688196,
+    "source": "docs/figures/allocator-evaluation-20260716/allocator-overview/allocator-overview-data.json",
+    "target_count": 7
+  },
+  "presentation": {
+    "eligible_for_measured_comparison": false,
+    "primary_one_line": "Static model: about 87% type coverage, 76% effective isolation-cache coverage, 25-30% expected execution-cost overhead, and 5-15% expected peak-RSS growth.",
+    "required_badge": "STATIC MODEL ESTIMATE - NOT MEASURED"
+  },
+  "projection": {
+    "effective_isolation_cache_coverage": {
+      "central_estimate": 0.76,
+      "range": [
+        0.72,
+        0.8
+      ],
+      "unit": "fraction_of_relevant_allocations"
+    },
+    "execution_cost_overhead": {
+      "design_target_upper_bound": 0.3,
+      "planning_range": [
+        0.2,
+        0.35
+      ],
+      "presentation_range": [
+        0.25,
+        0.3
+      ],
+      "unit": "fraction_over_default_unialloc"
+    },
+    "metadata_and_retention": {
+      "fixed_tls_kib_per_thread": 1.28,
+      "modeled_extreme_cache_retention_kib_per_thread": 2048
+    },
+    "peak_rss_growth": {
+      "central_estimate": 0.1,
+      "range": [
+        0.05,
+        0.15
+      ],
+      "unit": "fraction_over_default_unialloc"
+    },
+    "type_coverage": {
+      "central_estimate": 0.87,
+      "range": [
+        0.8,
+        0.9
+      ],
+      "unit": "fraction_of_allocations"
+    }
+  },
+  "schema_version": 1,
+  "source_binding": {
+    "build_freeze_required": true,
+    "canonical_sha256": null,
+    "git_revision": null,
+    "status": "unbound_development_projection"
+  },
+  "usage_boundaries": [
+    "Use only as a planning or presentation placeholder with the required estimate badge.",
+    "Keep this projection separate from frozen ce8 measured results.",
+    "Replace the projection after the current implementation digest completes its registered three-round campaign.",
+    "Do not infer allocator-specific occupancy, security coverage, or universal compiler coverage from this projection."
+  ]
+}

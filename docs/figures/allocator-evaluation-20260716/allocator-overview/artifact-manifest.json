@@ -1,0 +1,156 @@
+{
+  "artifacts": [
+    {
+      "bytes": 41901,
+      "path": "allocator-overview-data.json",
+      "sha256": "eabbc93dd2d337866dfa2f1abfadbefb2de72e0877a6164bfc4189037bf95950"
+    },
+    {
+      "bytes": 115906,
+      "path": "micro-performance-rss-measured.svg",
+      "sha256": "ec94b2c7ffe1622b859121cc7ad0477258845f8df4b2a79cf6f870f980eb1b57"
+    },
+    {
+      "bytes": 45853,
+      "path": "micro-performance-rss-measured.pdf",
+      "sha256": "86a84afbcd2dc5174597cab04078f4495cc04bad5863ce25a28de0511b2619dc"
+    },
+    {
+      "bytes": 547841,
+      "path": "micro-performance-rss-measured.png",
+      "sha256": "f2d1f0e5b26a3163a145c59b7fd6d9c388888756ec718c495e6415ae4a432b69"
+    },
+    {
+      "bytes": 124114,
+      "path": "macro-performance-rss-simulated.svg",
+      "sha256": "4df91ef54608b2a2d156f5b21dd5245673ed2dd2903bb8b0d8c7d527e6696805"
+    },
+    {
+      "bytes": 53877,
+      "path": "macro-performance-rss-simulated.pdf",
+      "sha256": "bd1c0263d642e0754d8c0ef537ac0ec23683f1c70180397eca52201de16f7530"
+    },
+    {
+      "bytes": 651291,
+      "path": "macro-performance-rss-simulated.png",
+      "sha256": "773931bf9578bcaa1cc606a5fb26e6fab296ad6b99717f952035134a889362f2"
+    }
+  ],
+  "figure_groups": [
+    "micro-performance-rss-measured",
+    "macro-performance-rss-simulated"
+  ],
+  "generator": {
+    "bytes": 24650,
+    "path": "evaluation/scripts/plot_allocator_overview.py",
+    "sha256": "67dcfc6b5f61b3c47d75f5520d16e1979c2b80c5a2ce5a3f738b4f50db937ef2"
+  },
+  "input_evidence": {
+    "common_robust_case_count": 236,
+    "common_selection_sha256": "e9e0591d546da26c4ff8da042d0cba10d04e715a7b1f9a568008c34de98c9586",
+    "main_campaign": {
+      "artifacts": {
+        "campaign-config.json": {
+          "bytes": 22492,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-config.json",
+          "sha256": "40762509ec0fb840bc732d183302c0ae323ba22d1893a17fa23c828cb4708d0a"
+        },
+        "campaign-selection.json": {
+          "bytes": 808,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-selection.json",
+          "sha256": "83b1f1cfc52beaf068c69bbb80911ec0156ecddb6cd93435dbe2349fe560ad19"
+        },
+        "campaign-state.json": {
+          "bytes": 404,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/campaign-state.json",
+          "sha256": "2adf447e223e0d2c8edbb7520fa85e089ac03ea87ed4653d9ffddeec57d1cd5d"
+        },
+        "provenance.json": {
+          "bytes": 29985,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/provenance.json",
+          "sha256": "9cadda6430a67e07be0ffc60ae0fd4b4ec12ba0d67bbeaea0294b98716590bac"
+        },
+        "records.jsonl": {
+          "bytes": 30779417,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/records.jsonl",
+          "sha256": "ead82ca48e902b09465ef692ff5b64fc4d8afaa50e0b8a8591db9b54e299a29e"
+        },
+        "summary.json": {
+          "bytes": 1564811,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/summary.json",
+          "sha256": "1c03a6332aa8427c6ece24a30936f7fd3bda0b5e76edf9a65aa7cc77f0ac232e"
+        }
+      },
+      "robust_case_count": 237,
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1",
+      "variant_ids": [
+        "unialloc",
+        "jemalloc",
+        "mimalloc",
+        "mimalloc_no_thp",
+        "google_tcmalloc"
+      ]
+    },
+    "supplemental_campaign": {
+      "artifacts": {
+        "campaign-config.json": {
+          "bytes": 22319,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-config.json",
+          "sha256": "a673f93fd2481ea5851f110a59106d0bf08587068454ef4a03c7724b22dbb17d"
+        },
+        "campaign-selection.json": {
+          "bytes": 630,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-selection.json",
+          "sha256": "7d1fc4e84a7c925865fa9c72b18cde67ed109fc06e9e30a7c612d0c2befe3726"
+        },
+        "campaign-state.json": {
+          "bytes": 404,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-state.json",
+          "sha256": "04ed09059ca7b0b480d1045caa3e5d77b0236fe6d0e3c9d51a8d595d59d86bb0"
+        },
+        "provenance.json": {
+          "bytes": 26252,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/provenance.json",
+          "sha256": "181e2a4e56cdedbfccd1250ceb09332919ea0aa606b90722947f113412981b2c"
+        },
+        "records.jsonl": {
+          "bytes": 22183406,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/records.jsonl",
+          "sha256": "d7ff9b9f3f38793d84aaa816bb2697cdf35deeed198964ce39b218ec45759790"
+        },
+        "summary.json": {
+          "bytes": 1259268,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/summary.json",
+          "sha256": "a286873e8d6375d0461330b73c899765ed3ef6e70be327227b8706c895094978"
+        }
+      },
+      "robust_case_count": 238,
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-extra-allocators-ce8af7b-v1",
+      "variant_ids": [
+        "unialloc",
+        "ptmalloc",
+        "snmalloc",
+        "scudo"
+      ]
+    },
+    "type_isolation_campaign": {
+      "comparison_family": "end_to_end",
+      "presentation_data": {
+        "bytes": 6060492,
+        "path": "/home/hanqing/alloc/UniAlloc/docs/figures/allocator-evaluation-20260716/presentation-data.json",
+        "sha256": "bfea6ef81c98a724175c7528524c8c7f141e1cacc42107b55ffa431ca6727338"
+      },
+      "reference_variant_id": "unialloc",
+      "source_artifact": {
+        "bytes": 4123119,
+        "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-feature-ce8af7b-v8-final/derived/primary-ce8af7b-v8/absolute-process-index.jsonl",
+        "sha256": "734c3089e3b2f5193e81acc1e1881790150eda979fbe0193bf851b9b00d2275c"
+      },
+      "subject_variant_id": "typeiso_perf"
+    },
+    "unialloc_cross_session_performance_anchor_ratio": 1.0023744457302985,
+    "unialloc_cross_session_rss_anchor_ratio": 1.0
+  },
+  "legacy_tcmalloc_included": false,
+  "schema_version": 1
+}
