@@ -1,14 +1,14 @@
 {
   "artifacts": [
     {
-      "bytes": 2388469,
+      "bytes": 2388468,
       "path": "normalized-observations.csv",
-      "sha256": "79b42ebb337803de1755f7551469cf01ae4ffa914d8ad24a92c86e57bfcc55df"
+      "sha256": "2cbf01d57eee3f772f1c8fb664fc02b24495c5644c2be17055878e7e325dd6df"
     },
     {
-      "bytes": 6058882,
+      "bytes": 6060492,
       "path": "presentation-data.json",
-      "sha256": "64052d08b97ffaf5089884f897cafc74dd7a3d7cad891470f696efc76c4cafec"
+      "sha256": "bfea6ef81c98a724175c7528524c8c7f141e1cacc42107b55ffa431ca6727338"
     },
     {
       "bytes": 74715,
@@ -26,19 +26,19 @@
       "sha256": "a541bd9d7bb43e7331996d9752ed064c4c94bca5ed8984c0d98070f91f8ee439"
     },
     {
-      "bytes": 85405,
+      "bytes": 88621,
       "path": "allocator-baselines-peak-rss.svg",
-      "sha256": "846c6abc162d01b7debd9932719fbf5583948824babe58ffa195e5897d110691"
+      "sha256": "62283bb863b33e783d3b48a7d4bb26ffe0f75f243921d9339c1c7a4f5113dbbd"
     },
     {
-      "bytes": 31198,
+      "bytes": 30434,
       "path": "allocator-baselines-peak-rss.pdf",
-      "sha256": "07248218cc4774025d4df024e9dca50b4a1282ba4472bcf1bcd3e64757a1b7c8"
+      "sha256": "461087082ffe0c2c7f96f65d6149b1dd5a2911eb5ddf3467d31443fe5147545f"
     },
     {
-      "bytes": 385749,
+      "bytes": 411643,
       "path": "allocator-baselines-peak-rss.png",
-      "sha256": "d210370c712a4952be6fa2cc342f2e91be9f1d1c4169b86259cdebeeb4fffce9"
+      "sha256": "a8044a798b22bc304d7aa1742de69d8f94f691c64b16b31fe7dc41bb1164e598"
     },
     {
       "bytes": 64571,
@@ -56,19 +56,19 @@
       "sha256": "e82e72700977ead05d031a84b7983f388e14b1edb87d013481e05d1ced00bb09"
     },
     {
-      "bytes": 73271,
+      "bytes": 76364,
       "path": "unialloc-features-peak-rss.svg",
-      "sha256": "47800affde84a8b97ea58ba630a056a67251877f56c473461fae9263d129e880"
+      "sha256": "917c69bb0c6f8514230f30b27b03683ee3530448b661898a44af49f59012e5f5"
     },
     {
-      "bytes": 25259,
+      "bytes": 25699,
       "path": "unialloc-features-peak-rss.pdf",
-      "sha256": "9f4a68a0cfa2e703d268908721a90d854048205946a040bbf2283c41d248335f"
+      "sha256": "8330eeb2674b488694697dfc8289ce6471e82ea6f92ddbd997214be74e1fcd3e"
     },
     {
-      "bytes": 345557,
+      "bytes": 364920,
       "path": "unialloc-features-peak-rss.png",
-      "sha256": "e887a83e0b3235a97eeb3cec2d08e842c9422ddeed19d014f26471312f58215d"
+      "sha256": "46ec7d0ca71dc6dbdcbb41edd3ccee07d35ac97991b02baa3f901dcb705ca393"
     }
   ],
   "figure_groups": [
@@ -2885,6 +2885,14 @@
       "target_count": 7,
       "workload_count": 34
     },
+    "macro_rss_eligibility_view": {
+      "diagnostic_harness_count": 23,
+      "fixed_work_harness_count": 11,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/config/macro_rss_eligibility_view_v1_ce8af7b.json",
+      "payload_sha256": "decc6dddcc58d4699b03d217e5b59ed0641963e1979ba02f030ae4caaee158d3",
+      "sha256": "d7f963c71f5aad3a1c54cd75c5334c1149042022babcc8cba39822d5d65a971d",
+      "view_id": "macro-rss-eligibility-v1-ce8af7b"
+    },
     "micro_baseline": {
       "benchmark_count": 468,
       "campaign-config_json_sha256": "40762509ec0fb840bc732d183302c0ae323ba22d1893a17fa23c828cb4708d0a",
@@ -2939,6 +2947,6 @@
     }
   },
   "png_dpi": 300,
-  "schema_version": 2,
+  "schema_version": 3,
   "suite_id": "type-isolation-primary-v6-ce8af7b"
 }

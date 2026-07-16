@@ -26,10 +26,13 @@ applies an independent estimator to each population.
 | Implementation SHA-256 | `9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178` |
 | Suite manifest | `evaluation/config/type_isolation_primary_suite_v6_ce8af7b.json` |
 | Suite manifest SHA-256 | `688b65afa2bf61f20c44192faf96afd6f4205e386ca2aea502dc101b7cd4484d` |
+| Macro RSS eligibility view | `evaluation/config/macro_rss_eligibility_view_v1_ce8af7b.json` |
+| Macro RSS view SHA-256 | `d7f963c71f5aad3a1c54cd75c5334c1149042022babcc8cba39822d5d65a971d` |
 
 An input may contribute to the current figures only when its source revision,
 implementation digest, suite digest, runner protocol, variant contract, and
-workload contract match this frozen identity. The exporter fails closed on a
+workload contract match this frozen identity. Macro RSS also requires a
+complete harness-level eligibility record. The exporter fails closed on a
 missing or mismatched binding.
 
 ## Comparison and aggregation contract
@@ -118,6 +121,8 @@ The current raw roots are:
   `evaluation/raw/std-bench-feature-ce8af7b-v8-final`
 - Allocator baselines:
   `evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1`
+- Supplemental allocator diagnostics:
+  `evaluation/raw/std-bench-extra-allocators-ce8af7b-v1`
 
 The feature matrix has 5,616 possible process slots
 (`468 cases x 3 variants x (1 warm-up + 3 measured)`). It records 5,605
@@ -128,6 +133,12 @@ It records 9,345 terminal processes: 467 cases are complete across all five
 variants, 237 pass the robustness gate, and five cells are timeout-censored.
 Timeout-censored cases retain terminal records and are excluded symmetrically
 from all selected variants.
+
+The supplemental ptmalloc, snmalloc, and Scudo matrix has 7,488 possible
+process slots (`468 cases x 4 variants x (1 warm-up + 3 measured)`). It records
+7,473 terminal processes, 466 cases complete across all four variants, 238
+robust cases, and five timeout-censored cells. Every ratio uses the matched
+UniAlloc anchor from the same campaign.
 
 ### Current Micro performance result
 
@@ -146,6 +157,22 @@ increase. The matched compiler route accounts for `0.70%`; the incremental
 isolation policy is `0.29%` faster within this population. These are
 hierarchical aggregates over the robustness-gated common-complete cases.
 
+The additional current-revision Micro campaign reports:
+
+| Supplemental comparison | Execution-cost ratio |
+|---|---:|
+| ptmalloc / UniAlloc | `1.0073x` |
+| snmalloc / UniAlloc | `0.9970x` |
+| Scudo / UniAlloc | `1.0321x` |
+
+These ratios use the same presentation estimator as the main Micro figures:
+the median log-ratio within each family followed by an unweighted geometric
+mean across the eight families. The compact evidence artifact is
+`benchmark-results/std-bench-extra-allocators-ce8af7b.json` (SHA-256
+`7c4f08e1169f1cd2fcb8ba2855cc8951768d0b59561f98b1981087cd192184a8`).
+This campaign is Micro-only supplemental evidence, so these three allocators
+remain outside the paired Micro/Macro main figure.
+
 ### Micro RSS boundary
 
 GNU `time` records peak RSS for each fresh process. The libtest benchmark
@@ -158,8 +185,22 @@ The Micro RSS geometric means are diagnostic. Google TCMalloc reports
 `3.0198x` the default UniAlloc process peak RSS in this adaptive libtest
 population. jemalloc, both mimalloc configurations, and all three Type
 Isolation comparison families round to `1.0000x` at the process-observed
-resolution. Historical Micro values remain archival evidence under their
-original implementation identities.
+resolution.
+
+A five-run inventory-only startup probe executes no benchmark case. Default
+UniAlloc reports a `3,072 KiB` median, while modern Google TCMalloc reports a
+`9,216 KiB` median and a `9,216--10,240 KiB` range. The median startup delta is
+`6,144 KiB`, and the corresponding startup ratio is `3.0000x`. This probe
+shows that allocator startup residency dominates the formal `3.0198x` Micro
+RSS diagnostic; benchmark heap-growth attribution remains unavailable. The
+probe is stored in
+`benchmark-results/allocator-startup-rss-diagnostic-ce8af7b.json` (SHA-256
+`ba08ba3d1fff3f630f8fd7f20def8797027eeb26e1dd1654007f20368835e49d`).
+
+The supplemental ptmalloc, snmalloc, and Scudo Micro RSS diagnostics are
+`1.0000x`, `1.3710x`, and `1.0000x`, respectively. They retain the same
+startup-inclusive, adaptive-work boundary. Historical Micro values remain
+archival evidence under their original implementation identities.
 
 ## Macrobenchmark protocol
 
@@ -169,7 +210,7 @@ workloads:
 | Target | Pinned source | Workloads | RSS classification |
 |---|---|---:|---|
 | Collections | Rust `1.97.0`, `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3` | 5 | Process-observed diagnostic |
-| Oxipng | `v10.1.1`, `628e241e23f368097883807fa6e985ccf7c00357` | 5 | Fixed work |
+| Oxipng | `v10.1.1`, `628e241e23f368097883807fa6e985ccf7c00357` | 5 | 2 fixed-work CLI; 3 diagnostic libtest |
 | redb | `v4.1.0`, `6ed1f981ba4deab0b2adbdd7bccb46ec409b2191` | 4 | Fixed work |
 | Polars | `py-1.42.1`, `0df0c25d4db895ec8cad773bedc4e98400e3135e` | 5 | Fixed work |
 | SWC | `v1.15.43`, `73f0f386da64fe432975183f9ccf28429b52638a` | 5 | Process-observed diagnostic |
@@ -182,6 +223,12 @@ Type Isolation matrix contains all 408 raw records
 contains all 1,088 planned pairwise cells: each of four external subjects has
 its own matched UniAlloc anchor, and every pair contains four rounds.
 
+The bound RSS eligibility view enumerates every `(target, harness)` pair
+exactly once. Eleven harnesses are fixed-work eligible: two Oxipng CLI jobs,
+four redb jobs, and five Polars jobs. The other 23 harnesses remain diagnostic.
+Rust libtest, Criterion, and any unrecognized performance source require an
+explicit equal-work override before fixed-work promotion.
+
 ### Current Type Isolation result
 
 The assembled result is
@@ -191,9 +238,9 @@ Its status is `complete_with_attribution_limits`.
 
 | Comparison | Execution cost, all workloads | Execution cost, route-equivalent workloads | Fixed-work peak RSS |
 |---|---:|---:|---:|
-| Compiler route | `1.0358x` | `1.0319x` | `0.9970x` |
-| Isolation policy | `1.2993x` | `1.3005x` | `1.0436x` |
-| End to end | `1.3509x` | `1.3476x` | `1.0405x` |
+| Compiler route | `1.0358x` | `1.0319x` | `1.0000x` |
+| Isolation policy | `1.2993x` | `1.3005x` | `1.0143x` |
+| End to end | `1.3509x` | `1.3476x` | `1.0143x` |
 
 The compiler-route equivalence gate accepts ratios in `[0.85x, 1.15x]`.
 Thirty-three of 34 workloads pass. RustPython `parse_mandelbrot` reports
@@ -201,10 +248,20 @@ Thirty-three of 34 workloads pass. RustPython `parse_mandelbrot` reports
 end-to-end execution-cost geometric mean is `2.8737x`; it remains visible in
 the target-level data and figures.
 
-Fixed-work RSS aggregates cover Oxipng, redb, and Polars: 14 workloads across
-three targets. Peak RSS for Collections, SWC, RustPython, and Actix Web is
-retained as process-observed diagnostic data and excluded from the headline
-fixed-work aggregate.
+Fixed-work RSS aggregates cover 11 workloads across Oxipng, redb, and Polars.
+The end-to-end target ratios are `1.0216x`, `1.0122x`, and `1.0092x`,
+respectively. Peak RSS for Collections, SWC, RustPython, Actix Web, and the
+three adaptive Oxipng libtest workloads is retained as process-observed
+diagnostic data and excluded from the headline fixed-work aggregate.
+
+The modest fixed-work increase matches the bounded implementation. Type
+Isolation reuses only exact identity-and-layout matches, caches objects up to
+64 KiB, caps the plain cache at 128 KiB per slot and 512 KiB per active thread,
+and caps the hosted L2 depot at eight 64 KiB shards. Capacity overflow returns
+to the ordinary allocator path. The fixed-work target summaries move from
+`49.90` to `50.98 MiB` for Oxipng, `43.01` to `43.53 MiB` for redb, and
+`157.26` to `158.72 MiB` for Polars. These values are process peaks; allocator-
+specific cache occupancy at the peak remains outside the current measurement.
 
 ### Current allocator-baseline evidence
 
@@ -227,10 +284,10 @@ The current Macro allocator aggregates are:
 
 | Allocator subject | Execution-cost ratio | Peak RSS ratio |
 |---|---:|---:|
-| Google TCMalloc | `0.9881x` | `1.3595x` |
-| jemalloc | `0.9521x` | `1.0661x` |
-| mimalloc | `0.8125x` | `1.5327x` |
-| mimalloc with THP disabled | `0.8975x` | `1.0497x` |
+| Google TCMalloc | `0.9881x` | `1.1514x` |
+| jemalloc | `0.9521x` | `1.0556x` |
+| mimalloc | `0.8125x` | `1.3781x` |
+| mimalloc with THP disabled | `0.8975x` | `1.0997x` |
 
 ## Incremental evidence storage
 
@@ -247,10 +304,13 @@ without rerunning compatible cells.
 3. **Selection plan:** an immutable manifest enumerates the exact relative raw
    paths admitted for one comparison. Variant and target changes create a new
    plan while preserving raw data.
-4. **Derived view:** `cells.jsonl`, summaries, normalized CSV, and figures are
+4. **Eligibility view:** the versioned Macro RSS view classifies every harness
+   as fixed work or diagnostic without mutating raw records. Its suite,
+   implementation, payload, and file digests are publication inputs.
+5. **Derived view:** `cells.jsonl`, summaries, normalized CSV, and figures are
    regenerated from the selected paths. `latest-selection.json` is a small
    mutable pointer to the chosen immutable plan.
-5. **Compatibility boundary:** a source, implementation, suite, runner,
+6. **Compatibility boundary:** a source, implementation, suite, runner,
    workload, input, build, or environment change creates a new campaign epoch.
    Invalidated epochs are retained with an invalidation manifest and excluded
    from publication.
@@ -279,9 +339,11 @@ digests; plots use display clipping only, while CSV and JSON retain uncapped
 ratios.
 
 The final bundle contains 15 files. `artifact-manifest.json` has SHA-256
-`83282752e13ddd3742dee6e450ea3c9371cdb438e0859525c0e9b55973ba12be`; `presentation-data.json` has SHA-256
-`64052d08b97ffaf5089884f897cafc74dd7a3d7cad891470f696efc76c4cafec`; and `normalized-observations.csv` has SHA-256
-`79b42ebb337803de1755f7551469cf01ae4ffa914d8ad24a92c86e57bfcc55df`.
+`8d40f21e96b69454d99e2ab0390d6c831d08f1ac7890fdfddb66a0677cec37db`;
+`presentation-data.json` has SHA-256
+`bfea6ef81c98a724175c7528524c8c7f141e1cacc42107b55ffa431ca6727338`;
+and `normalized-observations.csv` has SHA-256
+`2cbf01d57eee3f772f1c8fb664fc02b24495c5644c2be17055878e7e325dd6df`.
 
 ## Reproduction
 
@@ -291,6 +353,7 @@ accounting:
 ```bash
 uv run evaluation/scripts/plot_current_allocator_evaluation.py \
   --suite evaluation/config/type_isolation_primary_suite_v6_ce8af7b.json \
+  --rss-view evaluation/config/macro_rss_eligibility_view_v1_ce8af7b.json \
   --micro-feature evaluation/raw/std-bench-feature-ce8af7b-v8-final \
   --micro-baseline evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1 \
   --macro-feature benchmark-results/type-isolation-primary-v6-ce8af7b.json \

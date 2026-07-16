@@ -6,7 +6,7 @@
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
-> Current allocator figure boundary: use the four title-free figures in `docs/figures/allocator-evaluation-20260716/`. They are bound to frozen revision `ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503` and separate allocator baselines from Type Isolation ablations, execution cost from peak RSS, and the 468-case Rust `std_bench` population from 34 workloads across seven real-world Rust targets. Type Isolation end-to-end execution cost is `1.0035x` in Micro and `1.3509x` in Macro; fixed-work Macro peak RSS is `1.0405x`. Micro RSS remains diagnostic.
+> Current allocator figure boundary: use the four title-free figures in `docs/figures/allocator-evaluation-20260716/`. They are bound to frozen revision `ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503` and separate allocator baselines from Type Isolation ablations, execution cost from peak RSS, and the 468-case Rust `std_bench` population from 34 workloads across seven real-world Rust targets. Type Isolation end-to-end execution cost is `1.0035x` in Micro and `1.3509x` in Macro; fixed-work Macro peak RSS is `1.0143x` across 11 harnesses. Micro RSS remains diagnostic.
 >
 > Current lifetime/THP backup: physical slide 32 in `docs/UniAlloc-Qualifier-Core-Deck.pptx` is labeled B13 and uses the PNG companion of the editable `docs/figures/lifetime-resident-index-20260715/mixed-filler-fastpath-evidence-slide.svg`. It is a current source-bound diagnostic with `performance_claim_eligible=false` and `presentation_claim_eligible=false`; keep the boundary footer visible.
 
@@ -383,21 +383,34 @@ the 100 ns/iteration timer floor. The feature matrix has 467 common-complete
 cases and 238 robust cases. Type Isolation end to end is `1.0035x` in Micro;
 the compiler route is `1.0070x` and the incremental isolation policy is
 `0.9971x`. Peak RSS from libtest is a process-observed adaptive-work diagnostic
-and uses hollow marks.
+and uses hollow marks. Modern Google TCMalloc's `3.0198x` Micro RSS value is
+startup dominated: an inventory-only probe measures `3,072 KiB` for UniAlloc
+and a `9,216 KiB` median for Google TCMalloc while executing no benchmark case.
 
 The Macro population contains 34 workloads across Collections, Oxipng, redb,
 Polars, SWC, RustPython, and Actix Web. It takes the median of three same-round
 ratios per workload, a geometric mean within each target, and a geometric mean
 across target summaries. Type Isolation end to end is `1.3509x`; the compiler
 route is `1.0358x` and the incremental isolation policy is `1.2993x`.
-Fixed-work peak RSS is `1.0405x` end to end across Oxipng, redb, and Polars.
+Fixed-work peak RSS is `1.0143x` end to end across 11 harnesses: two Oxipng CLI
+jobs, four redb jobs, and five Polars jobs. Three adaptive Oxipng libtest
+harnesses remain diagnostic.
 The SWC end-to-end execution-cost ratio is `2.8737x` and remains visible.
 RustPython `parse_mandelbrot` retains an explicit compiler-route attribution
 limit.
 
 Use this safe wording in the main talk:
 
-> **On the complete Rust Micro population, Type Isolation adds `0.35%` execution cost. Across seven real-world targets, the observed end-to-end cost is `35.09%`, with SWC identifying the principal optimization target. Fixed-work Macro peak RSS increases `4.05%`.**
+> **On the complete Rust Micro population, Type Isolation adds `0.35%` execution cost. Across seven real-world targets, the observed end-to-end cost is `35.09%`, with SWC identifying the principal optimization target. Fixed-work Macro peak RSS increases `1.43%` across 11 equal-work harnesses.**
+
+Keep the supplemental current-revision allocator campaign in backup. On the
+same 238-case robust Micro hierarchy, ptmalloc is `1.0073x`, snmalloc is
+`0.9970x`, and Scudo is `1.0321x` execution cost relative to UniAlloc. Their
+startup-inclusive peak-RSS diagnostics are `1.0000x`, `1.3710x`, and
+`1.0000x`. The compact source-bound record is
+`benchmark-results/std-bench-extra-allocators-ce8af7b.json`. This campaign
+contains Micro cells only, so the four canonical main figures retain their
+complete paired variants.
 
 Use the performance figures in the main evaluation sequence and the RSS figures
 on the adjacent slide or immediate backup. Keep the frozen revision, estimator,

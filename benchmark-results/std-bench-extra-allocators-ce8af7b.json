@@ -1,0 +1,282 @@
+{
+  "aggregation_contract": {
+    "case_estimate": "Median of three measured processes for each allocator and benchmark case.",
+    "case_ratio": "Subject case median divided by the UniAlloc case median.",
+    "family_estimate": "Back-transformed median of benchmark-case log ratios within each family.",
+    "peak_rss": "Use the identical performance-selected robust cases and hierarchy; diagnostic only.",
+    "population_estimate": "Unweighted geometric mean of the eight family estimates.",
+    "selection": "Use only cases completed for every selected allocator whose minimum three-round performance median across all allocators is at least 100 ns/iter."
+  },
+  "completion": {
+    "all_warmups_attempted": true,
+    "allocator_cells": 1872,
+    "canonical_benchmark_cases": 468,
+    "censored_cell_identities": [
+      {
+        "allocator": "unialloc",
+        "benchmark": "btree::map::iter_1m",
+        "phase": "warmup",
+        "round": 0
+      },
+      {
+        "allocator": "ptmalloc",
+        "benchmark": "btree::map::iter_1m",
+        "phase": "warmup",
+        "round": 0
+      },
+      {
+        "allocator": "snmalloc",
+        "benchmark": "btree::map::iter_1m",
+        "phase": "warmup",
+        "round": 0
+      },
+      {
+        "allocator": "scudo",
+        "benchmark": "btree::map::iter_1m",
+        "phase": "warmup",
+        "round": 0
+      },
+      {
+        "allocator": "scudo",
+        "benchmark": "linked_list::bench_push_back",
+        "phase": "warmup",
+        "round": 0
+      }
+    ],
+    "censored_cells": 5,
+    "common_complete_benchmark_cases": 466,
+    "complete_cells": 1867,
+    "completed_terminal_processes": 7473,
+    "maximum_process_slots": 7488,
+    "robust_benchmark_cases": 238,
+    "status": "complete_with_timeout_censoring",
+    "timeout_censored_processes": 5,
+    "unexecuted_process_slots_after_cell_censoring": 15,
+    "valid_processes": 7468
+  },
+  "evidence_class": "supplemental diagnostic",
+  "execution": {
+    "allocators": [
+      "unialloc",
+      "ptmalloc",
+      "snmalloc",
+      "scudo"
+    ],
+    "cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "jobs": 32,
+    "lane_rule": "canonical benchmark index modulo jobs",
+    "measured_rounds": 3,
+    "numa_node": 0,
+    "timeout_seconds_per_process": 30,
+    "warmups": 1
+  },
+  "generated_utc": "2026-07-16T10:56:00.368716+00:00",
+  "results": {
+    "ptmalloc": {
+      "peak_rss": {
+        "benchmark_case_ratio_median": 1.0,
+        "family_balanced_ratio_vs_unialloc": 1.0,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 1.0,
+          "btree": 1.0,
+          "linked_list": 1.0,
+          "slice": 1.0,
+          "str": 1.0,
+          "string": 1.0,
+          "vec": 1.0,
+          "vec_deque": 1.0
+        },
+        "reference_benchmark_case_median_peak_rss_kib": 3072.0,
+        "subject_benchmark_case_median_peak_rss_kib": 3072.0
+      },
+      "performance": {
+        "benchmark_case_ratio_median": 1.0048598136150946,
+        "family_balanced_ratio_vs_unialloc": 1.0073153866735074,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 0.9997844008804967,
+          "btree": 1.0007697839141056,
+          "linked_list": 1.0429057685417413,
+          "slice": 1.01028592079841,
+          "str": 1.0012781033343618,
+          "string": 0.9892418345868115,
+          "vec": 1.0247534692784792,
+          "vec_deque": 0.9906431506953186
+        }
+      }
+    },
+    "scudo": {
+      "peak_rss": {
+        "benchmark_case_ratio_median": 1.0,
+        "family_balanced_ratio_vs_unialloc": 1.0,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 1.0,
+          "btree": 1.0,
+          "linked_list": 1.0,
+          "slice": 1.0,
+          "str": 1.0,
+          "string": 1.0,
+          "vec": 1.0,
+          "vec_deque": 1.0
+        },
+        "reference_benchmark_case_median_peak_rss_kib": 3072.0,
+        "subject_benchmark_case_median_peak_rss_kib": 3072.0
+      },
+      "performance": {
+        "benchmark_case_ratio_median": 1.0279553304253173,
+        "family_balanced_ratio_vs_unialloc": 1.0320984831241236,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 0.9987200790460868,
+          "btree": 1.200753086419753,
+          "linked_list": 1.0050161232533144,
+          "slice": 1.0025778412177637,
+          "str": 1.0053211340229857,
+          "string": 1.0044045423348242,
+          "vec": 1.0538240149926374,
+          "vec_deque": 1.0013800215344022
+        }
+      }
+    },
+    "snmalloc": {
+      "peak_rss": {
+        "benchmark_case_ratio_median": 1.3333333333333333,
+        "family_balanced_ratio_vs_unialloc": 1.3710474590638528,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 1.3333333333333333,
+          "btree": 1.6666666666666667,
+          "linked_list": 1.3333333333333333,
+          "slice": 1.3333333333333333,
+          "str": 1.3333333333333333,
+          "string": 1.3333333333333333,
+          "vec": 1.3333333333333333,
+          "vec_deque": 1.3333333333333333
+        },
+        "reference_benchmark_case_median_peak_rss_kib": 3072.0,
+        "subject_benchmark_case_median_peak_rss_kib": 4096.0
+      },
+      "performance": {
+        "benchmark_case_ratio_median": 0.9986521136183557,
+        "family_balanced_ratio_vs_unialloc": 0.9969888250457493,
+        "family_log_median_ratios_vs_unialloc": {
+          "binary_heap": 1.003871713198517,
+          "btree": 1.009617385328435,
+          "linked_list": 1.0246860485119558,
+          "slice": 0.9978007923219984,
+          "str": 0.9986988692317693,
+          "string": 0.9605669302666238,
+          "vec": 0.9943386104827732,
+          "vec_deque": 0.9875432525951557
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "scope": {
+    "claim_grade": false,
+    "lower_ratio_is_better": true,
+    "population": "Microbenchmarks",
+    "reference_allocator": "unialloc",
+    "rss_boundary": "Process peak RSS includes allocator and harness startup residency. Rust libtest chooses adaptive iteration counts, so RSS is diagnostic.",
+    "status": "Micro-only supplemental allocator comparison"
+  },
+  "source_identity": {
+    "artifacts": {
+      "campaign-config.json": {
+        "bytes": 22319,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-config.json",
+        "sha256": "a673f93fd2481ea5851f110a59106d0bf08587068454ef4a03c7724b22dbb17d"
+      },
+      "campaign-selection.json": {
+        "bytes": 630,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-selection.json",
+        "sha256": "7d1fc4e84a7c925865fa9c72b18cde67ed109fc06e9e30a7c612d0c2befe3726"
+      },
+      "campaign-state.json": {
+        "bytes": 404,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/campaign-state.json",
+        "sha256": "04ed09059ca7b0b480d1045caa3e5d77b0236fe6d0e3c9d51a8d595d59d86bb0"
+      },
+      "provenance.json": {
+        "bytes": 26252,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/provenance.json",
+        "sha256": "181e2a4e56cdedbfccd1250ceb09332919ea0aa606b90722947f113412981b2c"
+      },
+      "records.jsonl": {
+        "bytes": 22183406,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/records.jsonl",
+        "sha256": "d7ff9b9f3f38793d84aaa816bb2697cdf35deeed198964ce39b218ec45759790"
+      },
+      "summary.json": {
+        "bytes": 1259268,
+        "path": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1/summary.json",
+        "sha256": "a286873e8d6375d0461330b73c899765ed3ef6e70be327227b8706c895094978"
+      }
+    },
+    "base_runner_sha256": "afd06f10fec9226ff5a571f5664f6dcfdd2d16bc95e3016fd3084081dfa7beca",
+    "benchmark_inventory_sha256": "425806701392e5032d5f7bbf8af2dba4c14e4ef6c15bb81f8a3271149f5e6695",
+    "canonical_benchmark_list_sha256": "fe59626fbf9f3d154b5c01235b156d76a56bcdc77b07e6c007d5cc989c98b98b",
+    "implementation_revision": "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503",
+    "implementation_tree": "3e15e689996320ee4d3927deab1e103f014596ea",
+    "raw_root": "evaluation/raw/std-bench-extra-allocators-ce8af7b-v1",
+    "runner_sha256": "bf0b0f5df62b789ccdfe12e56bbc7d8559a3bbf3d407ab223042d9053528e0f7",
+    "scudo_runtime_sha256": "e7859566ba641ac49674e5c51c6edf605624786a4a4a748b31b73ec0135c9d6f",
+    "source_checkout_clean": true,
+    "variant_selection_sha256": "1bcf5c7e3060845a2b051698496b56d0412b9dd936ad5881f60d00a64332debb"
+  },
+  "source_summary_cross_check": {
+    "aggregation_contract": "Geometric mean of case ratios within each family, then unweighted geometric mean across families.",
+    "allocators": {
+      "ptmalloc": {
+        "reproduced_family_balanced_geomean": 0.9885350741178802,
+        "stored_family_balanced_geomean": 0.9885350741178802,
+        "stored_family_count": 8,
+        "stored_robust_benchmark_count": 238
+      },
+      "scudo": {
+        "reproduced_family_balanced_geomean": 1.1144633382952587,
+        "stored_family_balanced_geomean": 1.1144633382952587,
+        "stored_family_count": 8,
+        "stored_robust_benchmark_count": 238
+      },
+      "snmalloc": {
+        "reproduced_family_balanced_geomean": 0.9209192037589861,
+        "stored_family_balanced_geomean": 0.9209192037589861,
+        "stored_family_count": 8,
+        "stored_robust_benchmark_count": 238
+      }
+    },
+    "purpose": "Bind and independently reproduce the runner summary. Its stored performance aggregate uses geometric means within families and therefore differs from the presentation hierarchy above."
+  }
+}

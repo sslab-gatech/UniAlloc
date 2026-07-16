@@ -1,0 +1,89 @@
+{
+  "derived": {
+    "google_tcmalloc_vs_unialloc_median_startup_rss_delta_kib": 6144,
+    "google_tcmalloc_vs_unialloc_median_startup_rss_ratio": 3.0,
+    "interpretation": "The formal 3.019820x Micro RSS diagnostic primarily measures allocator startup residency; benchmark heap-growth attribution remains unavailable."
+  },
+  "evidence_class": "diagnostic",
+  "generated_utc": "2026-07-16T10:47:36.867307+00:00",
+  "google_tcmalloc_runtime": {
+    "identity": "verified modern Google TCMalloc HPAA",
+    "ld_preload": null,
+    "library_path": "evaluation/deps/tcmalloc/lib/libunialloc_google_tcmalloc.so",
+    "library_sha256": "5f99dcf644a7e1e138439fed5d42216c5313ad28e2557f936a250643e0f42081",
+    "linkage": "direct DT_NEEDED dynamic linkage"
+  },
+  "implementation_revision": "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503",
+  "protocol": {
+    "command": "/usr/bin/time -f %M <std_bench_binary> --list --format terse",
+    "metric": "GNU time maximum resident set size in KiB",
+    "numa_or_cpu_pinning": "none; startup attribution probe only",
+    "purpose": "separate allocator startup residency from benchmark heap growth",
+    "rounds": 5,
+    "work_contract": "benchmark inventory only; no benchmark case executes"
+  },
+  "schema_version": 1,
+  "source_campaign": {
+    "raw_root": "evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1",
+    "records_sha256": "ead82ca48e902b09465ef692ff5b64fc4d8afaa50e0b8a8591db9b54e299a29e",
+    "summary_sha256": "1c03a6332aa8427c6ece24a30936f7fd3bda0b5e76edf9a65aa7cc77f0ac232e"
+  },
+  "variants": {
+    "google_tcmalloc": {
+      "binary_path": "evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/builds/google_tcmalloc/target/release/deps/std_bench-8b52899c587c8ab5",
+      "binary_sha256": "4b61b5d3bdbf8da644e965006fe25e2cbabac84fb0f1c145ec4371d3dd01e5ff",
+      "maximum_peak_rss_kib": 10240,
+      "median_peak_rss_kib": 9216,
+      "minimum_peak_rss_kib": 9216,
+      "peak_rss_kib": [
+        9216,
+        10240,
+        9216,
+        10240,
+        9216
+      ]
+    },
+    "jemalloc": {
+      "binary_path": "evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/builds/jemalloc/target/release/deps/std_bench-66c28e043fd6ab07",
+      "binary_sha256": "84357b9d576d7f75e41e9f3ab7f394bfa61fc3b18b301db0f2f06dfcdfa396dc",
+      "maximum_peak_rss_kib": 3072,
+      "median_peak_rss_kib": 3072,
+      "minimum_peak_rss_kib": 3072,
+      "peak_rss_kib": [
+        3072,
+        3072,
+        3072,
+        3072,
+        3072
+      ]
+    },
+    "mimalloc": {
+      "binary_path": "evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/builds/mimalloc/target/release/deps/std_bench-460ccca6d31f7082",
+      "binary_sha256": "b41fc1e1c32605a291551447cc708a2a77f0fb82e14467ff0b665c777f0b964b",
+      "maximum_peak_rss_kib": 3072,
+      "median_peak_rss_kib": 3072,
+      "minimum_peak_rss_kib": 3072,
+      "peak_rss_kib": [
+        3072,
+        3072,
+        3072,
+        3072,
+        3072
+      ]
+    },
+    "unialloc": {
+      "binary_path": "evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1/builds/unialloc/target/release/deps/std_bench-9742587db21b17ee",
+      "binary_sha256": "b7c669ca527fa91c61515b441f4625d1c20bf96eaeb4195d8c235cb63bb6964a",
+      "maximum_peak_rss_kib": 3072,
+      "median_peak_rss_kib": 3072,
+      "minimum_peak_rss_kib": 3072,
+      "peak_rss_kib": [
+        3072,
+        3072,
+        3072,
+        3072,
+        3072
+      ]
+    }
+  }
+}
