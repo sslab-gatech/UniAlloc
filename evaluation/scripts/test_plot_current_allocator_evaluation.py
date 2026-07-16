@@ -250,12 +250,19 @@ class Fixture:
                 ),
             },
         }
-        protocol["protocol_sha256"] = MODULE.canonical_sha256(
-            {
-                "schema_version": protocol["schema_version"],
-                "compatibility": protocol["compatibility"],
-            }
-        )
+        protocol["protocol_sha256"] = hashlib.sha256(
+            (
+                json.dumps(
+                    {
+                        "schema_version": protocol["schema_version"],
+                        "compatibility": protocol["compatibility"],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode()
+        ).hexdigest()
         write_json(root / "campaign-protocol.json", protocol)
         cohort = "fixture-cohort"
         session_id = "fixture-measurement-session"
@@ -1618,6 +1625,10 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
             svg = (output / f"{stem}.svg").read_text(encoding="utf-8")
             self.assertNotIn("<title>", svg)
             self.assertNotIn("Allocator Baselines", svg)
+            self.assertTrue(
+                all(line == line.rstrip() for line in svg.splitlines()),
+                f"{stem}.svg contains trailing whitespace",
+            )
             png = (output / f"{stem}.png").read_bytes()
             self.assertEqual(b"\x89PNG\r\n\x1a\n", png[:8])
             width, height = struct.unpack(">II", png[16:24])
@@ -1764,6 +1775,19 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         summaries = MODULE.select_summaries(rows, "feature", "micro", "rss")
         self.assertTrue(all(row["aggregate_diagnostic"] for row in summaries))
         self.assertTrue(all(not row["aggregate_eligible"] for row in summaries))
+
+    def test_file_digest_cache_tracks_stable_file_identity(self) -> None:
+        artifact = self.fixture.root / "digest-cache.bin"
+        artifact.write_bytes(b"first")
+        MODULE._FILE_SHA256_CACHE.clear()
+        first = MODULE.sha256_file(artifact)
+        self.assertEqual(1, len(MODULE._FILE_SHA256_CACHE))
+        self.assertEqual(first, MODULE.sha256_file(artifact))
+        self.assertEqual(1, len(MODULE._FILE_SHA256_CACHE))
+        artifact.write_bytes(b"later!")
+        second = MODULE.sha256_file(artifact)
+        self.assertNotEqual(first, second)
+        self.assertEqual(2, len(MODULE._FILE_SHA256_CACHE))
 
     def test_off_scale_ratio_uses_an_explicit_overflow_position(self) -> None:
         displayed, direction = MODULE._display_log_ratio(32.0, 3.0)

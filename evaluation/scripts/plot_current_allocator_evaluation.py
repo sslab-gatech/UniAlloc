@@ -144,6 +144,8 @@ CSV_FIELDS = (
     "source_artifact",
 )
 
+_FILE_SHA256_CACHE: dict[tuple[str, int, int, int, int, int], str] = {}
+
 
 class EvidenceError(RuntimeError):
     """Raised when an input cannot support a current-suite figure."""
@@ -201,15 +203,47 @@ def fail(condition: bool, message: str) -> None:
 
 
 def sha256_file(path: Path) -> str:
+    resolved = path.resolve(strict=True)
+    before = resolved.stat()
+    identity = (
+        str(resolved),
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    )
+    cached = _FILE_SHA256_CACHE.get(identity)
+    if cached is not None:
+        return cached
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with resolved.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    return digest.hexdigest()
+    after = resolved.stat()
+    fail(
+        (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        == identity[1:],
+        f"artifact changed while hashing: {resolved}",
+    )
+    value = digest.hexdigest()
+    _FILE_SHA256_CACHE[identity] = value
+    return value
 
 
 def canonical_sha256(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def newline_canonical_sha256(value: Any) -> str:
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -914,7 +948,7 @@ def read_micro_feature(
         isinstance(provenance, dict) and provenance,
         "micro feature provenance is missing",
     )
-    protocol_digest = canonical_sha256(
+    protocol_digest = newline_canonical_sha256(
         {
             "schema_version": protocol.get("schema_version"),
             "compatibility": compatibility,
@@ -4215,7 +4249,7 @@ def save_figure(
             markerfacecolor="#4C78A8",
             markeredgecolor="#4C78A8",
             markersize=9,
-            label="Family or target",
+            label="Family median / target geometric mean",
         ),
         Line2D(
             [0],
@@ -4225,7 +4259,7 @@ def save_figure(
             markerfacecolor="#111111",
             markeredgecolor="#111111",
             markersize=9,
-            label="Equal-weight aggregate",
+            label="Overall geometric mean",
         ),
     ]
     if metric == "rss":
@@ -4239,7 +4273,7 @@ def save_figure(
                     markerfacecolor="white",
                     markeredgecolor="#4C78A8",
                     markersize=9,
-                    label="Diagnostic aggregate",
+                    label="Diagnostic geometric mean",
                 ),
                 Line2D(
                     [0],
@@ -4249,7 +4283,7 @@ def save_figure(
                     markerfacecolor="white",
                     markeredgecolor="#4C78A8",
                     markersize=9,
-                    label="Diagnostic detail",
+                    label="Diagnostic family / target",
                 ),
             ]
         )
@@ -4269,7 +4303,7 @@ def save_figure(
     figure.legend(
         handles=legend,
         loc="lower center",
-        ncol=len(legend),
+        ncol=min(2, len(legend)),
         frameon=False,
         fontsize=17,
         bbox_to_anchor=(0.5, 0.005),
@@ -4299,6 +4333,14 @@ def save_figure(
             )
         else:
             figure.savefig(destination, facecolor="white", metadata=metadata)
+            destination.write_text(
+                "\n".join(
+                    line.rstrip()
+                    for line in destination.read_text(encoding="utf-8").splitlines()
+                )
+                + "\n",
+                encoding="utf-8",
+            )
         outputs.append(destination)
     plt.close(figure)
     return outputs
@@ -4344,18 +4386,23 @@ def export(
     output: Path,
 ) -> Path:
     suite = read_suite(suite_path)
-    micro_feature_rows, micro_feature_identity = read_micro_feature(
-        micro_feature_path, suite
-    )
-    micro_baseline_rows, micro_baseline_identity = read_micro_baseline(
-        micro_baseline_path, suite
-    )
-    macro_feature_rows, macro_feature_identity = read_macro_feature(
-        macro_feature_path, suite
-    )
-    macro_baseline_rows, macro_baseline_identity = read_macro_baseline(
-        macro_baseline_path, suite
-    )
+    original_immutable_sha256_file = immutable_evidence.sha256_file
+    immutable_evidence.sha256_file = sha256_file
+    try:
+        micro_feature_rows, micro_feature_identity = read_micro_feature(
+            micro_feature_path, suite
+        )
+        micro_baseline_rows, micro_baseline_identity = read_micro_baseline(
+            micro_baseline_path, suite
+        )
+        macro_feature_rows, macro_feature_identity = read_macro_feature(
+            macro_feature_path, suite
+        )
+        macro_baseline_rows, macro_baseline_identity = read_macro_baseline(
+            macro_baseline_path, suite
+        )
+    finally:
+        immutable_evidence.sha256_file = original_immutable_sha256_file
     rows = sorted(
         [
             *micro_baseline_rows,
