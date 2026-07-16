@@ -19,7 +19,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "evaluation" / "scripts" / "polars_swc_rustpython_primary_campaign.py"
 CURRENT_SUITE = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v2_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v3_ce8af7b.json"
 )
 SPEC = importlib.util.spec_from_file_location("primary_campaign", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -145,11 +145,11 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual(CURRENT_SUITE.resolve(), primary.suite)
         self.assertEqual(
             ROOT
-            / "evaluation/raw/type-isolation-primary-v2-ce8af7b/campaigns/polars-swc-rustpython",
+            / "evaluation/raw/type-isolation-primary-v3-ce8af7b/campaigns/polars-swc-rustpython",
             primary.raw_dir,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v2-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v3-ce8af7b/targets",
             primary.publication_dir,
         )
 
@@ -675,6 +675,75 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         patched = campaign.allocator_source().lstrip() + "\n" + body
         self.assertNotIn("extern crate swc_malloc", patched)
         self.assertIn("UNIALLOC_PRIMARY_ALLOCATOR", patched)
+
+    def test_swc_prepare_records_exact_num_cpus_compatibility_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            checkout = root / "checkout"
+            (checkout / "crates/hstr").mkdir(parents=True)
+            (checkout / "crates/swc/benches").mkdir(parents=True)
+            (checkout / "Cargo.toml").write_text(
+                "[workspace.dependencies]\n"
+                + campaign.SWC_NUM_CPUS_UPSTREAM_LINE
+                + "\n",
+                encoding="utf-8",
+            )
+            (checkout / "crates/hstr/Cargo.toml").write_text(
+                "[dev-dependencies]\n"
+                + campaign.SWC_HSTR_NUM_CPUS_LINE
+                + "\n",
+                encoding="utf-8",
+            )
+            upstream_lock = (
+                "version = 4\n\n[[package]]\nname = \"num_cpus\"\n"
+                f'version = "{campaign.SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}"\n'
+            )
+            (checkout / "Cargo.lock").write_text(upstream_lock, encoding="utf-8")
+            (checkout / "crates/swc/benches/typescript.rs").write_text(
+                "extern crate swc_malloc;\nfn main() {}\n", encoding="utf-8"
+            )
+
+            worktree = root / "worktree"
+            prepared = campaign.prepare_worktree(
+                campaign.TARGET_SPECS["swc"], checkout, worktree, root / "raw"
+            )
+
+            self.assertIn(
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_LINE,
+                (worktree / "Cargo.toml").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "+num_cpus                  = \"=1.13.0\"",
+                pathlib.Path(prepared["patch"]).read_text(encoding="utf-8"),
+            )
+            self.assertEqual(1, len(prepared["compatibility_patches"]))
+            provenance = prepared["compatibility_patches"][0]
+            self.assertEqual(
+                campaign.sha256_bytes(upstream_lock.encode()),
+                provenance["cargo_lock_before_sha256"],
+            )
+            self.assertNotEqual(
+                provenance["manifest_before_sha256"],
+                provenance["manifest_after_sha256"],
+            )
+            self.assertIn(campaign.SWC_NUM_CPUS_UPSTREAM_LINE, (checkout / "Cargo.toml").read_text(encoding="utf-8"))
+
+            resolved_lock = upstream_lock.replace(
+                campaign.SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION,
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_VERSION,
+            )
+            (worktree / "Cargo.lock").write_text(resolved_lock, encoding="utf-8")
+            resolution = campaign.resolve_swc_num_cpus_compatibility(
+                prepared, worktree / "Cargo.lock"
+            )
+            self.assertEqual(
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_VERSION,
+                resolution[0]["cargo_lock_after_num_cpus_version"],
+            )
+            self.assertEqual(
+                campaign.sha256_bytes(resolved_lock.encode()),
+                resolution[0]["cargo_lock_after_sha256"],
+            )
 
     def test_force_load_wrapper_exposes_dependency_path_to_every_crate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

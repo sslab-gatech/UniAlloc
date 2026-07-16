@@ -19,7 +19,7 @@ from evaluation.scripts import immutable_evidence
 
 ROOT = Path(__file__).resolve().parents[2]
 CURRENT_SUITE_PATH = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v2_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v3_ce8af7b.json"
 )
 HISTORICAL_V1_SHA256 = (
     "ba386a779e45e0884e02cf8825c69985d1b5cf68d57366af78e7f77cfa8f6ccb"
@@ -95,7 +95,9 @@ class SuiteContract:
 
 def verify_protocol_files(contract: SuiteContract) -> dict[str, str]:
     raw_protocol = contract.manifest.get("protocol_files")
-    requires_protocol = contract.suite_id.startswith("type-isolation-primary-v2-")
+    requires_protocol = bool(
+        re.fullmatch(r"type-isolation-primary-v(?:[2-9]|[1-9][0-9]+)-.+", contract.suite_id)
+    )
     if raw_protocol is None and not requires_protocol:
         return {}
     if not isinstance(raw_protocol, dict):

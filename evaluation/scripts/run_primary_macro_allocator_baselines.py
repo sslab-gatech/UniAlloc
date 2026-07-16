@@ -2151,6 +2151,12 @@ def _build_psr_target(
     activation = allocator_activation_proof(binary, build_variant)
     binary_row = _binary_rows({"primary": binary})["primary"]
     lock = worktree / "Cargo.lock"
+    try:
+        compatibility_resolution = psr.resolve_swc_num_cpus_compatibility(
+            prepared, lock
+        )
+    except psr.CampaignError as error:
+        raise CampaignError(str(error)) from error
     record = {
         **_base_build_record(
             protocol=protocol,
@@ -2163,6 +2169,8 @@ def _build_psr_target(
         ),
         "worktree": str(worktree.resolve()),
         "allocator_patch": allocator_patch,
+        "compatibility_patches": prepared.get("compatibility_patches", []),
+        "compatibility_resolution": compatibility_resolution,
         "manifest_sha256": sha256_file(manifest),
         "derived_cargo_lock_sha256": sha256_file(lock),
         "dependency_audit": dependency_audit,
