@@ -352,7 +352,7 @@ fn main() {
             if isinstance(row, dict)
         }
         expected_statuses = {
-            allocation["callsite"]: "actual_semantic_scope_enter_exit_rewrite_applied",
+            allocation["callsite"]: "actual_semantic_scope_generic_type_rewrite_applied",
             shrink["callsite"]: "actual_semantic_scope_enter_exit_rewrite_applied",
             final_drop["callsite"]: "actual_semantic_scope_drop_rewrite_applied",
         }

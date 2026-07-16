@@ -413,13 +413,31 @@ pub const PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY: u16 = 1 << 14;
 /// long-lived phase boundary.
 ///
 /// The compiler/runtime ABI has always transported the complete `u16` value.
-/// These two exact values give the lifetime-aware hugepage experiment an
-/// explicit, conservative vocabulary: any other value remains unclassified.
+/// These legacy values retain their original policy semantics. Compiler-proven
+/// values use a separate range below so an opt-in runtime can distinguish exact
+/// proof from an advisory/profile class without changing existing callers.
 pub const LIFETIME_HINT_EPHEMERAL: u16 = 1;
 
 /// Prototype lifetime class for allocations expected to span multiple phases
 /// and benefit from dense placement on a long-lived hugepage arena.
 pub const LIFETIME_HINT_LONG_LIVED: u16 = 2;
+
+/// Reserved compiler fact for a locally owned allocation with a discovered
+/// Drop path. Drop topology carries no pressure-relative Short claim, so every
+/// placement classifier treats this value as `Unknown`.
+pub const LIFETIME_HINT_LOCAL_DROP_FACT: u16 = 0xA101;
+
+/// Bounded mechanism oracle for allocations whose owner is deliberately leaked
+/// or forgotten on every accepted path. This value supports controlled routing
+/// experiments; real-program Long classification comes from runtime outcomes.
+pub const LIFETIME_HINT_BOUNDED_PROCESS_LONG: u16 = 0xA102;
+
+/// Compatibility name for the reserved local-Drop fact. The value classifies
+/// as `Unknown` and must not authorize ephemeral placement.
+pub const LIFETIME_HINT_PROVEN_EPHEMERAL: u16 = LIFETIME_HINT_LOCAL_DROP_FACT;
+
+/// Compatibility name for the bounded process-long mechanism oracle.
+pub const LIFETIME_HINT_PROVEN_LONG_LIVED: u16 = LIFETIME_HINT_BOUNDED_PROCESS_LONG;
 
 /// Placement class understood by the prototype lifetime/hugepage policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -436,7 +454,22 @@ pub enum LifetimePlacementClass {
 pub const fn lifetime_placement_class(lifetime_hint: u16) -> LifetimePlacementClass {
     match lifetime_hint {
         LIFETIME_HINT_EPHEMERAL => LifetimePlacementClass::Ephemeral,
-        LIFETIME_HINT_LONG_LIVED => LifetimePlacementClass::LongLived,
+        LIFETIME_HINT_LONG_LIVED | LIFETIME_HINT_BOUNDED_PROCESS_LONG => {
+            LifetimePlacementClass::LongLived
+        }
+        _ => LifetimePlacementClass::Unknown,
+    }
+}
+
+/// Interpret only the bounded compiler mechanism oracle. Legacy/advisory hints
+/// and local-Drop facts resolve to `Unknown`; runtime ground truth supplies
+/// performance-lifetime labels for real programs.
+#[inline]
+pub const fn compiler_bounded_lifetime_placement_class(
+    lifetime_hint: u16,
+) -> LifetimePlacementClass {
+    match lifetime_hint {
+        LIFETIME_HINT_BOUNDED_PROCESS_LONG => LifetimePlacementClass::LongLived,
         _ => LifetimePlacementClass::Unknown,
     }
 }
@@ -4580,7 +4613,22 @@ fn scoped_metadata_is_active(metadata: AllocationMetadata) -> bool {
 
 #[inline]
 fn allocator_metadata_is_effective(metadata: AllocationMetadata) -> bool {
-    metadata.flags != 0 || semantic_stats_any_recording_enabled()
+    metadata.flags != 0
+        || semantic_stats_any_recording_enabled()
+        || lifetime_metadata_policy_is_effective(metadata)
+}
+
+#[inline]
+fn lifetime_metadata_policy_is_effective(metadata: AllocationMetadata) -> bool {
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    {
+        super::lifetime_hugepage::flags_zero_exact_scope_is_effective(metadata)
+    }
+    #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+    {
+        let _ = metadata;
+        false
+    }
 }
 
 #[inline]
@@ -7720,19 +7768,32 @@ pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
 pub(crate) enum ActiveAllocatorMetadata {
     Inactive,
     TransportOnly(AllocationMetadata),
+    /// A flags-zero exact compiler scope admitted solely by the active
+    /// lifetime policy. Arena storage is self-identifying, so this path avoids
+    /// recovery records and leaves allocator fallbacks on the ordinary path.
+    LifetimePolicy(AllocationMetadata),
     Policy(AllocationMetadata),
 }
 
 /// Select the allocator meaning of the current compiler scope exactly once.
 ///
-/// Flags-zero metadata proves compiler/runtime transport while deliberately
-/// suppressing both typed policy and process-wide auto metadata. Lifetime and
-/// placement hints remain visible through [`active_allocation_metadata`], but
-/// cannot independently authorize allocator behavior. Enabling aggregate or
-/// per-type statistics promotes the same metadata to `Policy` for accounting.
+/// Flags-zero metadata proves compiler/runtime transport while suppressing
+/// typed-cache policy and process-wide auto metadata. An enabled lifetime
+/// policy promotes an exact `(callsite, type)` scope to `Policy`, allowing the
+/// adaptive observer to consume its lifetime hint and record its outcome.
+/// Aggregate or per-type statistics also promote the metadata for accounting.
 #[inline]
 pub(crate) fn active_allocator_metadata() -> ActiveAllocatorMetadata {
     match active_allocation_metadata() {
+        Some(metadata)
+            if metadata.flags == 0
+                && !semantic_stats_any_recording_enabled()
+                && !cfg!(feature = "quarantine")
+                && !cfg!(feature = "reclaim_checks")
+                && lifetime_metadata_policy_is_effective(metadata) =>
+        {
+            ActiveAllocatorMetadata::LifetimePolicy(metadata)
+        }
         Some(metadata) if allocator_metadata_is_effective(metadata) => {
             // Statistics promote transport metadata for accounting. Mandatory
             // compiled policy is composed without changing its typed identity.
@@ -15799,6 +15860,18 @@ impl RustAllocator {
     }
 
     #[inline]
+    fn note_force_track_external_semantic_allocation(&self, ptr: *mut u8, layout: Layout) {
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        if !ptr.is_null() {
+            super::lifetime_hugepage::lifetime_hugepage_force_track_note_external_semantic_allocation(
+                layout.size(),
+            );
+        }
+        #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+        let _ = (ptr, layout);
+    }
+
+    #[inline]
     unsafe fn record_fast_recovery_or_global(
         &self,
         ptr: *mut u8,
@@ -16050,7 +16123,9 @@ impl RustAllocator {
             return semantic_zero_size_ptr(layout);
         }
         if layout_derived_raw_only_fast_path(metadata) {
-            return self.alloc_raw(layout);
+            let ptr = self.alloc_raw(layout);
+            self.note_force_track_external_semantic_allocation(ptr, layout);
+            return ptr;
         }
         activate_semantic_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
@@ -16062,6 +16137,7 @@ impl RustAllocator {
         }
         if guard_page_eligible(layout, metadata) {
             let ptr = alloc_guarded(layout, metadata);
+            self.note_force_track_external_semantic_allocation(ptr, layout);
             return self.finish_semantic_allocation_with_policy(
                 ptr,
                 layout,
@@ -16107,7 +16183,9 @@ impl RustAllocator {
             return semantic_zero_size_ptr(layout);
         }
         if layout_derived_raw_only_fast_path(metadata) {
-            return self.alloc_raw(layout);
+            let ptr = self.alloc_raw(layout);
+            self.note_force_track_external_semantic_allocation(ptr, layout);
+            return ptr;
         }
         activate_semantic_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
@@ -16115,6 +16193,7 @@ impl RustAllocator {
         }
         if guard_page_eligible(layout, metadata) {
             let ptr = alloc_guarded(layout, metadata);
+            self.note_force_track_external_semantic_allocation(ptr, layout);
             return self.finish_semantic_allocation_no_recovery(ptr, layout, metadata);
         }
 
