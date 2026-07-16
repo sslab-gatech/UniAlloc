@@ -17,7 +17,7 @@
 
 use super::type_isolation::{
     compiler_bounded_lifetime_placement_class, lifetime_placement_class, AllocationMetadata,
-    LifetimePlacementClass, FLAG_DELAYED_FREE,
+    LifetimePlacementClass, FLAG_DELAYED_FREE, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
 };
 use crate::pal::sys_alloc::{self, prots, HugePageMmapBacking};
 use crate::size_class::{get_size_class_tuple, SizeClass, TOTAL_SIZE_CLASS};
@@ -79,6 +79,12 @@ const ADAPTIVE_COLD_MAX_INFLIGHT: u32 = 8;
 const ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE: usize = ADAPTIVE_COLD_MAX_INFLIGHT as usize;
 const ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS: usize = ADAPTIVE_SITE_SLOTS / u64::BITS as usize;
 const ADAPTIVE_SHORT_SAMPLE_INTERVAL: u32 = 256;
+// Observation-only borrowed Vec reserve candidates target the resident buffer
+// band found in the real-workload audit. Smaller metadata objects cannot fill
+// extents efficiently; larger allocations belong to the allocator's large
+// object path. Keep this gate on the actual runtime Layout.
+const DYNAMIC_BUFFER_OBSERVE_MIN_BYTES: usize = 4 * 1024;
+const DYNAMIC_BUFFER_OBSERVE_MAX_BYTES: usize = 32 * 1024;
 // Bound the extra fullness comparison work on the allocation hot path.
 // The existing available-list search still traverses incompatible entries for
 // correctness; adaptive Long placement compares at most 32 usable candidates.
@@ -4793,11 +4799,30 @@ fn note_compiler_inferred_prelock_bypass(
     COMPILER_INFERRED_BYPASS_REQUESTED_BYTES.fetch_add(requested_bytes, Ordering::Relaxed);
 }
 
+#[inline]
+fn dynamic_buffer_observation_candidate(lifetime_hint: u16) -> bool {
+    lifetime_hint == LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE
+}
+
+#[inline]
+fn dynamic_buffer_observation_layout_admitted(layout: Layout) -> bool {
+    (DYNAMIC_BUFFER_OBSERVE_MIN_BYTES..=DYNAMIC_BUFFER_OBSERVE_MAX_BYTES).contains(&layout.size())
+}
+
 /// Try to route one exact semantic allocation into a lifetime/size arena.
 /// `None` preserves the existing allocator path.
 pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
     let observed_policy = LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire));
     if observed_policy == LifetimeHugepagePolicy::Disabled {
+        return None;
+    }
+    let dynamic_buffer_observation = dynamic_buffer_observation_candidate(metadata.lifetime_hint);
+    if dynamic_buffer_observation
+        && (!observed_policy.is_adaptive() || !dynamic_buffer_observation_layout_admitted(layout))
+    {
+        // The compiler tag requests bounded observation only. Out-of-band
+        // layouts and placement policies without runtime learning stay on the
+        // existing allocator path without taking ARENA's lock.
         return None;
     }
     let observed_compiler_inferred = matches!(
@@ -4820,6 +4845,11 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
     // backend. Pre-lock bypasses linearize at their stable policy load above.
     let policy = lifetime_hugepage_policy();
     if policy == LifetimeHugepagePolicy::Disabled {
+        return None;
+    }
+    if dynamic_buffer_observation
+        && (!policy.is_adaptive() || !dynamic_buffer_observation_layout_admitted(layout))
+    {
         return None;
     }
     let backend = lifetime_hugepage_backend();
@@ -5094,8 +5124,8 @@ pub(crate) unsafe fn try_deallocate(ptr: *mut u8) -> bool {
 mod tests {
     use super::*;
     use crate::alloc_api::type_isolation::{
-        LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
-        LIFETIME_HINT_LONG_LIVED,
+        LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
+        LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT, LIFETIME_HINT_LONG_LIVED,
     };
     use alloc::vec::Vec;
 
@@ -5120,6 +5150,10 @@ mod tests {
             LifetimePlacementClass::LongLived
         );
         assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE),
+            LifetimePlacementClass::Unknown
+        );
+        assert_eq!(
             compiler_bounded_lifetime_placement_class(LIFETIME_HINT_EPHEMERAL),
             LifetimePlacementClass::Unknown
         );
@@ -5131,6 +5165,130 @@ mod tests {
             compiler_bounded_lifetime_placement_class(LIFETIME_HINT_LOCAL_DROP_FACT),
             LifetimePlacementClass::Unknown
         );
+        assert_eq!(
+            compiler_bounded_lifetime_placement_class(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE),
+            LifetimePlacementClass::Unknown
+        );
+        assert!(dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(4 * 1024, 8).unwrap()
+        ));
+        assert!(dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(32 * 1024, 8).unwrap()
+        ));
+        assert!(!dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(4 * 1024 - 1, 8).unwrap()
+        ));
+        assert!(!dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(32 * 1024 + 1, 8).unwrap()
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dynamic_buffer_observation_stays_ordinary_until_runtime_confirms_long() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+
+        let candidate = AllocationMetadata::for_type(0xADAA_4103)
+            .with_module(0xA110_C413)
+            .with_lifetime_hint(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE);
+
+        // Compiler candidates outside the actual 4--32 KiB Layout band never
+        // enter adaptive state or acquire an arena extent.
+        let tiny = Layout::from_size_align(1024, 8).unwrap();
+        assert!(unsafe { try_allocate(tiny, candidate.with_callsite(0x51_D0)) }.is_none());
+        let after_tiny = lifetime_hugepage_stats_snapshot();
+        assert_eq!(after_tiny.adaptive_site_count, 0);
+        assert_eq!(after_tiny.current_extents, 0);
+
+        // A short-lived borrowed Vec site receives bounded observation on
+        // ordinary pages and then becomes a sampled/bypassed Short site.
+        let short_layout = Layout::from_size_align(8 * 1024, 8).unwrap();
+        let short_metadata = candidate.with_callsite(0x51_D1);
+        for _ in 0..ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            let ptr = unsafe { try_allocate(short_layout, short_metadata) }
+                .expect("unconfirmed candidate should be sampled on ordinary pages");
+            let state = ARENA.lock();
+            let base = ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::Ordinary)
+            );
+            drop(state);
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        assert!(unsafe { try_allocate(short_layout, short_metadata) }.is_none());
+
+        // An independent candidate also trains on ordinary pages. Only the
+        // allocation after eight decisive Long outcomes enters the Long lane.
+        let long_layout = Layout::from_size_align(16 * 1024, 8).unwrap();
+        let long_metadata = candidate.with_callsite(0x51_D2);
+        for _ in 0..ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            let ptr = unsafe { try_allocate(long_layout, long_metadata) }
+                .expect("unconfirmed candidate should remain observable");
+            let state = ARENA.lock();
+            let base = ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::Ordinary)
+            );
+            drop(state);
+            ARENA
+                .lock()
+                .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+
+        let confirmed_ptr = unsafe { try_allocate(long_layout, long_metadata) }
+            .expect("runtime-confirmed Long site should enter the Long lane");
+        {
+            let state = ARENA.lock();
+            let base = confirmed_ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::EpochCandidate)
+            );
+        }
+        let mut observations = [LifetimeAdaptiveSiteSnapshot::empty(); 2];
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut observations),
+            2
+        );
+        let short = observations
+            .iter()
+            .find(|row| row.callsite == 0x51_D1)
+            .unwrap();
+        let long = observations
+            .iter()
+            .find(|row| row.callsite == 0x51_D2)
+            .unwrap();
+        assert_eq!(short.latest_prediction, AdaptivePrediction::Short as u8);
+        assert_eq!(
+            short.latest_static_prior,
+            LifetimePlacementClass::Unknown as u8
+        );
+        assert_eq!(short.short_outcomes, ADAPTIVE_MIN_DECISIVE_SAMPLES as usize);
+        assert_eq!(long.latest_prediction, AdaptivePrediction::Long as u8);
+        assert_eq!(
+            long.latest_static_prior,
+            LifetimePlacementClass::Unknown as u8
+        );
+        assert_eq!(long.long_outcomes, ADAPTIVE_MIN_DECISIVE_SAMPLES as usize);
+
+        assert!(unsafe { try_deallocate(confirmed_ptr) });
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
     }
 
     #[test]
