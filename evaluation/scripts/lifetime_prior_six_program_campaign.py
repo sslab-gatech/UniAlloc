@@ -4244,6 +4244,7 @@ def run_stage_a_sample(
     command_prefix: Sequence[str] = (),
     evidence_stage: str = "stage-a",
     criterion_warm_up_seconds: float = 1.0,
+    runtime_environment_override: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     arm = ARM_BY_NAME[
         arm_name or STAGE_A_ARM_BY_BUILD_GROUP[build_group]
@@ -4270,8 +4271,13 @@ def run_stage_a_sample(
     )
     command = [*command_prefix, *command]
     artifact_dir = raw_dir / "runs" / target_id / build_group / run_label
-    runtime_cwd, runtime_environment = stage_a_runtime_context(
+    runtime_cwd, default_runtime_environment = stage_a_runtime_context(
         target_id, build, arm
+    )
+    runtime_environment = (
+        dict(runtime_environment_override)
+        if runtime_environment_override is not None
+        else default_runtime_environment
     )
     process = execute_monitored_process(
         command,

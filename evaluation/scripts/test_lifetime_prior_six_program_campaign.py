@@ -504,6 +504,38 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 arm_name="adaptive-ordinary-compiler-prior",
             )
 
+    def test_stage_b_can_supply_an_exact_runtime_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            environment = {"LANG": "C", "LC_ALL": "C", "TMPDIR": str(root)}
+            with (
+                mock.patch.object(campaign, "screening_command", return_value=["bench"]),
+                mock.patch.object(
+                    campaign,
+                    "stage_a_runtime_context",
+                    return_value=(root, {"INHERITED": "1"}),
+                ),
+                mock.patch.object(
+                    campaign,
+                    "execute_monitored_process",
+                    side_effect=RuntimeError("stop after environment capture"),
+                ) as execute,
+                self.assertRaisesRegex(RuntimeError, "environment capture"),
+            ):
+                campaign.run_stage_a_sample(
+                    "oxipng",
+                    "compiler-prior",
+                    build={"binary": str(root / "bench")},
+                    raw_dir=root / "raw",
+                    input_path=None,
+                    work_units=1,
+                    measurement_seconds=30.0,
+                    timeout=60.0,
+                    sample_interval=0.5,
+                    runtime_environment_override=environment,
+                )
+            self.assertEqual(environment, execute.call_args.kwargs["env"])
+
     def test_compiler_audit_digest_and_prior_mode_are_bound(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
