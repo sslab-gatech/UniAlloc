@@ -33,7 +33,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator, Mapping, Sequence
 
-
 SCRIPT_PATH = Path(__file__).resolve()
 ROOT = SCRIPT_PATH.parents[2]
 BASE_SCRIPT = SCRIPT_PATH.with_name("run_std_bench_allocator_variants.py")
@@ -43,7 +42,6 @@ if str(ROOT) not in sys.path:
 from evaluation.scripts import (  # noqa: E402
     type_isolation_suite_contract as suite_contract,
 )
-
 
 EXPECTED_CANONICAL_BENCHMARK_COUNT = 468
 MEASURED_ROUNDS = 3
@@ -87,7 +85,7 @@ VARIANT_BY_ID = {variant.allocator: variant for variant in SUPPORTED_VARIANTS}
 SELECTION_SCHEMA_VERSION = 1
 MEASUREMENT_LOCK_ATTEMPT_SCHEMA_VERSION = 1
 MEASUREMENT_LOCK_ATTEMPTS_FILE = "measurement-lock-attempts.jsonl"
-MIMALLOC_THP_RUNTIME_SOURCE = r'''#define _GNU_SOURCE
+MIMALLOC_THP_RUNTIME_SOURCE = r"""#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
@@ -150,7 +148,7 @@ __attribute__((destructor)) static void prove_final_policy(void) {
         _exit(86);
     }
 }
-'''
+"""
 MIMALLOC_THP_RUNTIME_POLICY = (
     "constructor PR_SET_THP_DISABLE plus initial and process-exit "
     "PR_GET_THP_DISABLE proofs"
@@ -218,14 +216,16 @@ def selection_payload(variants: Sequence[Any]) -> dict[str, Any]:
         "schema_version": SELECTION_SCHEMA_VERSION,
         **digest_payload,
         "selection_sha256": sha256_bytes(
-            json.dumps(
-                digest_payload, sort_keys=True, separators=(",", ":")
-            ).encode("utf-8")
+            json.dumps(digest_payload, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
         ),
     }
 
 
-def bind_campaign_selection(output_dir: Path, variants: Sequence[Any]) -> dict[str, Any]:
+def bind_campaign_selection(
+    output_dir: Path, variants: Sequence[Any]
+) -> dict[str, Any]:
     """Bind the ordered variant set before any build or benchmark process starts."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -248,17 +248,23 @@ def bind_campaign_selection(output_dir: Path, variants: Sequence[Any]) -> dict[s
         try:
             config = json.loads(legacy_config.read_text(encoding="utf-8"))
             rows = config["variants"]
-        except (KeyError, TypeError, OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise RuntimeError("existing campaign configuration is unreadable") from error
+        except (
+            KeyError,
+            TypeError,
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+        ) as error:
+            raise RuntimeError(
+                "existing campaign configuration is unreadable"
+            ) from error
         if rows != expected["variants"]:
             raise RuntimeError(
                 "existing full campaign variant selection differs; "
                 "choose a new output directory"
             )
     elif (output_dir / "records.jsonl").exists():
-        raise RuntimeError(
-            "existing process records have no bound campaign selection"
-        )
+        raise RuntimeError("existing process records have no bound campaign selection")
     base.write_json(path, expected)
     return expected
 
@@ -298,9 +304,7 @@ def validate_existing_campaign_request(
         "numa_node": args.numa_node,
         "ratio_floor_ns_per_iter": RATIO_FLOOR_NS,
     }
-    drift = [
-        field for field, value in expected.items() if observed.get(field) != value
-    ]
+    drift = [field for field, value in expected.items() if observed.get(field) != value]
     if drift:
         raise RuntimeError(
             "existing full campaign configuration differs before build: "
@@ -464,7 +468,9 @@ def assign_benchmark_lanes(
     if len(cpus) > len(benchmarks):
         raise ValueError("jobs cannot exceed the benchmark inventory size")
     return tuple(
-        Lane(index=index, cpu=int(cpu), benchmarks=tuple(benchmarks[index:: len(cpus)]))
+        Lane(
+            index=index, cpu=int(cpu), benchmarks=tuple(benchmarks[index :: len(cpus)])
+        )
         for index, cpu in enumerate(cpus)
     )
 
@@ -481,7 +487,9 @@ def record_key(record: Mapping[str, Any]) -> tuple[str, int, str, str]:
 def record_kind(record: Mapping[str, Any]) -> str:
     if record.get("valid") is True and record.get("timed_out") is not True:
         if record.get("status") not in (None, "valid"):
-            raise RuntimeError(f"valid record has contradictory status: {record_key(record)}")
+            raise RuntimeError(
+                f"valid record has contradictory status: {record_key(record)}"
+            )
         return "valid"
     if (
         record.get("timed_out") is True
@@ -591,7 +599,9 @@ def load_completed_records(
             key = record_key(value)
             record_kind(value)
             if key in completed:
-                raise RuntimeError(f"records.jsonl contains a duplicate process key: {key}")
+                raise RuntimeError(
+                    f"records.jsonl contains a duplicate process key: {key}"
+                )
             completed[key] = value
     return completed
 
@@ -626,9 +636,7 @@ def validate_resumed_record_artifacts(
                 f"resumed record {prefix} artifact digest mismatch: {key}"
             )
         if require_size and record.get(f"{prefix}_bytes") != path.stat().st_size:
-            raise RuntimeError(
-                f"resumed record {prefix} artifact size mismatch: {key}"
-            )
+            raise RuntimeError(f"resumed record {prefix} artifact size mismatch: {key}")
 
     stdout_path = (root / str(record["stdout_path"])).resolve()
     record_path = stdout_path.parent / "record.json"
@@ -760,9 +768,13 @@ def summarize(
     allocator_set = {variant.allocator for variant in selected}
     for record in records:
         if record.get("benchmark") not in benchmark_set:
-            raise RuntimeError(f"record has an unknown benchmark: {record.get('benchmark')}")
+            raise RuntimeError(
+                f"record has an unknown benchmark: {record.get('benchmark')}"
+            )
         if record.get("allocator") not in allocator_set:
-            raise RuntimeError(f"record has an unknown allocator: {record.get('allocator')}")
+            raise RuntimeError(
+                f"record has an unknown allocator: {record.get('allocator')}"
+            )
         record_kind(record)
 
     cells: list[dict[str, Any]] = []
@@ -846,7 +858,9 @@ def summarize(
             medians = [float(cell["median_ns_per_iter"]) for cell in benchmark_cells]
             if all(value > 0 for value in medians):
                 ratio_benchmarks.append(benchmark)
-                baseline = float(cell_map[("unialloc", benchmark)]["median_ns_per_iter"])
+                baseline = float(
+                    cell_map[("unialloc", benchmark)]["median_ns_per_iter"]
+                )
                 for cell in benchmark_cells:
                     cell["ratio_vs_unialloc"] = (
                         float(cell["median_ns_per_iter"]) / baseline
@@ -866,9 +880,7 @@ def summarize(
                         {
                             "benchmark": benchmark,
                             "reason": "minimum_median_below_ratio_floor",
-                            "minimum_median_ns_per_iter": minimum[
-                                "median_ns_per_iter"
-                            ],
+                            "minimum_median_ns_per_iter": minimum["median_ns_per_iter"],
                             "minimum_median_allocator": minimum["allocator"],
                         }
                     )
@@ -887,9 +899,7 @@ def summarize(
                     {
                         "benchmark": benchmark,
                         "reason": "non_positive_allocator_median",
-                        "minimum_median_ns_per_iter": minimum[
-                            "median_ns_per_iter"
-                        ],
+                        "minimum_median_ns_per_iter": minimum["median_ns_per_iter"],
                         "minimum_median_allocator": minimum["allocator"],
                     }
                 )
@@ -919,7 +929,9 @@ def summarize(
                     "minimum_median_ns_per_iter": (
                         minimum["median_ns_per_iter"] if minimum else None
                     ),
-                    "minimum_median_allocator": minimum["allocator"] if minimum else None,
+                    "minimum_median_allocator": (
+                        minimum["allocator"] if minimum else None
+                    ),
                 }
             )
 
@@ -934,9 +946,7 @@ def summarize(
             )
             for benchmark in ratio_benchmarks
         ]
-        robust_rows = [
-            row for row in raw_rows if row[0] in set(robust_benchmarks)
-        ]
+        robust_rows = [row for row in raw_rows if row[0] in set(robust_benchmarks)]
         aggregates.append(
             {
                 "allocator": variant.allocator,
@@ -948,7 +958,9 @@ def summarize(
         )
 
     warmup_records = [record for record in records if record.get("phase") == "warmup"]
-    measured_records = [record for record in records if record.get("phase") == "measured"]
+    measured_records = [
+        record for record in records if record.get("phase") == "measured"
+    ]
     observed_timeouts = {
         int(record["timeout_seconds"])
         for record in records
@@ -1109,7 +1121,9 @@ def write_summary_artifacts(output_dir: Path, summary: Mapping[str, Any]) -> Non
     with (output_dir / "aggregate-summary.csv").open(
         "w", encoding="utf-8", newline=""
     ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=aggregate_fields, lineterminator="\n")
+        writer = csv.DictWriter(
+            handle, fieldnames=aggregate_fields, lineterminator="\n"
+        )
         writer.writeheader()
         for aggregate in summary["aggregates"]:
             for scope in ("raw", "robust"):
@@ -1166,9 +1180,7 @@ def write_summary_artifacts(output_dir: Path, summary: Mapping[str, Any]) -> Non
 
 def validate_timeout_identity(record: Mapping[str, Any], allocator: str) -> bool:
     expected_scudo_markers = 1 if allocator == "scudo" else 0
-    expected_tcmalloc_markers = (
-        1 if allocator in {"tcmalloc", "google_tcmalloc"} else 0
-    )
+    expected_tcmalloc_markers = 1 if allocator in {"tcmalloc", "google_tcmalloc"} else 0
     reported = record.get("reported_benchmark")
     benchmark = record.get("benchmark")
     return bool(
@@ -1206,7 +1218,9 @@ def validate_process_record_identity(
     if record.get("timeout_seconds") != timeout_seconds:
         raise RuntimeError(f"process record has a different timeout bound: {key}")
     if record.get("glibc_tunables_present") is not False:
-        raise RuntimeError(f"process record violated the clean glibc environment: {key}")
+        raise RuntimeError(
+            f"process record violated the clean glibc environment: {key}"
+        )
 
     expected_markers = 1 if variant.allocator == "scudo" else 0
     if record.get("scudo_identity_marker_count") != expected_markers:
@@ -1249,8 +1263,7 @@ def validate_process_record_identity(
             )
         if (
             mimalloc_thp_runtime_sha256 is None
-            or record.get("mimalloc_thp_runtime_sha256")
-            != mimalloc_thp_runtime_sha256
+            or record.get("mimalloc_thp_runtime_sha256") != mimalloc_thp_runtime_sha256
         ):
             raise RuntimeError(
                 f"process record has a different mimalloc THP runtime: {key}"
@@ -1347,9 +1360,7 @@ def exclusive_campaign_lock(output_dir: Path) -> Iterator[None]:
             handle.close()
 
 
-def write_or_validate_campaign_config(
-    path: Path, config: Mapping[str, Any]
-) -> None:
+def write_or_validate_campaign_config(path: Path, config: Mapping[str, Any]) -> None:
     """Keep append-only lock evidence dynamic while campaign inputs stay fixed."""
 
     expected = dict(config)
@@ -1546,9 +1557,7 @@ def bind_measurement_lock_attempts(
         else [dict(attempt) for attempt in attempts]
     )
     if validate_existing:
-        validate_preexisting_measurement_lock_bindings(
-            output_dir, attempts=history
-        )
+        validate_preexisting_measurement_lock_bindings(output_dir, attempts=history)
     binding = measurement_lock_binding(output_dir, history)
     config["measurement_lock"] = binding
     provenance["measurement_lock"] = binding
@@ -1691,6 +1700,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--tcmalloc-lib-dir", type=Path, default=base.default_tcmalloc_dir()
     )
     parser.add_argument("--scudo-runtime-library", type=Path)
+    parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="build and validate every selected allocator without benchmark processes",
+    )
     args = parser.parse_args(argv)
     if args.jobs <= 0:
         parser.error("--jobs must be positive")
@@ -1766,9 +1780,7 @@ def _run_campaign_locked(
         base.mimalloc_thp_expected_state(item) is not None for item in selected
     )
     mimalloc_thp_runtime = (
-        ensure_mimalloc_thp_runtime(output_dir)
-        if needs_mimalloc_runtime
-        else None
+        ensure_mimalloc_thp_runtime(output_dir) if needs_mimalloc_runtime else None
     )
     mimalloc_thp_runtime_path = (
         Path(str(mimalloc_thp_runtime["binary"]))
@@ -1920,19 +1932,41 @@ def _run_campaign_locked(
         provenance=provenance,
         attempts=existing_lock_attempts,
     )
+    if args.build_only:
+        result = {
+            "schema_version": 1,
+            "mode": "build_only",
+            "variant_ids": [variant.allocator for variant in selected],
+            "canonical_benchmark_count": len(benchmarks),
+            "builds": {
+                variant.allocator: {
+                    "binary": builds[variant.allocator]["binary"],
+                    "binary_sha256": builds[variant.allocator]["binary_sha256"],
+                    "base_build_allocator": builds[variant.allocator][
+                        "base_build_allocator"
+                    ],
+                    "binary_reused": builds[variant.allocator]["binary_reused"],
+                }
+                for variant in selected
+            },
+            "measurement_processes_started": 0,
+            "measurement_lock": lock_binding,
+        }
+        base.write_json(output_dir / "build-validation.json", result)
+        return result
 
     completed = load_completed_records(output_dir)
     benchmark_indexes = {benchmark: index for index, benchmark in enumerate(benchmarks)}
-    lane_cpu = {
-        benchmark: lane.cpu for lane in lanes for benchmark in lane.benchmarks
-    }
+    lane_cpu = {benchmark: lane.cpu for lane in lanes for benchmark in lane.benchmarks}
     variants_by_allocator = {variant.allocator: variant for variant in selected}
     expected_slots = expected_process_slots(
         benchmarks, selected, measured_rounds=MEASURED_ROUNDS
     )
     unexpected = set(completed) - expected_slots
     if unexpected:
-        raise RuntimeError(f"records.jsonl contains unexpected process keys: {sorted(unexpected)}")
+        raise RuntimeError(
+            f"records.jsonl contains unexpected process keys: {sorted(unexpected)}"
+        )
     for key, record in completed.items():
         _, _, allocator, benchmark = key
         variant = variants_by_allocator[allocator]
@@ -2040,9 +2074,7 @@ def _run_campaign_locked(
 
     def current_state(allocator: str, benchmark: str) -> CellState:
         with append_lock:
-            history = _cell_records(
-                list(completed.values()), allocator, benchmark
-            )
+            history = _cell_records(list(completed.values()), allocator, benchmark)
         return classify_cell_history(history, measured_rounds=MEASURED_ROUNDS)
 
     def run_lane(lane: Lane) -> None:
@@ -2061,9 +2093,7 @@ def _run_campaign_locked(
                         continue
                     expected_round = len(state.valid_measured_rounds) + 1
                     if expected_round == round_index:
-                        execute_one(
-                            lane, benchmark, "measured", round_index, variant
-                        )
+                        execute_one(lane, benchmark, "measured", round_index, variant)
 
     measurement_lock = run_or_reuse_timed_lane_pool(
         has_pending=has_pending,
@@ -2103,9 +2133,7 @@ def _run_campaign_locked(
             ),
             "completed_terminal_processes": len(completed),
             "maximum_processes": maximum_processes,
-            "all_warmups_attempted": summary["record_counts"][
-                "all_warmups_attempted"
-            ],
+            "all_warmups_attempted": summary["record_counts"]["all_warmups_attempted"],
             "censored_cells": len(summary["censored_cells"]),
             "updated_utc": base.utc_now(),
             "summary_sha256": base.sha256_file(output_dir / "summary.json"),

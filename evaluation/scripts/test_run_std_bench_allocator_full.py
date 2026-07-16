@@ -16,7 +16,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-
 SCRIPT = Path(__file__).with_name("run_std_bench_allocator_full.py")
 SPEC = importlib.util.spec_from_file_location("run_std_bench_allocator_full", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -158,9 +157,7 @@ class FullCampaignTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "raw"
-            publication = campaign.selected_variants(
-                campaign.PUBLICATION_VARIANT_IDS
-            )
+            publication = campaign.selected_variants(campaign.PUBLICATION_VARIANT_IDS)
             campaign.bind_campaign_selection(output, publication)
             args = campaign.parse_args(
                 [
@@ -197,9 +194,7 @@ class FullCampaignTest(unittest.TestCase):
             root = Path(directory)
             output = root / "raw"
             output.mkdir()
-            publication = campaign.selected_variants(
-                campaign.PUBLICATION_VARIANT_IDS
-            )
+            publication = campaign.selected_variants(campaign.PUBLICATION_VARIANT_IDS)
             legacy_rows = [dict(variant.__dict__) for variant in publication]
             legacy_rows[2]["feature"] = "bench_ourself"
             (output / "campaign-config.json").write_text(
@@ -252,9 +247,7 @@ class FullCampaignTest(unittest.TestCase):
                 "schema_version": 2,
                 "source_root": str(root),
                 "runner_sha256": campaign.base.sha256_file(campaign.SCRIPT_PATH),
-                "base_runner_sha256": campaign.base.sha256_file(
-                    campaign.BASE_SCRIPT
-                ),
+                "base_runner_sha256": campaign.base.sha256_file(campaign.BASE_SCRIPT),
                 "variant_ids": [variant.allocator for variant in selected],
                 "variants": [variant.__dict__ for variant in selected],
                 "selection_sha256": selection["selection_sha256"],
@@ -434,9 +427,7 @@ class FullCampaignTest(unittest.TestCase):
             @contextlib.contextmanager
             def fake_primary_measurement_lock(**kwargs: object):
                 del kwargs
-                evidence = canonical_lock_evidence(
-                    output, acquired=20.0, released=21.0
-                )
+                evidence = canonical_lock_evidence(output, acquired=20.0, released=21.0)
                 evidence.pop("released_unix")
                 events.append("lock-acquired")
                 try:
@@ -467,9 +458,7 @@ class FullCampaignTest(unittest.TestCase):
                             campaign.Lane(1, 1, ("vec::second",)),
                         ),
                         jobs=1,
-                        run_lane=lambda lane: self.fail(
-                            f"fake pool executed {lane}"
-                        ),
+                        run_lane=lambda lane: self.fail(f"fake pool executed {lane}"),
                         stop_event=stop,
                         attempt_sink=sink,
                     )
@@ -641,9 +630,7 @@ class FullCampaignTest(unittest.TestCase):
             reordered_sha256 = campaign.base.sha256_file(log_path)
             for path in (config_path, provenance_path):
                 document = json.loads(path.read_text())
-                document["measurement_lock"][
-                    "attempt_log_sha256"
-                ] = reordered_sha256
+                document["measurement_lock"]["attempt_log_sha256"] = reordered_sha256
                 campaign.base.write_json(path, document)
             reordered_config = config_path.read_bytes()
             reordered_provenance = provenance_path.read_bytes()
@@ -875,6 +862,58 @@ class FullCampaignTest(unittest.TestCase):
             self.assertEqual(
                 builds["mimalloc"]["binary_sha256"], alias["binary_sha256"]
             )
+
+    def test_build_only_stops_before_measurement_record_loading(self) -> None:
+        selected = campaign.selected_variants(("unialloc",))
+        inventory = tuple(f"family::bench_{index:03d}" for index in range(468))
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "raw"
+            output.mkdir()
+            args = SimpleNamespace(
+                tcmalloc_lib_dir=Path("/tmp/tcmalloc/lib"),
+                scudo_runtime_library=None,
+                timeout_seconds=30,
+                jobs=1,
+                cpus=(0,),
+                numa_node=0,
+                build_only=True,
+            )
+            build = {
+                "allocator": "unialloc",
+                "feature": "bench_ourself",
+                "label": "UniAlloc",
+                "binary": "/tmp/std-bench",
+                "binary_sha256": "a" * 64,
+            }
+            evidence = {
+                "list_sha256": "b" * 64,
+                "binary_sha256": "a" * 64,
+            }
+            with mock.patch.object(
+                campaign.base, "validate_clean_source", return_value="deadbeef"
+            ), mock.patch.object(
+                campaign.base, "build_variant", return_value=build
+            ), mock.patch.object(
+                campaign.base,
+                "inventory_variant",
+                return_value=(inventory, evidence),
+            ), mock.patch.object(
+                campaign.base, "command_output", return_value="probe\n"
+            ), mock.patch.object(
+                campaign, "load_completed_records"
+            ) as load_records:
+                result = campaign._run_campaign_locked(
+                    args,
+                    Path(directory),
+                    output,
+                    variants=selected,
+                    selection=campaign.selection_payload(selected),
+                )
+
+            self.assertEqual("build_only", result["mode"])
+            self.assertEqual(0, result["measurement_processes_started"])
+            self.assertEqual([], result["measurement_lock"]["attempts"])
+            load_records.assert_not_called()
 
     def test_campaign_output_directory_has_an_exclusive_process_lock(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
