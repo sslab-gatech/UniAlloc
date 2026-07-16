@@ -1,0 +1,359 @@
+{
+  "adaptive_mechanism": {
+    "backing_gate": {
+      "claim_boundary": "this run-level gate only unlocks the explicit three-pair follow-on; each measured ordinary/THP process is gated separately",
+      "passed": true,
+      "peak_anon_hugepages_kib": 51200,
+      "positive_backing_sample_count": 28,
+      "reasons": [],
+      "sample_count": 28,
+      "thp_advice_attempts": 25,
+      "thp_collapse_successes": 25
+    },
+    "live_survival": {
+      "adaptive_live_survival_observations": 76,
+      "adaptive_live_survival_promotions": 9,
+      "adaptive_live_survival_registration_bypasses": 0,
+      "adaptive_live_survival_registrations": 78,
+      "adaptive_live_survival_scans": 24,
+      "adaptive_live_survival_slots_examined": 1102,
+      "adaptive_live_survival_stale_abstentions": 0
+    },
+    "mechanism": {
+      "all_mappings_released": false,
+      "current_extents": 7,
+      "current_retained_empty_bytes": 14680064,
+      "current_retained_empty_extents": 7,
+      "current_thp_collapse_confirmed_extents": 0,
+      "empty_extent_retention_capacity": 16,
+      "extent_unmap_failures": 0,
+      "extent_unmaps": 25,
+      "ordinary_extent_mappings": 4,
+      "peak_extents": 32,
+      "peak_retained_empty_bytes": 14680064,
+      "peak_retained_empty_extents": 7,
+      "peak_thp_collapse_confirmed_extents": 25,
+      "retained_empty_extent_evictions": 0,
+      "retained_empty_extent_insertions": 7,
+      "retained_empty_extent_reuse_hits": 0,
+      "retained_empty_extent_trims": 0,
+      "thp_advice_attempts": 25,
+      "thp_advice_errors": 0,
+      "thp_advice_successes": 25,
+      "thp_candidate_extent_mappings": 28,
+      "thp_collapse_attempts": 25,
+      "thp_collapse_eligible_extents": 0,
+      "thp_collapse_errors": 0,
+      "thp_collapse_low_occupancy_skips": 0,
+      "thp_collapse_successes": 25,
+      "thp_extent_mappings": 28
+    },
+    "procfs": {
+      "anon_hugepages_observed": true,
+      "peak_anon_hugepages_kib": 51200,
+      "peak_anonymous_kib": 91744,
+      "peak_pss_kib": 140957,
+      "peak_rss_kib": 143288,
+      "sample_count": 28
+    },
+    "runtime_predictor_matrix_one_representative_matched_process": {
+      "bytes": {
+        "fn": 0,
+        "fp": 2098816,
+        "precision": 0.9413197246532667,
+        "recall": 1.0,
+        "tn": 0,
+        "tp": 33668160
+      },
+      "objects": {
+        "fn": 0,
+        "fp": 173,
+        "precision": 0.9391915641476274,
+        "recall": 1.0,
+        "tn": 0,
+        "tp": 2672
+      }
+    },
+    "static_hint_matrix_one_representative_matched_process": {
+      "abstained_bytes": 185696,
+      "abstained_objects": 1466,
+      "bytes": {
+        "fn": 0,
+        "fp": 2088960,
+        "precision": 0.9416609471516816,
+        "recall": 1.0,
+        "tn": 0,
+        "tp": 33718272
+      },
+      "classified_byte_coverage": 0.9948407642745819,
+      "classified_object_coverage": 0.49846048580225794,
+      "objects": {
+        "fn": 0,
+        "fp": 85,
+        "precision": 0.9416609471516816,
+        "recall": 1.0,
+        "tn": 0,
+        "tp": 1372
+      }
+    }
+  },
+  "artifacts": {
+    "compiler_runtime_join": {
+      "bytes": 115140,
+      "path": "evaluation/raw/lifetime-resident-datafusion-55bc679-q512-r3-20260715/ground-truth-ordinary/compiler-runtime-exact-join.json",
+      "sha256": "9774557db0373f8530dd6efc401523de11f8a9a9360e2137e463f0468193a364"
+    },
+    "compiler_sites": {
+      "bytes": 92930,
+      "path": "evaluation/raw/lifetime-resident-datafusion-55bc679-q512-r3-20260715/build/compiler-sites.json",
+      "sha256": "c445ddbd4eefe22ea2c3789503afcc9bc4dc02ce7ef007c309321a2b5d0c2e63"
+    },
+    "result": {
+      "bytes": 117869,
+      "path": "evaluation/raw/lifetime-resident-datafusion-55bc679-q512-r3-20260715/result.json",
+      "sha256": "47e2210773f898888d7d407928e41cadca313bd7038bbaf812af0ba21890714a"
+    }
+  },
+  "claim_boundary": "three fresh-process pairs are a preliminary direction check; a preregistered larger matched campaign is required for a stable estimate",
+  "claim_scope": "preliminary-three-pair-mechanism-follow-on",
+  "mechanism_contrast_backing_eligible": true,
+  "compiler_prior": {
+    "applied_prior_site_count": 1,
+    "exact_join": {
+      "allocation_count": 2048,
+      "censored_outcomes": 0,
+      "long_outcomes": 2048,
+      "matched": true,
+      "resolution_status": "exact_numeric_match",
+      "runtime_key": {
+        "align": 8,
+        "callsite": 4805309694561570809,
+        "module_id": 10500104977311344944,
+        "requested_size": 24576,
+        "type_id": 2926349436607754679
+      },
+      "short_outcomes": 0
+    },
+    "match_coverage": 1.0,
+    "matched_applied_prior_site_count": 1,
+    "matched_outcomes": {
+      "allocation_count": 2048,
+      "allocation_requested_bytes": 50331648,
+      "censored_outcomes": 0,
+      "censored_requested_bytes": 0,
+      "current_live_survival_inflight": 0,
+      "current_live_survival_inflight_payload_bytes": 0,
+      "current_live_survival_inflight_requested_bytes": 0,
+      "deduplicated_by": [
+        "callsite",
+        "type_id",
+        "module_id",
+        "requested_size",
+        "align"
+      ],
+      "evidence_complete": true,
+      "exact_site_key_digest": "b11dde3a323340c1d181176cb22099ea1240739ed5c57f510aa7fef2469de5c1",
+      "live_survival_observations": 11,
+      "live_survival_payload_bytes": 270336,
+      "live_survival_requested_bytes": 270336,
+      "long_outcomes": 2048,
+      "long_prior_site_count": 1,
+      "long_requested_bytes": 50331648,
+      "missing_or_invalid_field_site_count": 0,
+      "scope": "resolved-compiler-applied-prior-key5",
+      "short_outcomes": 0,
+      "short_prior_site_count": 0,
+      "short_requested_bytes": 0,
+      "site_count": 1
+    },
+    "site": {
+      "align": 8,
+      "audit_path": "/home/hanqing/alloc/UniAlloc-lifetime-resident-index-20260715/evaluation/raw/lifetime-resident-datafusion-55bc679-q512-r3-20260715/build/compiler-audits/unialloc_lifetime_resident_datafusion-fbabd02eee08cf39.json",
+      "callsite": 4805309694561570809,
+      "lifetime_hint": 2,
+      "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+      "lifetime_hint_confidence": 70,
+      "lowering_kind": "semantic_scope_enter_exit_rewrite",
+      "module_id": 10500104977311344944,
+      "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+      "requested_layout_basis": "exact_vec_with_capacity_requested_layout",
+      "requested_size": 24576,
+      "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+      "type_id": 2926349436607754679
+    }
+  },
+  "decision": {
+    "memory_result": "selective THP increased median peak RSS by 7.27% in the three-pair direction screen",
+    "next_gate": "larger preregistered matched run after the refill-time lane and mixed-filler O(1) hot-path work",
+    "physical_thp_realized": true,
+    "reason": "one exact compiler Long site matched one runtime KEY5 and covered all 2,048 target allocations / 50,331,648 requested bytes; every force-track target outcome was Long",
+    "stable_speed_claim": false,
+    "static_lifetime_prior_useful": true
+  },
+  "fixed_work": {
+    "batches_per_table": 256,
+    "columns_per_table": 4,
+    "correctness": true,
+    "query_digest": "984dfbf69696ae91",
+    "query_iterations": 512,
+    "query_output_rows": 8,
+    "query_seconds": 8.903080285,
+    "resident_build_seconds": 0.030395083,
+    "resident_payload_bytes": 50331648,
+    "result_digest": "f784576314bd3125",
+    "routable_buffer_bytes": 24576,
+    "rows_per_batch": 3072,
+    "rows_per_table": 786432,
+    "schema_version": 1,
+    "table_count": 2,
+    "target_partitions": 2,
+    "total_seconds": 8.933475918
+  },
+  "ground_truth": {
+    "opportunity_gate": {
+      "confirmed_short_passed": false,
+      "long_cohort_passed": true,
+      "minimum_confirmed_short_requested_bytes": 8388608,
+      "minimum_long_requested_bytes": 2097152,
+      "observed_confirmed_short_requested_bytes": 0,
+      "observed_long_requested_bytes": 50581920,
+      "passed": true
+    },
+    "summary": {
+      "allocation_requested_bytes": 50581920,
+      "candidate_long_byte_density": 1.0,
+      "censored_requested_bytes": 0,
+      "completed_long_requested_bytes": 50581920,
+      "confirmed_short_byte_density": 0.0,
+      "confirmed_short_requested_bytes": 0,
+      "confirmed_short_site_count": 0,
+      "current_live_survival_inflight": 0,
+      "current_live_survival_inflight_requested_bytes": 0,
+      "decisive_requested_bytes": 50581920,
+      "decisive_site_count": 15,
+      "live_survival_observations": 137,
+      "long_requested_bytes": 50581920,
+      "long_site_count": 15,
+      "runtime_site_count": 15,
+      "short_requested_bytes": 0,
+      "short_site_count": 0
+    }
+  },
+  "matched_three_pairs": {
+    "all_pairs_backing_verified": true,
+    "median_peak_rss_delta_percent": 7.266031974133291,
+    "median_query_ratio_thp_over_ordinary": 0.9877944993312149,
+    "median_query_saving_percent": 1.2205500668785119,
+    "median_total_saving_percent": 1.1401933381446905,
+    "median_wall_saving_percent": 4.143088431935748,
+    "pair_count": 3,
+    "pairs": [
+      {
+        "anon_hugepages_kib": {
+          "ordinary": 0,
+          "selective_thp": 51200
+        },
+        "backing_gate_passed": true,
+        "block": 1,
+        "order": [
+          "adaptive-ordinary-compiler-prior",
+          "adaptive-selective-thp-compiler-prior"
+        ],
+        "ordinary_extent_mappings": 32,
+        "peak_rss_kib": {
+          "ordinary": 133608,
+          "ratio_thp_over_ordinary": 1.072660319741333,
+          "selective_thp": 143316
+        },
+        "query_seconds": {
+          "ordinary": 9.614320346,
+          "ratio_thp_over_ordinary": 0.9258931576690778,
+          "selective_thp": 8.901833424
+        },
+        "thp_candidate_extent_mappings": 28,
+        "thp_collapse_successes": 25,
+        "total_ratio_thp_over_ordinary": 0.927488751846365,
+        "wall_ratio_thp_over_ordinary": 0.9330218160687145
+      },
+      {
+        "anon_hugepages_kib": {
+          "ordinary": 0,
+          "selective_thp": 51200
+        },
+        "backing_gate_passed": true,
+        "block": 2,
+        "order": [
+          "adaptive-selective-thp-compiler-prior",
+          "adaptive-ordinary-compiler-prior"
+        ],
+        "ordinary_extent_mappings": 32,
+        "peak_rss_kib": {
+          "ordinary": 133316,
+          "ratio_thp_over_ordinary": 1.0701491193855202,
+          "selective_thp": 142668
+        },
+        "query_seconds": {
+          "ordinary": 9.111813519,
+          "ratio_thp_over_ordinary": 0.9877944993312149,
+          "selective_thp": 9.000599273
+        },
+        "thp_candidate_extent_mappings": 28,
+        "thp_collapse_successes": 25,
+        "total_ratio_thp_over_ordinary": 0.9885980666185531,
+        "wall_ratio_thp_over_ordinary": 0.9585691156806425
+      },
+      {
+        "anon_hugepages_kib": {
+          "ordinary": 0,
+          "selective_thp": 51200
+        },
+        "backing_gate_passed": true,
+        "block": 3,
+        "order": [
+          "adaptive-ordinary-compiler-prior",
+          "adaptive-selective-thp-compiler-prior"
+        ],
+        "ordinary_extent_mappings": 32,
+        "peak_rss_kib": {
+          "ordinary": 133348,
+          "ratio_thp_over_ordinary": 1.0738218795932448,
+          "selective_thp": 143192
+        },
+        "query_seconds": {
+          "ordinary": 8.484108498,
+          "ratio_thp_over_ordinary": 1.0681659943571362,
+          "selective_thp": 9.06243619
+        },
+        "thp_candidate_extent_mappings": 28,
+        "thp_collapse_successes": 25,
+        "total_ratio_thp_over_ordinary": 1.0687585846901746,
+        "wall_ratio_thp_over_ordinary": 1.071597481958577
+      }
+    ],
+    "query_faster_pair_count": 2,
+    "query_slower_pair_count": 1
+  },
+  "performance_claim_eligible": false,
+  "presentation_claim_eligible": false,
+  "provenance": {
+    "allocator_implementation_sha256": "2679f95d3087b63064ad9f0bc1d9c9fe296b8dbb66772e63154d9cc81be1285d",
+    "allocator_revision": "55bc6799864e7564c154a1bf66a76d73131f7ae7",
+    "allocator_snapshot_sha256": "1a21c35afad922842b3683f4bfa36a6716eed1db56c873365aa5299806b17365",
+    "binary_sha256": "c4ddca5cf63e622b1423e84ae3a87a832d72e5b4d3cf57385faa2c5b117d3da6",
+    "datafusion_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b",
+    "datafusion_repository": "https://github.com/apache/datafusion.git",
+    "datafusion_tree": "8177a4235cb93152de9fc6bdc9dfacc57e4256f2",
+    "datafusion_version": "54.0.0",
+    "evaluator_digest": "6143e912b73ee793c74e462832f7744b359286c5f07299dc37432850b76e7b60"
+  },
+  "schema_version": 1,
+  "source": "unialloc-lifetime-resident-datafusion-summary-v1",
+  "target_routing": {
+    "align": 8,
+    "allocation_count": 2048,
+    "allocation_requested_bytes": 50331648,
+    "requested_size": 24576,
+    "site_count": 1,
+    "unsupported_layout_bypasses": 0
+  }
+}

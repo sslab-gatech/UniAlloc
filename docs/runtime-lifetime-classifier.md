@@ -1,5 +1,26 @@
 # Marker-Free Runtime Lifetime Classification
 
+## 2026-07-15 resident-object extension
+
+The classifier now observes Long objects while they remain live. Each
+predictor site keeps up to eight bounded `(pointer,birth_pressure)` samples. A
+global next-due gate scans only after some sample can cross 8 MiB of later
+allocation pressure. The first exact crossing records one Long vote, marks the
+trailer to prevent a duplicate vote at `Drop`, and changes placement only for
+future allocations.
+
+Observation ABI v2 exports cumulative live-survival provenance and current
+in-flight survivor counts separately from completed outcomes. This lets a
+resident database or query-engine process learn before shutdown.
+
+The exact audit/export key
+`(callsite,type_id,module_id,requested_size,align)` remains separate from the
+predictor key described below. Requested-size histograms and exact joins never
+change `AdaptiveSiteKey` learning behavior. Adaptive THP promotion requires
+75% runtime-confirmed Long live bytes and per-process physical backing proof.
+The full current allocation design is in
+`docs/lifetime-hugepage-payload-design.md`.
+
 ## Result and claim boundary
 
 UniAlloc can now learn allocation-site lifetime from allocator-observed survival

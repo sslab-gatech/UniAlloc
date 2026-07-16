@@ -1,6 +1,32 @@
 # Conservative Automatic Lifetime Classification
 
-## Status
+## Current deployment status
+
+The presentation path uses the ground-truth-first design in
+`docs/lifetime-hugepage-payload-design.md`. The compiler exports advisory Rust
+ownership priors and exact join keys; runtime pressure survival authorizes
+adaptive THP promotion.
+
+Three corrections govern current use:
+
+- exact local `Drop` alone exports an eventual-release fact with
+  `hint=Unknown`;
+- any owner-live cleanup or unwind edge forces abstention;
+- a combined all-path local-release Short prior requires no opaque call,
+  store, loop backedge, yield/await, or cleanup ambiguity and still remains
+  subject to runtime validation.
+
+Return and consuming-escape ownership flows may emit a Long prior at confidence
+70 when the exact requested layout is joinable. Local-release priors use
+confidence 85. The compiler/runtime observation key is
+`(callsite,type_id,module_id,requested_size,align)`.
+
+The remainder of this document records the earlier explicit semantic-epoch
+classifier and its regression contract. Its `Drop before epoch => Ephemeral`
+rule applies only when an application deliberately adopts that synchronized
+epoch contract. It is excluded from marker-free performance-lifetime claims.
+
+## Explicit-epoch classifier status
 
 UniAlloc now has an opt-in, one-pass rustc MIR classifier that turns a bounded
 ownership-and-phase proof into allocator lifetime metadata. The implementation

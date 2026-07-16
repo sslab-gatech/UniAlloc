@@ -8,6 +8,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("lifetime_resident_datafusion.py")
@@ -240,8 +242,29 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             ],
         )
         self.assertFalse(rejected["passed"])
-        self.assertEqual(3, len(rejected["reasons"]))
+        self.assertEqual(4, len(rejected["reasons"]))
         admitted = runner.adaptive_thp_backing_gate(
+            {"thp_advice_attempts": 2, "thp_collapse_successes": 1},
+            [
+                {
+                    "elapsed_seconds": 0.5,
+                    "rss_kib": 100,
+                    "pss_kib": 90,
+                    "anonymous_kib": 80,
+                    "anon_hugepages_kib": 2_048,
+                },
+                {
+                    "elapsed_seconds": 1.0,
+                    "rss_kib": 200,
+                    "pss_kib": 190,
+                    "anonymous_kib": 180,
+                    "anon_hugepages_kib": 2_048,
+                },
+            ],
+        )
+        self.assertTrue(admitted["passed"])
+        self.assertEqual(2, admitted["positive_backing_sample_count"])
+        partial = runner.adaptive_thp_backing_gate(
             {"thp_advice_attempts": 2, "thp_collapse_successes": 1},
             [
                 {
@@ -260,20 +283,66 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
                 },
             ],
         )
-        self.assertTrue(admitted["passed"])
-        self.assertEqual(1, admitted["positive_backing_sample_count"])
+        self.assertFalse(partial["passed"])
 
     def test_each_measured_process_has_an_independent_backing_gate(self) -> None:
         runner = self.runner
         ordinary = [{"anon_hugepages_kib": 0}, {"anon_hugepages_kib": 0}]
-        thp = [{"anon_hugepages_kib": 0}, {"anon_hugepages_kib": 4_096}]
-        self.assertTrue(runner.measured_pair_backing_gate(ordinary, thp)["passed"])
+        thp = [{"anon_hugepages_kib": 2_048}, {"anon_hugepages_kib": 4_096}]
+        admitted = runner.measured_pair_backing_gate(ordinary, thp)
+        self.assertTrue(admitted["passed"])
+        self.assertEqual(0, admitted["ordinary_positive_backing_sample_count"])
+        self.assertEqual(2, admitted["thp_positive_backing_sample_count"])
         contaminated = [{"anon_hugepages_kib": 2_048}]
         self.assertFalse(
             runner.measured_pair_backing_gate(contaminated, thp)["passed"]
         )
         absent = [{"anon_hugepages_kib": 0}]
         self.assertFalse(runner.measured_pair_backing_gate(ordinary, absent)["passed"])
+
+    def test_three_pair_screen_only_unlocks_a_backing_mechanism_contrast(self) -> None:
+        runner = self.runner
+        fixed_work = self.result_record()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ordinary_samples = root / "ordinary.json"
+            thp_samples = root / "thp.json"
+            ordinary_samples.write_text(
+                json.dumps([{"anon_hugepages_kib": 0}]), encoding="utf-8"
+            )
+            thp_samples.write_text(
+                json.dumps([{"anon_hugepages_kib": 2_048}]), encoding="utf-8"
+            )
+
+            def fake_run_one(*, arm_name: str, **_kwargs):
+                is_thp = arm_name == "adaptive-selective-thp-compiler-prior"
+                return {
+                    "fixed_work": fixed_work,
+                    "wall_seconds": 3.0,
+                    "procfs": {"peak_rss_kib": 200 if is_thp else 100},
+                    "smaps_samples_path": str(
+                        thp_samples if is_thp else ordinary_samples
+                    ),
+                }
+
+            with mock.patch.object(runner, "run_one", side_effect=fake_run_one):
+                result = runner.run_matched_pairs(
+                    raw_dir=root,
+                    build={},
+                    expected_fixed_work=fixed_work,
+                    args=SimpleNamespace(
+                        batches_per_table=2,
+                        query_iterations=3,
+                        target_partitions=2,
+                        minimum_seconds=0.0,
+                        maximum_seconds=10.0,
+                        timeout=10,
+                        sample_interval=0.1,
+                    ),
+                )
+        self.assertTrue(result["mechanism_contrast_backing_eligible"])
+        self.assertFalse(result["performance_claim_eligible"])
+        self.assertFalse(result["presentation_claim_eligible"])
 
     def test_live_survival_fields_are_forward_compatible_and_validated(self) -> None:
         runner = self.runner

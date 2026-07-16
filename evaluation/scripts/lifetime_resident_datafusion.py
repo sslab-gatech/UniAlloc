@@ -615,6 +615,10 @@ def adaptive_thp_backing_gate(
     if not procfs["anon_hugepages_observed"]:
         reasons.append("this adaptive run has no sampled physical anonymous THP backing")
     positive_samples = sum(int(row.get("anon_hugepages_kib", 0)) > 0 for row in smaps_samples)
+    if positive_samples != len(smaps_samples):
+        reasons.append(
+            "adaptive THP backing is absent from one or more operation-window samples"
+        )
     return {
         "passed": not reasons,
         "reasons": reasons,
@@ -643,16 +647,25 @@ def measured_pair_backing_gate(
         reasons.append("one or more procfs samples omit AnonHugePages")
     if any(value > 0 for value in ordinary_values):
         reasons.append("ordinary process has sampled anonymous THP backing")
-    if not any(value > 0 for value in thp_values):
-        reasons.append("selective-THP process has no sampled anonymous THP backing")
+    if not all(value > 0 for value in thp_values):
+        reasons.append(
+            "selective-THP backing is absent from one or more operation-window samples"
+        )
+    ordinary_positive_samples = sum(value > 0 for value in ordinary_values)
+    thp_positive_samples = sum(value > 0 for value in thp_values)
     return {
         "passed": not reasons,
         "reasons": reasons,
         "ordinary_sample_count": len(ordinary_values),
         "thp_sample_count": len(thp_values),
+        "ordinary_positive_backing_sample_count": ordinary_positive_samples,
+        "thp_positive_backing_sample_count": thp_positive_samples,
         "ordinary_peak_anon_hugepages_kib": max(ordinary_values),
         "thp_peak_anon_hugepages_kib": max(thp_values),
-        "claim_boundary": "both processes in this measured block are gated independently",
+        "claim_boundary": (
+            "both processes and every operation-window sample in this measured "
+            "block are gated independently"
+        ),
     }
 
 
@@ -1350,7 +1363,8 @@ def run_matched_pairs(
         "pair_count": MATCHED_BLOCK_COUNT,
         "pairs": pairs,
         "all_pairs_backing_verified": all_backed,
-        "performance_claim_eligible": all_backed,
+        "mechanism_contrast_backing_eligible": all_backed,
+        "performance_claim_eligible": False,
         "presentation_claim_eligible": False,
         "median_query_ratio_thp_over_ordinary": statistics.median(query_ratios),
         "median_total_ratio_thp_over_ordinary": statistics.median(total_ratios),
@@ -1532,9 +1546,10 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
         "success": True,
         "classification": "ground-truth-first-resident-heap-screen",
         "performance_claim": False,
-        "performance_claim_eligible": bool(
-            matched is not None and matched["performance_claim_eligible"]
+        "mechanism_contrast_backing_eligible": bool(
+            matched is not None and matched["mechanism_contrast_backing_eligible"]
         ),
+        "performance_claim_eligible": False,
         "source": checkout,
         "allocator_snapshot": snapshot,
         "build": build,

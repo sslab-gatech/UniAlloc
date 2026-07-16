@@ -1,0 +1,132 @@
+{
+  "allocator_mechanism": {
+    "force_track_routed_allocations": 3641377,
+    "mapping_to_peak_extent_ratio": 29078.777777777777,
+    "ordinary_extent_mappings": 785127,
+    "peak_extents": 27
+  },
+  "artifacts": {
+    "compiler_runtime_join": {
+      "bytes": 2734088,
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/run/compiler-runtime-exact-join.json",
+      "sha256": "98a1f934b723f928563151de8cc39810b6663c14b4add1c80bbc3795209af9da"
+    },
+    "result": {
+      "bytes": 40669,
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/result.json",
+      "sha256": "3e77947d1297df6c3d6755385bf4d91704debc354a712a7da0495adb4ce43b92"
+    },
+    "runtime_sites": {
+      "bytes": 108376,
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/run/runtime-sites.json",
+      "sha256": "8b2311b4c972e24d023f4c91082a7bef1a58d29f4671fb5550ca18eb910dbade"
+    },
+    "smaps_samples": {
+      "bytes": 14070,
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/run/smaps-samples.json",
+      "sha256": "1d1bc9c551be3ef3a2b47a5e021b17d52f7dbb9b73944f1f8894eb4b267ee3da"
+    }
+  },
+  "broad_static_prior_counterexample": {
+    "byte_precision": 0.00020682704683353686,
+    "decision": "Broad return/escape Long admission is rejected; runtime validation or an exact held-out profile must remain authoritative",
+    "long_outcomes": 2936,
+    "long_requested_bytes": 197880,
+    "matched_applied_prior_coverage": 0.07142857142857142,
+    "matched_executed_sites": 10,
+    "object_precision": 0.004214600086703626,
+    "short_outcomes": 693690,
+    "short_requested_bytes": 956543528
+  },
+  "claim_scope": "single-run diagnostic opportunity and classifier evidence; no performance claim",
+  "compiler": {
+    "applied_allocation_rewrites": 499,
+    "audited_crates": [
+      "ownedbytes",
+      "tantivy",
+      "tantivy_bitpacker",
+      "tantivy_columnar",
+      "tantivy_common",
+      "tantivy_query_grammar",
+      "tantivy_sstable",
+      "tantivy_stacker",
+      "tantivy_tokenizer_api",
+      "unialloc_lifetime_resident_tantivy"
+    ],
+    "binary_sha256": "9d48c984638893f36b5b3478f95ab3762504951ecc4ac3e3e5c6f5248802d33b",
+    "classified_candidates": 140,
+    "target_crates": [
+      "unialloc_lifetime_resident_tantivy",
+      "tantivy",
+      "tantivy_stacker",
+      "tantivy_common",
+      "tantivy_columnar",
+      "tantivy_query_grammar",
+      "tantivy_bitpacker",
+      "tantivy_tokenizer_api",
+      "ownedbytes",
+      "tantivy_sstable"
+    ],
+    "transported_classified_candidates": 140
+  },
+  "ground_truth": {
+    "confirmed_short_requested_bytes": 5171077058,
+    "confirmed_short_sites": 51,
+    "long_observation_sites": 62,
+    "long_requested_bytes": 9220049,
+    "opportunity_gate": {
+      "confirmed_short_passed": true,
+      "long_cohort_passed": true,
+      "minimum_confirmed_short_requested_bytes": 8388608,
+      "minimum_long_requested_bytes": 2097152,
+      "observed_confirmed_short_requested_bytes": 5171077058,
+      "observed_long_requested_bytes": 9220049,
+      "passed": true
+    },
+    "pressure_clock_boundary": "Long means survival through at least 8 MiB of subsequent process-wide requested allocation pressure in this diagnostic; it is a workload-relative observation rather than a universal lifetime definition",
+    "runtime_exact_sites": 104
+  },
+  "performance_claim_eligible": false,
+  "runtime_predictor": {
+    "byte_accuracy": 0.9999679706550946,
+    "byte_precision": 0.9982596801421276,
+    "byte_recall": 0.9834957405691502,
+    "fn_bytes": 151472,
+    "fn_objects": 2497,
+    "fp_bytes": 15736,
+    "fp_objects": 320,
+    "object_accuracy": 0.9992216980741102,
+    "object_precision": 0.9855985598559855,
+    "object_recall": 0.8976513505758905,
+    "tn_bytes": 5211269200,
+    "tn_objects": 3594701,
+    "tp_bytes": 9026280,
+    "tp_objects": 21900
+  },
+  "schema_version": 1,
+  "source": "unialloc-lifetime-resident-tantivy-ground-truth-summary-v1",
+  "workload": {
+    "commit": "d8f4c0b703120ed98f06297724dc1522df6019b9",
+    "fixed_work": {
+      "batches": 216,
+      "commits": 216,
+      "correctness": true,
+      "documents_indexed": 442368,
+      "documents_per_batch": 2048,
+      "elapsed_seconds": 20.346176869,
+      "final_num_docs": 442368,
+      "matched_documents": 95993856,
+      "queries_per_batch": 128,
+      "query_evaluations": 27648,
+      "query_phases": 216,
+      "result_digest": "12d05c320a270fdf",
+      "schema_version": 1
+    },
+    "peak_anon_hugepages_kib": 0,
+    "peak_rss_kib": 41192,
+    "repository": "https://github.com/quickwit-oss/tantivy.git",
+    "single_process": true,
+    "tree": "fe2469071989c602bd83ee4b8b6b2054747a44c9",
+    "version": "0.26.1"
+  }
+}

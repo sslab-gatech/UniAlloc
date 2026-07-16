@@ -1,0 +1,39 @@
+{
+  "artifacts": {
+    "after_sha256": "cd5ea306b949ba8e76a7727f51242016210bd3e899e74882c7cac2952f96731b",
+    "before_sha256": "10234f8a5943644e232493434bd80549d30bdd866263405baaecb6ca9f9c1b2e"
+  },
+  "claim_scope": "mechanism-counters-only",
+  "invariants": {
+    "before_after_output_digest_match": true,
+    "before_after_routed_counts_match": true,
+    "input_sha256": "15275fa30b90d4e9281846801a1bfce46e805b99ce371fb76bb65728721b4b94",
+    "ordinary_thp_routed_counts_match": true,
+    "output_digest": "910697faf3e95f3d",
+    "routed_allocations": 79972
+  },
+  "ordinary": {
+    "mapping_reduction": 3856,
+    "mapping_reduction_percent": 99.66399586456448,
+    "mappings_after": 13,
+    "mappings_before": 3869,
+    "retained_empty_reuse_hits_after": 3856,
+    "reuse_hits_equal_avoided_mappings": true
+  },
+  "performance_claim_eligible": false,
+  "reason_performance_excluded": "single samples ran on a busy host and before/after binaries include different allocator snapshots",
+  "schema_version": 1,
+  "source": "unialloc-lifetime-empty-extent-retention-syn-mechanism-v1",
+  "thp": {
+    "anon_hugepages_kib_after": 26624,
+    "anon_hugepages_kib_before": 24576,
+    "live_slot_bytes_after": 14300344,
+    "mapping_reduction": 3856,
+    "mapping_reduction_percent": 99.66399586456448,
+    "mappings_after": 13,
+    "mappings_before": 3869,
+    "physical_backing_minus_live_slot_bytes_after": 12962632,
+    "retained_empty_reuse_hits_after": 3856,
+    "reuse_hits_equal_avoided_mappings": true
+  }
+}

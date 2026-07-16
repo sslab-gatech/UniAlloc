@@ -1,0 +1,110 @@
+{
+  "artifacts": {
+    "backing_result": {
+      "path": "evaluation/raw/lifetime-prior-swc-direct-profile-n16-r20-20260715/direct-static-pilot-results.json",
+      "sha256": "9c439d1be10c6aab8221e61e23762ebe1bb737cddc69d6e98d2a05092bc0d0ef"
+    },
+    "defense_readout": {
+      "path": "evaluation/raw/lifetime-prior-swc-thp-no-procfs-n16-r20-20260715/DEFENSE-READOUT.md",
+      "sha256": "75166cc6617df4e6f85886d7bea217bbf226faf02a7fdee99eab47911486dd8d"
+    },
+    "dependency_provenance": {
+      "path": "evaluation/raw/lifetime-prior-swc-thp-no-procfs-n16-r20-20260715/dependency-provenance.json",
+      "sha256": "c3dbb91ef03695a50e4fdccc974c898c626195a5604d1f881426e9c20749a0cf"
+    },
+    "source_worktree": "/home/hanqing/alloc/UniAlloc-lifetime-swc-fixed-work-20260715",
+    "stage_a_result": {
+      "path": "evaluation/raw/lifetime-prior-swc-fixed-work-profile-direct-v3-20260715/stage-a-results.json",
+      "sha256": "3fbe07a257a5250c8987d79048dbec2025e9d3d2d0912dbb187c32f8f148624b"
+    },
+    "timing_result": {
+      "path": "evaluation/raw/lifetime-prior-swc-thp-no-procfs-n16-r20-20260715/thp-timing-confirmation-results.json",
+      "sha256": "5eb133913c3b0ecec688a69bb21a8800807b3fe2c73c41f2e48ff2b0963826e1"
+    }
+  },
+  "backing_gate": {
+    "causal_eligible_pair_count": 20,
+    "ordinary_median_anon_hugepages_kib": 0.0,
+    "passed": true,
+    "repeat_count": 20,
+    "thp_advice_attempts_per_process": 256,
+    "thp_advice_errors_per_process": 0,
+    "thp_advice_successes_per_process": 256,
+    "thp_extent_mappings_per_process": 256,
+    "thp_mapping_failures_per_process": 0,
+    "thp_median_anon_hugepages_kib": 22528.0
+  },
+  "classification": {
+    "applied_long_hint_count": 313,
+    "claim_boundary": "accuracy is measured with the Stage-A allocator pressure clock; production-clock accuracy remains a separate claim",
+    "evidence_stage": "stage-a-pressure-clock",
+    "executed_exact_site_count": 59,
+    "long_false_negative_outcomes": 0,
+    "long_false_positive_outcomes": 1678470,
+    "long_precision": 0.9617426961262061,
+    "long_recall": 1.0,
+    "long_true_positive_outcomes": 42194721,
+    "matched_applied_prior_site_count": 59,
+    "static_prior_join_success": true
+  },
+  "default_allocator_boundary": {
+    "comparison_role": "exploratory-five-arm-backing-run",
+    "matched_pair_count": 20,
+    "static_thp_operation_penalty_percent": 6.84954845113281,
+    "static_thp_pipeline_penalty_percent": 6.837973777805965,
+    "static_thp_vmhwm_increase_percent": 62.330831929919476,
+    "statement": "The matched backing ablation establishes the physical-THP increment for the selected cohort. The five-arm comparison still places static THP behind the default allocator."
+  },
+  "fixed_work": {
+    "application_warmup_runs": 0,
+    "compiler_selected_routed_allocations_per_process": 996240,
+    "criterion_used": false,
+    "fixture_bytes": 1086345,
+    "fresh_process_per_arm_sample": true,
+    "full_parse_transform_codegen_units_per_process": 16,
+    "harness_id": "large_full_es2020",
+    "output_bytes_per_process": 15034128,
+    "output_digest": "f5965d4ad6332e37",
+    "output_equivalence_passed": true,
+    "pinned_cpu": 20,
+    "repeat_count_per_arm": 20,
+    "timing_external_procfs_reads": 0
+  },
+  "matched_ordinary_vs_thp": {
+    "baseline_arm": "static-ordinary-compiler-prior",
+    "candidate_arm": "static-selective-thp-compiler-prior",
+    "operation": {
+      "candidate_faster_pair_count": 20,
+      "median_percent_reduction": 4.049954512883891,
+      "paired_bootstrap_95_high_percent": 4.353369458577273,
+      "paired_bootstrap_95_low_percent": 3.5434306565176943
+    },
+    "pair_count": 20,
+    "pipeline": {
+      "candidate_faster_pair_count": 20,
+      "median_percent_reduction": 4.076150480485866,
+      "paired_bootstrap_95_high_percent": 4.3746211042148655,
+      "paired_bootstrap_95_low_percent": 3.5670665862931203
+    },
+    "vmhwm": {
+      "candidate_increase_paired_bootstrap_95_high_percent": 67.1556972137728,
+      "candidate_increase_paired_bootstrap_95_low_percent": 63.84390466497413,
+      "median_candidate_increase_percent": 65.47737887807948
+    }
+  },
+  "presentation_claim_eligible": true,
+  "provenance": {
+    "allocator_campaign_snapshot_sha256": "51f4751ad2341f4010d72c0a899e6793a943a35fc69ea7a5731e6b62bb622c78",
+    "allocator_implementation_sha256": "1d6f73e1dfe1c43666d0d4e3a2a4b9abe0ac69f4df213061ba7666ff5799129e",
+    "allocator_revision": "170478b283d1680b034a0ec6a8afc28dff19c851",
+    "compiler_binary_sha256": "8235aeba58749787f0eb39e03f216455c5a333417ca4bf7bc147ad04358f62a0",
+    "compiler_pass_source_sha256": "6d08284466183b0ad8ee5e6e7e931fedf72705fe1a9bc3618dd2ce685726c1d1",
+    "direct_static_helper_sha256": "032b72bc203a214c0fd251a3c82b3f03c0e2080445ef9ae334390dcdd73570be",
+    "stage_a_evaluator_sha256": "3a06bf4a0cf701f8f0a91a9fb37cbea9f453508c835d5d4064e5a9d93aeed7f5",
+    "stage_b_evaluator_sha256": "2ec6bb6dc88e5df876d70633bae3585b0c5c0d5debe467a1327b206300dd62b6",
+    "swc_commit": "73f0f386da64fe432975183f9ccf28429b52638a",
+    "timing_evaluator_sha256": "af3a4fcb1eb7a9828815ae68fba9025a72038b6209ca42d9c96768ea8d754ff8"
+  },
+  "schema_version": 1,
+  "source": "unialloc-lifetime-swc-thp-matched-summary-v1"
+}

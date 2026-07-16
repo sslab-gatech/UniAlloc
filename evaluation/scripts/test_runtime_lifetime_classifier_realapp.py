@@ -217,6 +217,26 @@ class RuntimeLifetimeClassifierRealAppTests(unittest.TestCase):
         self.assertEqual(parsed[0]["tracked_inflight"], 1)
         self.assertNotIn("inflight_outcome", parsed[0])
 
+    def test_site_parser_requires_abi_v2_live_survival_schema(self) -> None:
+        self.assertEqual(2, wrapper.RUNTIME_SITE_ABI_VERSION)
+        self.assertEqual(
+            "unialloc-lifetime-adaptive-site-snapshot-v2",
+            wrapper.RUNTIME_SITE_SOURCE,
+        )
+        envelope = json.loads(site_snapshot([valid_site()]).split("=", 1)[1])
+        envelope["abi_version"] = 1
+        with self.assertRaisesRegex(
+            wrapper.matrix.MatrixError, "ABI version mismatch"
+        ):
+            wrapper.parse_runtime_site_rows(
+                wrapper.RUNTIME_SITE_PREFIX + json.dumps(envelope)
+            )
+
+        legacy_row = valid_site()
+        del legacy_row["live_survival_observations"]
+        with self.assertRaisesRegex(wrapper.matrix.MatrixError, "ABI v2"):
+            wrapper.parse_runtime_site_rows(site_snapshot([legacy_row]))
+
     def test_site_parser_rejects_duplicate_exact_five_key(self) -> None:
         row = valid_site()
         with self.assertRaises(wrapper.matrix.MatrixError):

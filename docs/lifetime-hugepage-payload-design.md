@@ -1,106 +1,250 @@
-# Lifetime-guided payload arenas
+# Lifetime-guided THP allocation
 
-## Scope
+## Current claim boundary
 
-The `lifetime_hugepage` experiment turns `AllocationMetadata::lifetime_hint`
-into an opt-in payload-placement decision.  It keeps the default allocator
-unchanged and adds three hosted policies:
+The production-facing experiment is default-off and uses a four-stage decision:
 
-| Policy | Ephemeral objects | Long-lived objects | Unknown objects |
-|---|---|---|---|
-| `Disabled` | existing allocator | existing allocator | existing allocator |
-| `SegregatedOrdinary` | ordinary 2 MiB extent | separate ordinary 2 MiB extent | existing allocator |
-| `LongLivedHugepage` | ordinary 2 MiB extent | 2 MiB HugeTLB extent | existing allocator |
-| `SegregatedHugepage` | 2 MiB HugeTLB extent | separate 2 MiB HugeTLB extent | existing allocator |
+```text
+Rust ownership prior
+    -> exact compiler/runtime site join
+    -> runtime survival validation
+    -> confirmed-byte density gate
+    -> physical THP request
+```
 
-Every routed extent belongs to one coarse
-`(lifetime class, size class, alignment class)` bucket. Each 2 MiB extent is
-split into 32 fixed 64 KiB identity regions. A region belongs to one exact
-semantic identity `(type, module, flags, lifetime, placement)` while live;
-different identities can share an extent and never share a region.
+The compiler prior is useful for candidate selection, cold-start packing, and
+site identity. Runtime evidence controls the defensible adaptive THP admission.
+A separate compiler-only policy remains a mechanism arm for isolating page
+backing effects.
 
-## Integration boundary
+The allocator objective matches the high-level HugePageFiller/HPAA objective:
 
-1. Semantic allocation resolves exact metadata and runs guard-page precedence.
-2. A known lifetime class asks the feature-gated arena for a slot before the
-   semantic object cache or raw allocator miss.
-3. Arena success publishes one raw-allocation lifecycle witness and continues
-   through the existing recovery, tag, initialization, and statistics finish
-   path.
-4. Arena-origin provenance is address based.  Every raw terminal release,
-   including a Drop without active metadata and a moved reallocation, checks
-   the arena before dispatching to the ordinary backend.
-5. Arena-owned semantic frees bypass the per-object TLS type cache.  Retaining
-   even a small number of cache entries could pin complete 2 MiB extents.
-6. `lifetime_hugepage_phase_flush_current_thread` turns a known phase boundary
-   into terminal release of that thread's semantic caches and quarantine.
+- keep a backed 2 MiB extent densely occupied by objects that remain live;
+- group draining objects so a complete extent becomes empty and releasable;
+- avoid THP backing for sparse or rapidly draining extents;
+- avoid repeated map, fault, zero, advise, and unmap cycles.
 
-## Arena structure
+Lifetime information adds a Rust-specific signal for pursuing that objective. It
+does not replace occupancy, release, or hot-path engineering.
 
-- Process-global spin-locked state; it supports cross-thread frees without
-  allocating allocator metadata recursively.
-- Fixed descriptor and address-index tables cover at most the configured 8 GiB
-  experimental pool.
-- One 2 MiB aligned mapping per extent.
-- Existing UniAlloc size classes plus alignment-aware slot strides.
-- Bump allocation for never-used slots and an intrusive free list stored in
-  released slots.
-- One available-extent list per coarse bucket. Lookup prefers an existing
-  matching identity region, then an unassigned region, and promotes the chosen
-  extent to the list head.
-- Exact identities co-pack at 64 KiB granularity. An empty region can be
-  reassigned only after every slot previously owned by its identity is freed.
-- Immediate checked `munmap` when an extent becomes empty.  A failed unmap
-  leaves the descriptor published and reusable.
-- An atomic zero-active-extents check keeps raw traffic out of the arena lock
-  when no routed mapping exists.
+## What Long and Short mean
 
-## Required invariants
+The runtime clock measures later allocation pressure:
 
-1. `Unknown` and unsupported layouts always use the existing allocator.
-2. A pointer has exactly one backend owner for its complete lifetime.
-3. Region assignment and reuse bind exact semantic identity; pointer release
-   validates the extent base, region, slot boundary, class, and allocated slot
-   range.
-4. Policy changes succeed only with zero live arena objects and zero retained
-   mappings.
-5. HugeTLB fallback is observable.  Claim-grade runs require zero fallback.
-6. Reallocation may stay in place only when the new layout fits the original
-   arena slot; class changes move through the normal semantic transaction.
-7. Every empty extent either unmaps successfully or remains indexed and
-   reusable.
+```text
+pressure = cumulative eligible requested allocation bytes
+age      = pressure at observation or free - pressure at allocation
 
-## Prototype boundaries
+Short    = age < 2 MiB
+Censored = 2 MiB <= age < 8 MiB
+Long     = age >= 8 MiB
+```
 
-- One process-global lock serializes routed allocation, release, and lookup.
-  The current evidence covers the placement mechanism and single-thread probe;
-  scalable multithread throughput remains an evaluation item.
-- A raw-backend reallocation that moves through the internal raw API can lose
-  lifetime placement. Semantic reallocation preserves placement metadata.
-- `lifetime_hugepage_phase_flush_current_thread` drains all retained semantic
-  cache and delayed-free entries on the calling thread, including entries that
-  originate in other semantic paths. Same-thread reentry is ignored by a TLS
-  guard.
-- The experiment's `exact` synthetic mode uses distinct Rust-like type IDs for
-  the long and ephemeral cohorts. `lifetime-only` removes that type boundary;
-  it measures the value of exact identity when program types correlate with
-  lifetime cohorts.
+The 8 MiB threshold refers to **subsequent allocation pressure**, not object
+size. A 64-byte object can be Long, while a 24 KiB object can be Short. These
+thresholds are preregistered feasibility parameters tied to the 2 MiB target
+extent. They are workload-policy choices rather than universal Rust lifetime
+definitions. The label measures pressure-relative residency; access hotness is
+a separate signal.
 
-## Evaluation gates
+Rust semantic lifetime and allocator performance lifetime remain separate:
 
-- Regression: exact-hint routing, Unknown fallback, cross-scope Drop,
-  same-class reuse, class-changing realloc, checked teardown, and fixed-heap
-  feature compatibility.
-- Mechanism: ordinary segregation versus long-lived HugeTLB placement with
-  equal `(lifetime,size)` packing.
-- Robustness: 0.1%, 1%, and 5% label corruption, type-diversity sweeps, and
-  phase-shift traces.
-- Cost: allocation/deallocation throughput, pointer-chain latency, retained
-  bytes, live slot bytes, reusable unassigned-region capacity, assigned-region
-  slack, complete extents returned, RSS/PSS, HugeTLB fallback, and
-  dTLB/page-walk PMU counters. `retained_slack = retained - live slots` includes
-  both immediately reusable free regions and slack inside identity-bound
-  regions; reports keep those components separate.
-- Presentation: distinguish manual-oracle, profile-predicted, and MIR-proven
-  hint sources.  A production-performance claim requires predicted hints on
-  real workloads; the integrated arena alone supports a mechanism claim.
+- a final `Drop` proves eventual release;
+- an owner return or consuming escape is a useful Long prior;
+- survival through later allocation pressure is runtime Long evidence;
+- cleanup and unwind can change the terminal path and force abstention.
+
+## Compiler analysis
+
+The marker-free pass runs after borrow checking and before normal MIR
+optimization. For each supported semantic allocation, it exports ownership and
+control-flow facts:
+
+- exact destination owner and owner move chain;
+- return, consuming escape, projected store, and local Drop sinks;
+- opaque calls while the owner is live;
+- loop backedges, `yield`/`await`, and receiver-owned allocation;
+- normal and cleanup successors and cleanup Drops;
+- exact requested layout when rustc can prove it.
+
+The advisory rules are:
+
+| MIR fact | Prior | Confidence | Boundary |
+| --- | --- | ---: | --- |
+| owner reaches return | Long | 70 | no cleanup, backedge, or yield ambiguity |
+| owner reaches consuming escape | Long | 70 | same boundary |
+| all-path local release | Short | 85 | exact Drop plus no opaque call, store, loop, yield, or owner-live cleanup |
+| bounded receiver-local release | Short | 85 | exact receiver owner and the same path restrictions |
+| owner-live cleanup/unwind | Unknown | 0 | all paths remain unproven |
+| opaque call before release | Unknown | 0 | call may allocate, retain, or unwind |
+| exact `Drop` fact alone | Unknown | 0 | eventual release has no pressure bound |
+
+Exact `mem::forget` and `Box::leak` recognition is retained only as a bounded
+process-long smoke oracle. It is excluded from real-program Long-classification
+claims.
+
+### Exact site authentication
+
+The runtime observation key is:
+
+```text
+(callsite, type_id, module_id, requested_size, align)
+```
+
+The compiler now evaluates exact constant `Vec::with_capacity` layouts. For the
+DataFusion resident target, a generated driver `Vec<u64>` with capacity 3,072
+exports size 24,576, alignment 8, and a compiler-derived TypeId matching the
+monomorphized runtime helper. The driver feeds resident Arrow batches into the
+real DataFusion query process; this site is outside the DataFusion library.
+
+A generic definition that still has no concrete TypeId retains a zero sentinel
+and can resolve only through an authenticated, unique runtime TypeId. A
+concrete positive compiler TypeId uses the stronger exact five-field key.
+
+This observation/export identity is separate from the predictor key. Exporting
+requested size never changes `AdaptiveSiteKey`, so dynamic-size callsites do not
+fragment the runtime learner into one predictor per byte size.
+
+## Runtime validation
+
+The adaptive learner keeps 4,096 bounded sites. Its predictor key retains the
+existing allocation-policy identity, including callsite, semantic type/module,
+flags, placement, payload geometry, and alignment. Static hints initialize
+small vote priors; runtime outcomes control state changes.
+
+Each site may register up to eight live-survivor samples. A global next-due
+pressure gate avoids scanning until some sample can cross the Long threshold.
+When an exact slot remains live for 8 MiB of later pressure:
+
+1. the site receives one Long observation before `Drop`;
+2. a trailer flag prevents a second Long vote when the object is later freed;
+3. the current allocation keeps its original placement;
+4. only future allocations receive confirmed-Long placement and density credit.
+
+This closes the shutdown-resident blind spot of a deallocation-only classifier.
+A process can learn a resident site while its important owners are still live.
+
+Cold-to-stable classification requires eight decisive observations. State
+transitions use hysteresis, four post-transition samples, and periodic vote
+decay. Censored outcomes add no vote. Static-prior conflicts neutralize the
+prior while runtime learning continues.
+
+## Placement and THP backing
+
+Every routed 2 MiB extent contains 32 fixed 64 KiB identity regions. A region
+binds exact semantic identity and slot geometry while live. Unknown and
+unsupported allocations retain the base allocator path.
+
+For the adaptive policy:
+
+- Cold and sampled Short allocations use ordinary candidate backing;
+- confirmed Long allocations prefer the fullest compatible candidate extent;
+- static Long evidence may help candidate packing;
+- only runtime-confirmed Long live slot bytes count toward physical promotion;
+- promotion requires at least 75% of one 2 MiB extent;
+- the allocator then issues `MADV_HUGEPAGE` and attempts collapse outside the
+  arena lock;
+- each measured process must independently prove `AnonHugePages` backing.
+
+The matched adaptive ordinary arm uses identical learning, trailers, geometry,
+and routing while forcing `MADV_NOHUGEPAGE`. It isolates THP backing from the
+rest of the lifetime-aware mechanism.
+
+Transparent Huge Pages are the primary backend because they preserve ordinary
+anonymous allocation and allow per-extent eligibility. Explicit HugeTLB remains
+an extra mechanism arm with reserved-pool and coarse-residency tradeoffs.
+
+## Empty-extent retention
+
+Lifetime-routed workloads repeatedly drain the same geometry set. Immediate
+`munmap` converted this into repeated map/fault/zero/advice work. The current
+allocator retains a bounded LRU of fully empty compatible mappings:
+
+- capacity: 16 extents;
+- maximum mapped retention: 32 MiB;
+- exact geometry and backing-state validation on reuse;
+- explicit trim, reset, and reconfiguration release;
+- counters for insertion, reuse, eviction, trim, and current/peak bytes.
+
+In the syn fixed-work mechanism screen, extent mappings fell from 3,869 to 13
+and 3,856 retained-empty reuse hits matched the avoided mappings exactly. This
+is a mapping-churn claim. Peak physical memory still depends on density and
+reclaim policy.
+
+An unconditional `MADV_DONTNEED` on every empty transition would preserve the
+VMA while forcing refault and zero-fill on reuse. A later two-budget policy may
+retain 2--4 warm MRU extents and discard older ordinary pages under pressure.
+
+## Heterogeneous region filling
+
+The default-off mixed filler allows different slot geometries to share one 2
+MiB extent at 64 KiB region boundaries while preserving lifetime class,
+backing, cohort, exact identity, and trailer provenance.
+
+The SWC N=8 diagnostic established the memory opportunity:
+
+- legacy layout: 11 extents;
+- mixed layout: 3 extents;
+- THP peak RSS paired saving: 34.45%;
+- physical THP backing passed in every policy-2 sample.
+
+The current implementation scans the descriptor table after a legacy bucket
+miss. It selected that path for 940,170 of 996,240 routed allocations and made
+the THP mixed arm 8.73% slower. Mixed filling therefore remains a memory
+mechanism until an O(1) validated lane/bucket hint removes the per-allocation
+scan. The compact evidence is in
+`docs/evidence/lifetime-resident-index-20260715/mixed-filler-swc-quick-summary.json`.
+
+## TCMalloc relationship and hot-path plan
+
+Modern Google TCMalloc translates allocation size into a low-cardinality size
+class, serves common operations through per-CPU caches, moves batches through
+transfer/central caches, and reaches the page heap and HugePageFiller on refill
+misses. Its HPAA is the relevant modern comparison; gperftools is retained only
+as `gperftools-legacy`.
+
+UniAlloc currently applies the same high-level full-or-empty objective with a
+Rust lifetime lane. Its routed allocation and free paths still enter one global
+arena lock. The next architecture step is:
+
+```text
+hot allocation/free:
+    size class + low-cardinality lifetime/placement lane
+    -> TLS or per-CPU run pop/push
+
+refill/overflow:
+    batch 64 KiB regions
+    -> central lifetime lane
+    -> extent filler and THP density decision
+
+sampled learning:
+    cheap local pressure countdown
+    -> rare exact-site observation slow path
+```
+
+The compiler hint becomes a refill-time lane selector. Predictor updates,
+pressure scans, extent selection, and syscalls leave the common allocation
+lock domain. This is the route to a TCMalloc-like hot path while preserving the
+Rust-specific lifetime contribution.
+
+## Evaluation contract
+
+A presentation result requires all of the following:
+
+1. pinned source commit, allocator revision, toolchain, and evaluator hashes;
+2. fixed work in fresh processes, with zero application warmup and no Criterion
+   boundary around the real operation;
+3. equal correctness/output digests and routed allocation counts;
+4. exact target-site routing and compiler/runtime join evidence;
+5. every measured ordinary operation-window sample with zero anonymous THP and
+   every measured THP operation-window sample with positive anonymous THP,
+   checked per process and per pair;
+6. time, peak RSS, `AnonHugePages`, mappings, live bytes, and packing slack
+   reported together;
+7. modern Google TCMalloc at compatibility pin
+   `12f255231938d30493186b0a037feedd70f5a1c1`, Bazel 8.4.2, with HPAA identity
+   and mapped library proven fail-closed.
+
+A failed backing gate produces a density/admission diagnosis and no timing
+claim. A quick N=8 diagnostic identifies direction and bottlenecks; a stable
+presentation estimate requires a larger preregistered matched campaign.
