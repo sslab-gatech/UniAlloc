@@ -1,0 +1,2944 @@
+{
+  "artifacts": [
+    {
+      "bytes": 2388469,
+      "path": "normalized-observations.csv",
+      "sha256": "79b42ebb337803de1755f7551469cf01ae4ffa914d8ad24a92c86e57bfcc55df"
+    },
+    {
+      "bytes": 6058882,
+      "path": "presentation-data.json",
+      "sha256": "64052d08b97ffaf5089884f897cafc74dd7a3d7cad891470f696efc76c4cafec"
+    },
+    {
+      "bytes": 74715,
+      "path": "allocator-baselines-performance.svg",
+      "sha256": "2c58b8394f326f4095be3836c2c039dbd778ad8421a2fe3548c7ce9d23155fab"
+    },
+    {
+      "bytes": 31638,
+      "path": "allocator-baselines-performance.pdf",
+      "sha256": "0b1602f0b3e2639eeee0db0bfeed98f1cc39e09d18ea32e23cf17f87a8ddcb52"
+    },
+    {
+      "bytes": 361549,
+      "path": "allocator-baselines-performance.png",
+      "sha256": "a541bd9d7bb43e7331996d9752ed064c4c94bca5ed8984c0d98070f91f8ee439"
+    },
+    {
+      "bytes": 85405,
+      "path": "allocator-baselines-peak-rss.svg",
+      "sha256": "846c6abc162d01b7debd9932719fbf5583948824babe58ffa195e5897d110691"
+    },
+    {
+      "bytes": 31198,
+      "path": "allocator-baselines-peak-rss.pdf",
+      "sha256": "07248218cc4774025d4df024e9dca50b4a1282ba4472bcf1bcd3e64757a1b7c8"
+    },
+    {
+      "bytes": 385749,
+      "path": "allocator-baselines-peak-rss.png",
+      "sha256": "d210370c712a4952be6fa2cc342f2e91be9f1d1c4169b86259cdebeeb4fffce9"
+    },
+    {
+      "bytes": 64571,
+      "path": "unialloc-features-performance.svg",
+      "sha256": "c5b985c7df04be704ed1d40f02bd8823f668a7985879b9d393efb113b53151a7"
+    },
+    {
+      "bytes": 26055,
+      "path": "unialloc-features-performance.pdf",
+      "sha256": "28a0dbdd2bf65e32e3a5ecaa836591476abbd5eb04c934c08cc2dbcaceaab5e9"
+    },
+    {
+      "bytes": 313848,
+      "path": "unialloc-features-performance.png",
+      "sha256": "e82e72700977ead05d031a84b7983f388e14b1edb87d013481e05d1ced00bb09"
+    },
+    {
+      "bytes": 73271,
+      "path": "unialloc-features-peak-rss.svg",
+      "sha256": "47800affde84a8b97ea58ba630a056a67251877f56c473461fae9263d129e880"
+    },
+    {
+      "bytes": 25259,
+      "path": "unialloc-features-peak-rss.pdf",
+      "sha256": "9f4a68a0cfa2e703d268908721a90d854048205946a040bbf2283c41d248335f"
+    },
+    {
+      "bytes": 345557,
+      "path": "unialloc-features-peak-rss.png",
+      "sha256": "e887a83e0b3235a97eeb3cec2d08e842c9422ddeed19d014f26471312f58215d"
+    }
+  ],
+  "figure_groups": [
+    "allocator-baselines-performance",
+    "allocator-baselines-peak-rss",
+    "unialloc-features-performance",
+    "unialloc-features-peak-rss"
+  ],
+  "input_evidence": {
+    "macro_baseline": {
+      "build_index_sha256": "ac7c2566b461b3367a8bb65a9fd1ce730ff7dc9fb6308e6b132e2b062391c0b4",
+      "campaign_sha256": "61e699ce31fbc587fa96125f94873ea6be46e7946b64593905d508819bbb2bbe",
+      "cell_index_sha256": "fb919c79c78362ab36c96667440da91772569c0c69d55d568dcd424ce54bfc8b",
+      "compatibility_import": {
+        "destination_protocol_fingerprint": "57b645582fdb12632133936338eefe556e99d74e9fab81bf84282bed86ace17a",
+        "destination_record_set_sha256": "1d879628d551e4ab32daf58a19f3bd342c778f4d910fa0ab73f71c09a9b95a74",
+        "import_build_index": {
+          "bytes": 112562,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/import-build-index.json",
+          "sha256": "ed59c52400f76778ac9a297f09dde1112343febd1f46e98df8f3bae543a3556b"
+        },
+        "import_id": "c649e0e00a760d38930f12d22637578c51f5eacbf4968c5d05587c616c5f1a0e",
+        "manifest": {
+          "bytes": 53896,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/compatibility-imports/7734395f225e045b6799d5554f59ba318ab7c131d2603036120543ef0c0b8f21/manifest.json",
+          "sha256": "559f71c3b356481dca9266cdca89f860d610f9cd92ed94f9293ae664663815b2"
+        },
+        "manifest_payload_sha256": "7734395f225e045b6799d5554f59ba318ab7c131d2603036120543ef0c0b8f21",
+        "pointer_path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/latest-compatibility-import.json",
+        "pointer_sha256": "f8b8238faf493d15d8eac5f641769f3d9637bf7d731072162692bfaf159de49a",
+        "record_count": 42,
+        "source_protocol_fingerprint": "e95f08ea8a7abd17e84522fa0dd7e6c3dabf9da971d8dc08db2df5042aecd60a",
+        "source_record_set_sha256": "595b7f319fd0f5a3d6900249c5ad97805101391e924e7c282bb22f18ea81f600"
+      },
+      "plan_sha256": "2a8ba4ce6219b6a5c1ca9a8a9cf21d6657e30c1893ef8604dc62018a40912c1f",
+      "planned_cell_count": 1088,
+      "referenced_artifacts": [
+        {
+          "bytes": 1815064,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/deps/tcmalloc/lib/libunialloc_google_tcmalloc.so",
+          "roles": [
+            "allocator_runtime"
+          ],
+          "sha256": "5f99dcf644a7e1e138439fed5d42216c5313ad28e2557f936a250643e0f42081"
+        },
+        {
+          "bytes": 33187,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/google_tcmalloc/c62a4e8dd448c4190c18c04bbce5c2b0ba02375db939158562acacd2a4f1ab47/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "a39a38781b265ce9d99b84440a7a7efd6ddad169b636f1f04b812c05dea3f1bf"
+        },
+        {
+          "bytes": 13077368,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/binaries/response-body-compression",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "b750231e23cb50c0579c5487601162aeef0f81fbb84d70eab337a917eb37a8fa"
+        },
+        {
+          "bytes": 11427416,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/binaries/router",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "8941472715733fed8db2a8e0b1b38b000d277fe5c6b54bdc7c80a2ed0239638d"
+        },
+        {
+          "bytes": 19497016,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/binaries/server",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "92c416958304ddcab976c38528f96688453cd7719b015172f426ddccd028d16a"
+        },
+        {
+          "bytes": 12117808,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/binaries/service",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "7ef73cc831b5115c3391a2b6e2edc0df19bb05dfd7a36ed3475cb7d63b29bdba"
+        },
+        {
+          "bytes": 8378,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-http-response-body-compression.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "7a8aafe6c9e42dab28e178ad906477e479ec3d1da80f9f12d8286037dfc03b54"
+        },
+        {
+          "bytes": 301654,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-http-response-body-compression.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "f9c767bf212db57a86b0ff13d6ea3bf104a0ddf9ae054708ef0b4536f0746014"
+        },
+        {
+          "bytes": 1043,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-router-router.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "179b9bc595402fa65cbe3fda2d5a0e3fb8f154debdd7b1930811265f153936d7"
+        },
+        {
+          "bytes": 87495,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-router-router.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "ec1da533e4dd88c2f1f7781a1f318d72f74a166f6b3b62e602ee157fefc492a4"
+        },
+        {
+          "bytes": 1910,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-web-server.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "12c1b89ff184375e66b6361f3aac362ef456b2600c0eb6b9c7e3cae4cf3e96b4"
+        },
+        {
+          "bytes": 303594,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-web-server.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "1726d095d1895ae5891b42f2b634bfcc1f6ab2f1089934d9b964ee90f088100f"
+        },
+        {
+          "bytes": 254,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-web-service.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "cf209846a1a8a6a7c9195957f40960d9667ff0402583834387f372d0f6f1bd16"
+        },
+        {
+          "bytes": 303568,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build-actix-web-service.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "2cb802d4ea65003965e0a012024441a80bd62f83040737434677fa1937b43a20"
+        },
+        {
+          "bytes": 21726,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "bab0d562e46d01af9a4bccd64e0f919df9f7c9dff7ae473701f5e67062599b15"
+        },
+        {
+          "bytes": 8223800,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/binaries/response-body-compression",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "e197fcbe3787d98f920c64888383e7c67fe2dc1974b9822080854330ffd1b075"
+        },
+        {
+          "bytes": 6583720,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/binaries/router",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "0f86a617c8d2e48bb6d89b83934426d2e2e771051e947f8f8ae1b69ed7e7bdac"
+        },
+        {
+          "bytes": 14613688,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/binaries/server",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "ec4d56164736327ab3d2fdc21423b0f4028f3b16c573a0e04ec7b98f51675432"
+        },
+        {
+          "bytes": 7258504,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/binaries/service",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "6df2c46b9acaecde84debce200d0820132bfc49785339ed1248b2b3aad7f77c1"
+        },
+        {
+          "bytes": 8260,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-http-response-body-compression.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "72453307170963076c839053630765abf5e48b0b17e0dc9512c8fadc0f7d8ae0"
+        },
+        {
+          "bytes": 300731,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-http-response-body-compression.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "966f34bd6cd312194a792d437d3c96511751e08564118f1a63947d729d95e5b6"
+        },
+        {
+          "bytes": 984,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-router-router.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "16acfae798d57aa64cadb111eb50f15b8358b0f1221636083fbb96b8eecc14f7"
+        },
+        {
+          "bytes": 86938,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-router-router.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "9a4324eab1c1425db9e91ae8fb77ff9f6c4a00d116b8e65647e6ff0f6645d6ec"
+        },
+        {
+          "bytes": 1910,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-web-server.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "da0652e3ccefd293d8610ff3d2a23b28bd054eb4c38cf8c37c5a9ef498bf9f78"
+        },
+        {
+          "bytes": 302671,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-web-server.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "520cbaa5ab37f7d5a65e5bd687e6748d1d349abdd36e178e4d79e2d914985e13"
+        },
+        {
+          "bytes": 254,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-web-service.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "95254343b0cc9fe9156eb0cb26ecc6857b412e04d7b231355893e7cbcd65b013"
+        },
+        {
+          "bytes": 302645,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build-actix-web-service.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "7bc05d9faa06318f574a503d12d086cd52a74ee498d5f61320d75d1641a3b258"
+        },
+        {
+          "bytes": 18179,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "58fbb2ba50a75317c8242e3b8f989f1dfa197e0aa852a72dfc5724bd8f0dd525"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "4dbd7a738d25ddefc6850e08222551a1fef8b2edc9c93ce1094f421bc70ec690"
+        },
+        {
+          "bytes": 538434,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/provenance/mimalloc/libmimalloc-01.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "05a9755c091a06b158d5a5afd3fd76d0d1f51bbcba4f24805f94d0c2b4b1178c"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/provenance/mimalloc/libmimalloc-02.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "387f16c85a6493086a439be43278bd85e51823681569ad91eab0d566037e1ec0"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 18765,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/mimalloc_no_thp/5fc07920bdb02f1a5b26c067b642baa6e663bcf49ee5eff780719a21710eaad4/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "eebe737d5c84990a5702be2968723e7b4bc298e1c1de44e1227b614b2d5b1b92"
+        },
+        {
+          "bytes": 8048992,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/binaries/response-body-compression",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "dc6679aecb2f6fccc4deeb9014b534b0e093d85f7a006764699b14ba154aff21"
+        },
+        {
+          "bytes": 6431064,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/binaries/router",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "d32fd22f118b934d3a9faf6792eec718286d0bac486b93f61c07358efd5a5ef9"
+        },
+        {
+          "bytes": 14379936,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/binaries/server",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "19b9c96c0e44ccce20a0c4aa66b332bfd3b4b05d4f5b6ae138016dc5f10857c1"
+        },
+        {
+          "bytes": 7097888,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/binaries/service",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "28d4c3419e38f7349c27fc527eda405b89c98156203821cdcd9ace4be1db2aa8"
+        },
+        {
+          "bytes": 8031,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-http-response-body-compression.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "d863115024a214ae57c94803e11735442b3f265243d25165e973bfd938e07e33"
+        },
+        {
+          "bytes": 293264,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-http-response-body-compression.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "de4e636f635925b2632c0018d012241686049a702f28c551964553de52816a0b"
+        },
+        {
+          "bytes": 915,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-router-router.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "b74036c2efdfde4c9bb0b9b7584cb83eb8aec9e7d87384f536522d22860d5320"
+        },
+        {
+          "bytes": 83003,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-router-router.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "10af2deeaaa89cfb573640c70513e92f2848cb825bad492a2493044f19676b11"
+        },
+        {
+          "bytes": 1898,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-web-server.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "4ac48c21c1823cdceb83ed0ebf66b80803afac4308e5f28d5d2ace56258d3fa8"
+        },
+        {
+          "bytes": 295185,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-web-server.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "1eff1c3d4582ba3962acbedbe147886773e704f8c791dc7852dd40950398f0b8"
+        },
+        {
+          "bytes": 252,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-web-service.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "d074629d6a92a94a3cb8bfb7074d49ca7dd65e9b93c0806a27139b9b6d883cd4"
+        },
+        {
+          "bytes": 295159,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build-actix-web-service.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "00511cbff8059873024a1d6f1fed42924a1d799cdd7573af75af99a3c8e16f29"
+        },
+        {
+          "bytes": 16169,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "c677bcf620d2f0ef67b82523203fe62c970958f2bdc7db118253a6c3b1c0cb62"
+        },
+        {
+          "bytes": 8588208,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/binaries/response-body-compression",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "c439ea9a6f1377ea5624e5bb8ed69971f157b4014a4c3ab420fab2f7bce86b4f"
+        },
+        {
+          "bytes": 6903304,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/binaries/router",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "0271463997d6c2fb97509ef2c2a9785cb5109487e2d34a9e1f25437ff2783069"
+        },
+        {
+          "bytes": 15104872,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/binaries/server",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "22626803bd7736f7374a2c793afebf1779854e11d4fad287943259c1001d1d11"
+        },
+        {
+          "bytes": 7617904,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/binaries/service",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "9e32ef2674f91c6627c8aca57df400b1954e6e2c3467f4ce827baddcc37f2f35"
+        },
+        {
+          "bytes": 8043,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-http-response-body-compression.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "3658963f7c8bacb97acd877d00c4ae65360ebef36c3ec70fea4d884d426fde37"
+        },
+        {
+          "bytes": 294374,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-http-response-body-compression.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "7cc43e0915d204381f1c701aa3dceb23ec728d814e5d815e7cac368df4cc1b0c"
+        },
+        {
+          "bytes": 917,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-router-router.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "061c735110b3e6cb7fdfbe55005dd3ba103b31473b4286a65dbe31463651bfff"
+        },
+        {
+          "bytes": 83317,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-router-router.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "8fb1cd83799fb9db732abd21f71490047e058d8276e6fdf62e9bff3add154c15"
+        },
+        {
+          "bytes": 1910,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-web-server.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "ade7d37c3699ad6be93704d1bc3f5d80253955722b88dc3dbf205c11b928694f"
+        },
+        {
+          "bytes": 296319,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-web-server.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "ceebb317457233ddec6f2bbc060bd88589bf2ff5c7589e4b470a88fe570aefec"
+        },
+        {
+          "bytes": 254,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-web-service.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "0c916d7383246360622ab8939cf867010447f841e4028c6a2bb57c84f96f2f62"
+        },
+        {
+          "bytes": 296293,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build-actix-web-service.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "22a0fd8fbd913acd701da23d305def2fe72b3652e25b2a471bece354f96170cd"
+        },
+        {
+          "bytes": 29518,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "dc9202b68b55fe8b7b24f7a2366bae06b41efba074b897b9a2cbc2b7dc2ccf32"
+        },
+        {
+          "bytes": 762,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/direct-load/build.stderr",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "5258701598c67971659efc6468639581e8e32b66cb5ace95dfde773bd7bbe352"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/direct-load/build.stdout",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 4187266,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/direct-load/target/release/deps/libunialloc-5670c851a780aa61.rlib",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "7c947b514a0cf001e634c7fa54c041ca075e0eaced54dfeb73231db83f6e42f4"
+        },
+        {
+          "bytes": 1712,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/actix_web/unialloc/tools/unialloc-direct-load-wrapper",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "4323ab9a4fa63450a7e5436c9e06f060656ef8dea5d8457b549a921c470e2d35"
+        },
+        {
+          "bytes": 14155,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/google_tcmalloc/58568d30f1e31585e1cf0fa4a0164bfd92c7bd1b74ddee3217e2a6b510c46808/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "d2034d6af7738988e5b61682973f254f72e06a9725647ab08d94e726c2c695b9"
+        },
+        {
+          "bytes": 13617256,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/jemalloc/binaries/allocbenches-18764bb473a925a6",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "4f05255e1210ec2bf508af99c9e3df0609790d14a3dd0ebc51fd524fbf9a1d6d"
+        },
+        {
+          "bytes": 1008,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/jemalloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "660e679ee6ecded882dd473e3257418e72f221f605403dde738aa0631fc265da"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/jemalloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 9086,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "32cdc4ba9e2fa9b884c5bc969229b287bc9d22b13ec48f42ee2e8c395e764e4b"
+        },
+        {
+          "bytes": 8784704,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/binaries/allocbenches-4c616bf24396530a",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "3c38708af27df9013acb8e13a2ce7234d368000ac3ef6ee0129c5e2a59bf93d9"
+        },
+        {
+          "bytes": 922,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "4b483fc37e287504e81439408a6ac1159f653684ecf2362cec1aeca8e9271a9a"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 9303,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "71042f5741818f4eebfa835fd52755a809f6b1776c23739552da0a77820220db"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "8cd3a8b550dcd14a17c2b9136ae53264a0ea429d23fc25d31766c0866a3160d2"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 9891,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/mimalloc_no_thp/929101d94e8b378b8e72eba1b9811a67d4f06814483e047ab94835b24f39b368/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "98207cf19d17d96e0bdd7be79ffe6e48d2eab3e6d863bc350def621b4334274b"
+        },
+        {
+          "bytes": 8629432,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/system/binaries/allocbenches-ac31a10e9910bfc9",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "5634612dae98016eb208dbc80b3b747b29badec46b7448c824922e1e2142fe4f"
+        },
+        {
+          "bytes": 765,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/system/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "1f1bb238b21c6de4d6c732f9e8a4bf1b74bfbd8fa5b89a40356f15ed298bf350"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/system/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 7681,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "cc8999dc87a5f48b2bcd9730bed02abc0f66af4d259473cd5325ba97d2e847e1"
+        },
+        {
+          "bytes": 9011824,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/unialloc/binaries/allocbenches-e0cd11ccdbd1ddcc",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "5ce8f030f46498086c957bcf1b7451ebaa5714c5980eea61c6c857b8811df81d"
+        },
+        {
+          "bytes": 10281,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/unialloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "043975f21ee40645e18a660f675c4b9c3c19ea9f82d2fbeaa5b1b6d2128ba642"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/unialloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 10719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/collections/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "8d3c6977e060731630f743e821dd3f8183354ebfa73349fb0ca48f7fc48ebbc8"
+        },
+        {
+          "bytes": 29557,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/google_tcmalloc/c61bb785efd0c426220cc46a6e2f08df8abb641bd23954e1a62dcac8e14014ad/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "4922356428cb5f49ffaa601799c8f819f1d59d3ca6f16081478c3cba483fbb20"
+        },
+        {
+          "bytes": 10502552,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/binaries/filters-409bc2d9397ce452",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "2750241b6bc2922a21aeee9e8432a3b1c6157221788d33fdffc401d30ea81f38"
+        },
+        {
+          "bytes": 8595744,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/binaries/oxipng",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "5a2006bfb85e365ba97a7217c78205769337363699275ef25e6af35e06d3b560"
+        },
+        {
+          "bytes": 10505576,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/binaries/reductions-a62de5cd7fcdde23",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "75760db87b26babb30a9ded2deb4d7e28b141eef9cf1e9d66fdc6bb52a0385f2"
+        },
+        {
+          "bytes": 10399768,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/binaries/strategies-daec38228455fa4b",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "166bffe0bf9c9696d0c570a63b4e4a89642a3ca8f3b1c583cb52ca16792d06f8"
+        },
+        {
+          "bytes": 1952,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "db35978b36668e91e7172d8768497f8de757cd9eefe9e1ea7fe907bd809d89a6"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 2475,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/build-01.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "97d0868875410b1d0094967deb481c7135e30f054b1d9d5434a402a291a88970"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/build-01.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 18607,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "5850b8a97401c69f0750a401f7fb20d56a244cedae8226f8431469c7760b1519"
+        },
+        {
+          "bytes": 5673288,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/binaries/filters-d27c4b100f3b6792",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "69367a3f2328f00e7f95ce206a496e0961aa4dfe0fe01f5fb7db1c56db5350e8"
+        },
+        {
+          "bytes": 3768152,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/binaries/oxipng",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "c78df8586b63208d00fd225afe89a008215bbdc83dd3c90b845f3597ade847a8"
+        },
+        {
+          "bytes": 5672456,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/binaries/reductions-74ce0d03fe979710",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "43d9cf0c079bfce26f526c493783d3515f8b6578bab27363dee99239a9cbfe7d"
+        },
+        {
+          "bytes": 5571280,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/binaries/strategies-ff79df4d07dfe44d",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "6821cb8bb627d8aa2350263c15b12e3a3b61e76fa436a70a63ebd351b1ee5ffe"
+        },
+        {
+          "bytes": 1963,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "1a44bb1f846510a7ee612fb60522fef8ac5edde680835a0d934eb2314caa80d3"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 2389,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/build-01.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "37141c5ca620bfff1c03cd44fc224726d1960756a19adb280447cbded9449cdf"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/build-01.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 14401,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "1402971a7ba7700668870a8f6e7abd700b335d3c7c1f0e845199337440ea069f"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "5e8a33969c168593a1ef800d0325d94ce55256ecdfc47c3b854101f41dd9c1e0"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 14984,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/mimalloc_no_thp/94ae0fb6cf76016630f19bf0527b7e19a3a3b79d223a553b422b306b9c3855c5/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "bcdf9a49b18c4d69a672bf4eab8c3276c5993d81097e60d3995cb80068d66d57"
+        },
+        {
+          "bytes": 5583112,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/binaries/filters-caecc595633ca2f0",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "e76c0adc6e8dc4ee6e0a0f18a2c265c2f634f421f135dbd4cad41c70d9c4b75f"
+        },
+        {
+          "bytes": 3627216,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/binaries/oxipng",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "8045a934bfebf05bb92657068f01ad5dd3f917bb986da165b61d5eb9d05c82fd"
+        },
+        {
+          "bytes": 5581248,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/binaries/reductions-3b5dbdcd67ce6d25",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "ac886fec5795896fa4bf0185b51d1af8138bbf8dd326abda17e062019fc31e16"
+        },
+        {
+          "bytes": 5481392,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/binaries/strategies-8d6be74f5f48c28b",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "aef51198118f98bda7e493f1377a7c7f744e3fab683bc1d545288c07006926df"
+        },
+        {
+          "bytes": 1576,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "8bb98f5733a65d5f806b7c12894df7d3ccdd8f9de2ee88639e81b2c2062885fe"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 2314,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/build-01.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "bf146c677fcd00bea6ff215bde6d452d7d5c241f08672ff3b540d67dd57b405d"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/build-01.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 12514,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "be6a4976ca7e0e404d2c76f3920001ba5d59d454e6f0392a3ab980c2047942e0"
+        },
+        {
+          "bytes": 5911528,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/binaries/filters-0f710730ac34e6eb",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "943c84ba067101d0739fbc21ae9a8dbd23c0f0d2fa13c5943cdc4e2bca942b28"
+        },
+        {
+          "bytes": 4005016,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/binaries/oxipng",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "bd6cc47616918861cc985e65ef166754415666d8f812ad73f6832e0480f60409"
+        },
+        {
+          "bytes": 5918944,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/binaries/reductions-ca0ed31d34573a75",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "a0e3c656337e279ba519acc0e4b21ef77d9a2c5912f34df09cc0dbf69184364d"
+        },
+        {
+          "bytes": 5804304,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/binaries/strategies-d81a09f3ac069722",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "c8b4ce739de4d0bf6972d38768756054520786186f30b1506f5d1ceb91fda78e"
+        },
+        {
+          "bytes": 12076,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/build-00.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "860c49bd69a5ce94408931f74b1c0aa94e680d8d4ba34c22188259109408d6eb"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/build-00.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 11449,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/build-01.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "02bf6e72790b80266b89ebe66ee33c4c9636bdd8abbb05adaa0a422f7882a420"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/build-01.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 24266,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/oxipng/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "180773607feca51297660121c76900c09fff80991d47646db34353781fde7f72"
+        },
+        {
+          "bytes": 13536,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/google_tcmalloc/a8e094874ad995b77c9019d8b77963521cee92bbf5947b1e8a51eefaa24066a0/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "04155ce9c5a5c8b4c055c3b91766d1f37843dcb2cecd246965b1f3678f5e5053"
+        },
+        {
+          "bytes": 583866720,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/jemalloc/binaries/polars-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "192e30ad6230e60a9fbe77b283e06a8b5542c163437ab7587b4548ce1e943992"
+        },
+        {
+          "bytes": 8371,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "a708e2bef1d5235ef0bb30a313db43162b25e0b29c66b92219e1db7480339bf4"
+        },
+        {
+          "bytes": 86664,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/jemalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "5872cdd442d3ababb7d3c814dec53a8f537245df003f5430c545c983ba3579b7"
+        },
+        {
+          "bytes": 374296,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/jemalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "c506d250b320ef2bffd91ace5c9ce44a8c0561f8034dd99890a2dd437bb03e75"
+        },
+        {
+          "bytes": 572588024,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/binaries/polars-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "3e6ee9dc739829b2e9b5f19eeb67d108d900394a47a417b5dc3a513fe663362f"
+        },
+        {
+          "bytes": 8585,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "01db70bc4340db91058d6a6a1b2fd763b3a07fd93a4e8a3ee6399c2966799756"
+        },
+        {
+          "bytes": 86509,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "18e80db32076ad476670369af04850f1504d2766987c800544a509732f489ac5"
+        },
+        {
+          "bytes": 373854,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "c1a9665710d7055357416029feedfa2d580480a6e4dce9b047c067b13d0055e2"
+        },
+        {
+          "bytes": 4370186,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "0aac4c3436f5160f19a2146bbe21071e8a57c5a9f3ea8e750aaea88f110a9744"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 9168,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/mimalloc_no_thp/89f136af1db92892e92d5bb52b96497e6abbc9ea3408621393616f42eb2d270e/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "05a23df06eaca413fdd22df7dfda94b4d219eebfb7c9663aa0b055884f0f40bb"
+        },
+        {
+          "bytes": 571564672,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/system/binaries/polars-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "45c1df3a2c8047b55dc6d3f0a5782d910a12c1970215b7525c28fc0abb860b96"
+        },
+        {
+          "bytes": 7087,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "cdadd24b0e1a3681400c95962c03632d071e33356db955df47e67ebb0e0f3997"
+        },
+        {
+          "bytes": 86396,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/system/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "a64701c76e1caaee4bdb7e2eff49603cf28e9a826916fafcc72a2f2137de15bb"
+        },
+        {
+          "bytes": 368708,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/system/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "228887653b84bd9e06761448b1b044a6dd88ae968b527db0ac632068b797ca23"
+        },
+        {
+          "bytes": 576062768,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/unialloc/binaries/polars-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "5f07009769faa34569d12bc477ef1761189c2fcab42d4e88c806031a634f4831"
+        },
+        {
+          "bytes": 10102,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "933c98057008f563474f50bb6d4da3239995aab5ae6f126bf9c1bc421ad74019"
+        },
+        {
+          "bytes": 96712,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/unialloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "af721b638f2f9a4cbd036be1f6dc403ef6f096b31ac797865610ef3566dd91c0"
+        },
+        {
+          "bytes": 379525,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/polars/unialloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "090f436b482efa241473ebd120f691c843793c55b399a229b4ee786d0aa81783"
+        },
+        {
+          "bytes": 12468,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/google_tcmalloc/38e76d618bf3fb049bf788535aa71b83ef8b5b69f9afb6e2d025096157297719/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "9fedea5d47c41a1d6b51d8280ef08288a305a1bc2072d7e185c4b2e8e2a7366d"
+        },
+        {
+          "bytes": 10369288,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/jemalloc/binaries/redb-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "90a44c0010a7f913719664bea21897293569177dfbf849c66779bc203a78689c"
+        },
+        {
+          "bytes": 7449,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "b5c89d3e8074d4c890ffb1c91edf50dd03a27dee04d010cadc99f541bf14ff6a"
+        },
+        {
+          "bytes": 1261,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/jemalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "02db48fb94703997ff2320d03dfe334cfd386173959967627e1a010587c3d4d7"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/jemalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 5541848,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/binaries/redb-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "4c429ba4efa69fdcc22c72f292d5e96befcb98060b21db8be0e30b2334a2dfa6"
+        },
+        {
+          "bytes": 7654,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "b4c2de333af8893536d62c4294090470af345b2b47b6dcc23a2ac031eabca249"
+        },
+        {
+          "bytes": 1174,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e1ea18b2f2741cd76d99413574bd40e730c718893f27b41c70b7ffe94a1e094c"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "b4ea09a07ecce58789a5f68aa5daf1b8af565d3c674ee442d9c635f42c7fc0e3"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 8235,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/mimalloc_no_thp/e05bf2a8a5430b14d7c971ae509139cc09ae89f153586b21eef9eaf4b193a119/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "575484abf1f10dc97d9085f92278d0254b6ed2d6be72c2a7b6d353301e0fe49a"
+        },
+        {
+          "bytes": 5381776,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/system/binaries/redb-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "2e77c00cd9f4b135c815aedd0b7784d8b970b30f10ee467b1d206ece72f3f27e"
+        },
+        {
+          "bytes": 6134,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "130e9fede8dcfa68c1db1c2a90c9b5f4e720355173c9b78c2e2d8ab6e1e5e0bb"
+        },
+        {
+          "bytes": 1019,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/system/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e13388762733993fcfa46319bf7b5b8d31ff2960044ab2fc0cba0d16929ae4f4"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/system/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 5749600,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/unialloc/binaries/redb-primary",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "a70340c27497066297d6547507a35465fd0f0e7db90ae955f77900ce3f350642"
+        },
+        {
+          "bytes": 9077,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "dd5f467c2a26b0a1cadd74d6b740aa471cb08360e6e9c6774803309c43f9a084"
+        },
+        {
+          "bytes": 10533,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/unialloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "183e9ca79bd47cdc7d6f6b55fc498ff2c2be19a57f597450d009ffdf5110d199"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/redb/unialloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 13516,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/google_tcmalloc/14f914963a242109a9658be10c8259951fdc88675d6b3c0cf862e21b86c993da/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "aaf3491d99e31fed69f3aac41114b601fbe79b7eef8ca93c7e91b3a5db78b07d"
+        },
+        {
+          "bytes": 39780192,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/jemalloc/binaries/execution",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "38c03688fcddc7f4ebb4f6dbdb41c12ee794bb663aa81c792f30911ff95592ed"
+        },
+        {
+          "bytes": 8366,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "7bebc412bb1edc6e4b48d55abe4bdd1b37ebc42031ab0b9ecdd5f708dfc3ed39"
+        },
+        {
+          "bytes": 15255,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/jemalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "81b1222a8fe0d3c2b86625398fd584e670eb4be81e3fbe865b6d37015b8417a2"
+        },
+        {
+          "bytes": 585831,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/jemalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "9ade9dc67d970763241a09e4119d47f55d67b0e975af81a22db17c1414db2b16"
+        },
+        {
+          "bytes": 34883056,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/binaries/execution",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "4892521c1f487f05421467acdce1216d93f7990e0c4fb319a57188759d817e54"
+        },
+        {
+          "bytes": 8587,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "bdf0c82ea800263161e2a59b81b389d68b411d6433629e791a85de49dccb2048"
+        },
+        {
+          "bytes": 15137,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "a243d594ac09bff52ae92db0fae2e249253858d2407ad164abadc51d296581a5"
+        },
+        {
+          "bytes": 585274,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "7f821198bdeb518d8d7ad6edb65043c6b617438d82267972ac7148dd89bbdff9"
+        },
+        {
+          "bytes": 425874,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "1517bb85d0b6a400c8ddba1be5cde8d45dbaf84d46370d68f81cb5cf443a4f96"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 9174,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/mimalloc_no_thp/3497e4f912bf014cc39d04b54a8c1d6e2abee25359c31172075520ed5a74b257/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "4ea036eb6fc3e9135537f2188f7c4581ce0608e3e0546a19a31eb0b93b2da89c"
+        },
+        {
+          "bytes": 34704504,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/system/binaries/execution",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "f48e070ff9755364533873824468eda5ac6acb0f7c8be4585270852ad70750f8"
+        },
+        {
+          "bytes": 7064,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "04ddfd8fbda75d41f1c1b50efa33e71ca297931d2c2c846a498ac5a2a4b08e27"
+        },
+        {
+          "bytes": 14888,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/system/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "b505af56f51ba492b79999f9a03bbe6030329cf28ebb5631d1ca0a7d12c4a6c9"
+        },
+        {
+          "bytes": 579374,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/system/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "2ddb789b3d301eda5ec18841e0d334c92475c2a1cb1d9eb5b27863112debfddc"
+        },
+        {
+          "bytes": 35571232,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/binaries/execution",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "5bbf0f0bc9bc95c7ca80c2365631e43a8dbb6b84d2f5e8d68c8af8182fb224f5"
+        },
+        {
+          "bytes": 13037,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "ba31f0b760085b843753aa80d6f7a5f0c85b78685881e53f01f1c2a0978adc88"
+        },
+        {
+          "bytes": 14920,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "4ae8a8ea866e174c2d99493bb7fe2376f16fad02bcf45e5a3520fadb5bdf84ba"
+        },
+        {
+          "bytes": 581646,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "2092c7e7cf50080868a7d205af3b4532f7743cbfa6bfb8299f51c114a611af19"
+        },
+        {
+          "bytes": 762,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/direct-load/build.stderr",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "c193b2f40410afd47e9c558a56ff7695ef8a2feba107eac81731f5dc0115f6c0"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/direct-load/build.stdout",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 4187274,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/direct-load/target/release/deps/libunialloc-5670c851a780aa61.rlib",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "07f1be812cfbed25790c3fdd9dbe6bfc530b13ab3addcb3524ad7e30cefaff13"
+        },
+        {
+          "bytes": 1712,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/rustpython/unialloc/tools/unialloc-direct-load-wrapper",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "4323ab9a4fa63450a7e5436c9e06f060656ef8dea5d8457b549a921c470e2d35"
+        },
+        {
+          "bytes": 13418,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/google_tcmalloc/84394c5936e296ae24ef1463ec72213bd91637051471d31221ef9c2cf38de5c8/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "faee95f5c59c29339d081ce9c8c6482a8ba25b1ae091b8eb0d0b08896a2b5c1b"
+        },
+        {
+          "bytes": 308765560,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/binaries/typescript",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "4fc090359ab802f3553da00efe38697c81e663273ecc3e832867b6d897de8f38"
+        },
+        {
+          "bytes": 10059,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "5eb50de1274cee8be7562b150757b6d1cdb6499fbab643bb8c52af1a127387b4"
+        },
+        {
+          "bytes": 21543,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "85454fe07719e0d0429bc4dfdabd42cef2a9a50bf237f650f0c33822788b2c19"
+        },
+        {
+          "bytes": 400684,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "d9e2962b6cf0edd1f40cc4a2b9fc7f71019c3b173cff55dfd35f4016abbaaa75"
+        },
+        {
+          "bytes": 6117,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/build.json",
+          "roles": [
+            "swc_jemalloc_direct_load_record"
+          ],
+          "sha256": "b60397ec3969e5376851ee92451971ce1904649196d178d0a9505789fe4dd4fc"
+        },
+        {
+          "bytes": 583,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/build.stderr",
+          "roles": [
+            "swc_jemalloc_direct_load_command"
+          ],
+          "sha256": "20b9688cfef51198945fb277c179e9aff414a47c03622683916821e066848f73"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/build.stdout",
+          "roles": [
+            "swc_jemalloc_direct_load_command"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 74,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/generate-lockfile.stderr",
+          "roles": [
+            "swc_jemalloc_direct_load_command"
+          ],
+          "sha256": "5be4150c536397f0f2bf89e71fda6257f4a01895715da1de6d9f24f73d7e69f7"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/generate-lockfile.stdout",
+          "roles": [
+            "swc_jemalloc_direct_load_command"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 1564,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/source/Cargo.lock",
+          "roles": [
+            "swc_jemalloc_direct_load_artifact"
+          ],
+          "sha256": "9e50f4b8125a82af4cfdaa1738e5ed8a508a4a14af5c0d533bd242f0f2dfcc25"
+        },
+        {
+          "bytes": 308,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/source/Cargo.toml",
+          "roles": [
+            "swc_jemalloc_direct_load_artifact"
+          ],
+          "sha256": "7e6cde3b48767a7dd6f02f09e4bff71440ce90aa39034d0469c87d1a671095b5"
+        },
+        {
+          "bytes": 32,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/source/src/lib.rs",
+          "roles": [
+            "swc_jemalloc_direct_load_artifact"
+          ],
+          "sha256": "2b6ed9eff8dd124a2e1f0c7cb4b67bb86679e9aa8ee25b6f6eaf34133081bd3c"
+        },
+        {
+          "bytes": 1748,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/swc-jemalloc-direct-load-wrapper",
+          "roles": [
+            "swc_jemalloc_direct_load_artifact"
+          ],
+          "sha256": "a4baa7a5dad5bb200f87c9feb3cc5ab72aab7dfe19216acb365338d461a7f2ea"
+        },
+        {
+          "bytes": 6554,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/direct-load-jemalloc/d8dbe0eed67e1c8c219e9e546954d7d767236be8d937bdefddc6540348a92921/target/release/deps/libunialloc_direct_jemallocator-76edf8053f014fe5.rlib",
+          "roles": [
+            "swc_jemalloc_direct_load_artifact"
+          ],
+          "sha256": "a9aaf44b1fd0ffd026e1898848f7f9749987026429a463ba1e5b4d3f418a7423"
+        },
+        {
+          "bytes": 231871,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/jemalloc/source/Cargo.lock",
+          "roles": [
+            "swc_upstream_lock"
+          ],
+          "sha256": "66577eee2bb8381b9093f89ad20303983a15ae0a1751dedd88c878b9b77617a2"
+        },
+        {
+          "bytes": 302518472,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/binaries/typescript",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "0c38e4a2505c3bcd989bbe615ca7a08597e862758bd658af7b8d3fae618ebff7"
+        },
+        {
+          "bytes": 8484,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "cef1c1c954ed93bcfc942099505d46da24b529c6249599d96be520031b17d34b"
+        },
+        {
+          "bytes": 21715,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "72c674e8c29e8c319bdcbe678145fd5e4a5b9a712e21b4e1490a8818ebc7c174"
+        },
+        {
+          "bytes": 400684,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "8a7faa426b3c50412a3e15a50e7ee42119a7a0e757faba3a940c00affffc9e1e"
+        },
+        {
+          "bytes": 4419050,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/provenance/mimalloc/libmimalloc-00.a",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "13701d408ae6997f9e03c4361bf572aab5c393538322d675fe00c618b5a4f139"
+        },
+        {
+          "bytes": 47719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc/provenance/mimalloc/mimalloc.h",
+          "roles": [
+            "allocator_provenance"
+          ],
+          "sha256": "869161433ab2d807a75752d0762accf5b68b6b24ce67e417af46bf181b9b6c72"
+        },
+        {
+          "bytes": 9064,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/mimalloc_no_thp/3b559c047747b4706897e74dd3b93ed087591fc96102ff4e17a24bb11a2a8700/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "1d76afc9e2b63335a77f117027331410a645cc63a47946392ab687f2081af8b4"
+        },
+        {
+          "bytes": 299743120,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/system/binaries/typescript",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "fa42185b817d13ef7b70785294195898c45031ec0df65e705880fe8c3c3708ca"
+        },
+        {
+          "bytes": 6979,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/system/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "1f60ee2af6205fb1847a35380116a3b6cda2bd5fe3d32d05b5891a5d1e4206f1"
+        },
+        {
+          "bytes": 21411,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/system/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "a107095c001cfab67bab60f89faacfde3d357d971d9c45d5ceff1827078146e8"
+        },
+        {
+          "bytes": 398896,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/system/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "e7d7664de869faec6c396a202aa5c82c8613bf8ce1c5d43d1fe82795bffd9d99"
+        },
+        {
+          "bytes": 300836392,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/binaries/typescript",
+          "roles": [
+            "build_binary",
+            "measurement_binary"
+          ],
+          "sha256": "a2ec9b3ab6cf6486fcd269700e977a967ffa0b737e97f29dc7b644786278f882"
+        },
+        {
+          "bytes": 12848,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/build.json",
+          "roles": [
+            "compatibility_import_source_record"
+          ],
+          "sha256": "00a4a9570ce14a99d8baa145677fa9ed11d5d2a1d5a20a151459a34af5a29a58"
+        },
+        {
+          "bytes": 21543,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/build.stderr",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "5bf8c99a2045d248cb06abbb8d24bbc918ad6fde9eeb456aea9ff384cef8b083"
+        },
+        {
+          "bytes": 400684,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/build.stdout",
+          "roles": [
+            "build_command_output"
+          ],
+          "sha256": "07c4611ed5604f033b1884546f8743d7575c8c7b5d49aa9b733ac8671105f8f4"
+        },
+        {
+          "bytes": 762,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/direct-load/build.stderr",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "dd310645e7c31454bd60edce8a6ce7d88c51cc7b8aec62e982f4955c36f248cc"
+        },
+        {
+          "bytes": 0,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/direct-load/build.stdout",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bytes": 4187242,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/direct-load/target/release/deps/libunialloc-5670c851a780aa61.rlib",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "eedfaebb8498c924a51ba38d5507000e440aafca663de3b1edfb82ab493abbe4"
+        },
+        {
+          "bytes": 1712,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/builds/swc/unialloc/tools/unialloc-direct-load-wrapper",
+          "roles": [
+            "build_support"
+          ],
+          "sha256": "4323ab9a4fa63450a7e5436c9e06f060656ef8dea5d8457b549a921c470e2d35"
+        },
+        {
+          "bytes": 15020,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/campaigns/e95f08ea8a7abd17e84522fa0dd7e6c3dabf9da971d8dc08db2df5042aecd60a/campaign.json",
+          "roles": [
+            "source_protocol_manifest"
+          ],
+          "sha256": "2c0e002928e3aa96d531b22d83f594e57044ee6826f80c85f108eecb7c5a61d9"
+        },
+        {
+          "bytes": 39269,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v3/frozen-implementation/9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178/snapshot.json",
+          "roles": [
+            "source_implementation_snapshot_manifest"
+          ],
+          "sha256": "8d79dc65f3a5d44ea62c6a3f734ed1efe1af576ddb1655913a9e3f9f68667d6b"
+        },
+        {
+          "bytes": 34187,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/google_tcmalloc/1561bb34c2a18af6d312b9638888e60ff48fe9b47bdc6e32927994fbad6ce79d/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "f100871aeb953e687d0d5b4bced44a381d99e7b867b45740b42d52518a7d7c69"
+        },
+        {
+          "bytes": 22606,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "4f0ada3601b41526d954ff01ede156fff26b311446b1fe28196a183f5a82675a"
+        },
+        {
+          "bytes": 19059,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "73a616dd92a293600ff7e2284fcaa357f5a4b486d0b8004dd972e636b7cd7465"
+        },
+        {
+          "bytes": 19765,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/mimalloc_no_thp/53dd1a97f352ae0e4736a22d72422cd7454a41b65a9d17b528dcd6f0ff9bd6fb/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "eefb498857255ff898f44301a3326ed5c8d01db4fd4da29e61c87850ffa8d60a"
+        },
+        {
+          "bytes": 17047,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "72161bd795e58ae87a3e0e7f34a683beb23106773a0ebd70912bc95b88fd86e4"
+        },
+        {
+          "bytes": 30398,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "382f8daff48b96bc454aa97ec7d10286961b93790975c25aac02342fb1128ecc"
+        },
+        {
+          "bytes": 15157,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/google_tcmalloc/bc3be3ad384e91c823bb1b0aefb509c40ea54396ee08181c3cebeeb6812675dc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "cde6b3da57f004cef93395f34267bab9e0b6e25403c9b06d5467bb2bcd87e899"
+        },
+        {
+          "bytes": 9967,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "a7e5ce5ebd8e07a7eba83301a61c70f3f289fb02c14ab9f5b995c080e83b8078"
+        },
+        {
+          "bytes": 10184,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "aa8fe4a76be6f96f26fd0bfb0022d0201ae609d013fe876da0d4b61bba173cd5"
+        },
+        {
+          "bytes": 10892,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/mimalloc_no_thp/1ba3a0f6cc7420bd6240c47e06daf50e3d552b998533ddb9930d29f31d6badb8/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "3bb4a24d620527ca44d4f203a2dd344f02ca5437cf60dce9e2048aaf3ec44724"
+        },
+        {
+          "bytes": 8560,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "981e8529460bf69ee7204ffb4a2a19964728f4bc1a13d7246bfcdffcd37df95c"
+        },
+        {
+          "bytes": 11601,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "78109eff81dbeb3ba5ccf0678c4c11b97cd76963e1a750aaf614ec0a8eb66142"
+        },
+        {
+          "bytes": 30554,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/google_tcmalloc/d8d608fbb734c9392a2847c0a45e54342d8d45acaa1752c9ec32b9c2bfb16aa4/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "e9feee400d0d8f5d5d45e1765fadd3caf9678e7273fa5def2b58108dc51b4445"
+        },
+        {
+          "bytes": 19484,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "c00867f25b888202ea4c5fc618644fda12e15549575a318b84680712da249b13"
+        },
+        {
+          "bytes": 15278,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "cfeef93d5f868820c26cfa57121591146e8e94eebfaef1821e07a8f79bb28341"
+        },
+        {
+          "bytes": 15981,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/mimalloc_no_thp/ed22c2444448528d5f111213c62a0223621bf8d8a5278fee174a9f93d6b0154a/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "1df51bb58d41e108eb113e0c7d1fcc33f4c25a1760e108fe0e75dfc813ff3f10"
+        },
+        {
+          "bytes": 13389,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "4f36eab1bd220f570fd08470a4b25f8a76308e450ce5c7189fbd8607a50c6dc5"
+        },
+        {
+          "bytes": 25143,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "8f7d5d228b2dd61eeb67ce4905b617e23814a4bba8e4c104baff6948cbb87676"
+        },
+        {
+          "bytes": 14533,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/google_tcmalloc/ede5139152d88358e61d73fd20a17be5f57195c6bbfcd8235b9ae0507e48fb95/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "1bed73075ddee2e0a650165129ee3b513808b2f4f2f8069b1e1e525ca6517da5"
+        },
+        {
+          "bytes": 9247,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "eec99de988881e29cfe280f7edca6b8e39a0f08912768a4387ed2ce30d4839ef"
+        },
+        {
+          "bytes": 9461,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "b9a26f77cd3deda659542ad81f64b5531998d6afbf5064e4fcd9d841796ae419"
+        },
+        {
+          "bytes": 10164,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/mimalloc_no_thp/b354848c169fd267af216477de845d913005694d82b8dd09318b9ac453838d63/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "5880c7b50eb0f3f14dd57ab45e80131507025cf98e36e01c85472d499f7cb548"
+        },
+        {
+          "bytes": 7961,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "136554ffdcfa30b57bee68d192faa17c947421ab79630de80d25cac6dc67061a"
+        },
+        {
+          "bytes": 10979,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "08b0bc251810831378065c09b4668f795fdd06e222d149cef1ee42db3eff6502"
+        },
+        {
+          "bytes": 13463,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/google_tcmalloc/4df19c32ad994f740ad6fb35236cbc7f35739b551344d3179861f714f3f4d4bc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "a8202e37662b628d933803bcee6fc423df13765c8693dbb663d1da3bfbe5b9ef"
+        },
+        {
+          "bytes": 8323,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "17710cdb8abcc6ac231fd8b5de409a0b2f341ffb16bc9f7f49c89f6d4e1a4d5c"
+        },
+        {
+          "bytes": 8528,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "8de89457987381de2d8aef4d0f7ba7b32ffa4e1c801b45aa4b8c81321bdbe4be"
+        },
+        {
+          "bytes": 9229,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/mimalloc_no_thp/dce65762cf77fc6d2d448b7b32427a9cd855e720d3ad87bdb17b59b9ee9753d3/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "ec8e0df753bdcf291a2b22db3c2215e120fc80874d9ab4596e99313c97260dd9"
+        },
+        {
+          "bytes": 7006,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "0f678a29ceb39d7417d7ab0ddbadf98f32308cfad4591c3c7eeb0fba9830c7c6"
+        },
+        {
+          "bytes": 9951,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "bff097aee1c6f9f1dc77999dbd2b2cf1ac4f5a5c5f90bb0ec941df175d7815d4"
+        },
+        {
+          "bytes": 14517,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/google_tcmalloc/3213a4f004ce6dfe3e1aa7094b5f61507980499ec6091a5f2a7694dcb272cd06/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "90c77fe3b09f4b3673b3ede92910ead88f1c7a6a8329ca36dc8c9fe6a9a8880a"
+        },
+        {
+          "bytes": 9246,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "0b2cb129227d9120ebfc60998cfbc4701b731038131b3284fec5399603ae57dd"
+        },
+        {
+          "bytes": 9467,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "7b8b09d9bda7913d0f15445c4230d0eb474af8ad83c50a2a2d15f4cecaa464f0"
+        },
+        {
+          "bytes": 10174,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/mimalloc_no_thp/4af0418bd3a6f9d2b603435f630d741d7777fe5c84ef322f2d59bee2eb6ecc1a/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "4d1476ff97e0bd463a2d75b3d126bdff5bc85d5e88f9fc0ae98806b13f4a38a2"
+        },
+        {
+          "bytes": 7942,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "c4fc6a589a13e69cc016af341c260056d78b0c3dc26b2735dd5990822cd94e0d"
+        },
+        {
+          "bytes": 13918,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "38a43f36cd4df4cf23ba9f1c2f02a19d6000bcc23be76f1ddf842a30184a3626"
+        },
+        {
+          "bytes": 14412,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/google_tcmalloc/6584524098d82b300b6be318a6c19b7363ebcec93ee1a3745301ce0be07ca7d5/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "5dac4399f52898a48128077b73af59516d6d9dd1f73f93a2e4da320375174828"
+        },
+        {
+          "bytes": 10933,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/jemalloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "5cc52893fb6106c3aa2eac8e8064d6a967d1bf321b8ba2d42d430323eed0a181"
+        },
+        {
+          "bytes": 9357,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/mimalloc/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "9bf130f8c0dbccea96754df5cd91173bf7215942d36dff30fd78202e1baa9c4b"
+        },
+        {
+          "bytes": 10057,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/mimalloc_no_thp/2add596eae1854efe5080c4eb5fda6f02444e55afee58263e9afab504d24d2d3/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "179f89918693f9fb6b44c455bd809dd668b748b83187a2e7d1a96b2f0c516f2e"
+        },
+        {
+          "bytes": 7850,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/system/build.json",
+          "roles": [
+            "base_build_record",
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "50b9dae5c8fd31b5034c63bcdf7d6f4383e2214cf01fba4dc9de904083bd6f14"
+        },
+        {
+          "bytes": 13722,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/unialloc/build.json",
+          "roles": [
+            "compatibility_import_destination_record"
+          ],
+          "sha256": "33010ad89d2c9ce863fe982382abe5c53391d8d172cf1963270ca710bb1bcb26"
+        },
+        {
+          "bytes": 53896,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/compatibility-imports/7734395f225e045b6799d5554f59ba318ab7c131d2603036120543ef0c0b8f21/manifest.json",
+          "roles": [
+            "compatibility_import_manifest"
+          ],
+          "sha256": "559f71c3b356481dca9266cdca89f860d610f9cd92ed94f9293ae664663815b2"
+        },
+        {
+          "bytes": 1719,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/031f3c8ff25ecbe539153c329db39801e37b1e1ee01b147ca50ab83a0086ea86.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "611fe808f69ce5bcd765295786d235018b0e8d348e014f70d875cedd0d3de87b"
+        },
+        {
+          "bytes": 1721,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/16b02b1d38f98371b4f8d743dbfdf8cf0aa47e983cf74781917f50459a8572d9.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "0345d5ebe73732a12e7a6ee23d9e2ac72ca97287b65db347015f22b7e1666788"
+        },
+        {
+          "bytes": 1831,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/1c952de1ea93776904fb09c37cf875ddce41f58f6c62675d88baf98ad6343aad.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "4ca520254cf76a661fa7049c6ef313de7a71ebc43edc6373f43398ea8c2c67d6"
+        },
+        {
+          "bytes": 1514,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/2946a6d5993a147c310ce3c7f7a3027d165c1e764e35a158fcd5f2e8ba03d77e.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "c8480129625de92bde58823b8ef83f048c9fc6dfd8049fe79f9f1582abc4dbad"
+        },
+        {
+          "bytes": 1605,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/29d16e1f64434836980f8445c19f225d599a46896a3d72afc7de17c1174ac558.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "411ce3dfa3d70866da7cd9eaab4c873c87fea89d7f7427394cb2451c0af7697d"
+        },
+        {
+          "bytes": 1718,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/2a962985fb518ae1491969ad74c1821a5aa8e967f6e14e62f481b995e5c471a8.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "6c70e66f2eb72097cbc927cb4a89ba81b2b4adc4d356395191adfd666606670b"
+        },
+        {
+          "bytes": 1403,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/2b5de487a5a2b0a723a8bdc925cb1a102996aa8af0a98f064fad19bd7490ee3d.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "bb7762dabd97ca79d6406b1c555dbc5fde150ba7c7e1af3c2999c766391d1bb3"
+        },
+        {
+          "bytes": 1728,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/30e805e6a259f9e9a54c958463aa5c93ecf24d5c47ae60b1643cf1d2404a405b.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "35968541f19dff3e1ec6312a6f8a6890669ef88553cb9ea9829f039920f7086a"
+        },
+        {
+          "bytes": 1825,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/337a6e73a70cffb01a747d10ef2fe0e3c905dce1453b75394a40ae1e1f73bb73.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "576b136e3a43fdab508f729ac8ffdf61ebc15e1be35e3cab617bb344dd2a5637"
+        },
+        {
+          "bytes": 1398,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/3ce02f3ad21c164f0bbd6673b1965a04caee9a2861390288b87d3ab346c8a8ab.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "5b3cfdee4ca7a5751b2b124abe43c9c7091337340df76aa0046ac158786f858a"
+        },
+        {
+          "bytes": 1725,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/45c775df197d8956849064a6e721808b1870f66e126e8b6728896730f29aa644.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "a6c674ec9c44e5f28979b4eecfc1f10e7b4212958b13bb0fe24817af692c9ba2"
+        },
+        {
+          "bytes": 1401,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/515f2d52bcc0cace1e324e0a79dd4ca94d29fb3cb9a7bbbc9644872b947cdbc2.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "ea4dbc4dd7cdb0c16e903c063dd59d0eddd2152afcc6263f074ecfe355183a9d"
+        },
+        {
+          "bytes": 1708,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/52285886cb30a58ccd9434523476ab19b56209643fa35c9920fcf4c82fabce0a.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "6795bd4cf640c86999b2f19cc074a2ae72f8018d11ab5a87ac0a04521684e269"
+        },
+        {
+          "bytes": 1519,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/596cfd3f741c689c6b93eab6b42813e90ef0623c1cd7ca2c07d7712b6065bbf5.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "8bb46724c245b2fbdd987ab774062743c2dc92a791db8c59847cc159fb9311cc"
+        },
+        {
+          "bytes": 1518,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/5e601ba65906d0278a9671208873481e572561de022939ccfbf756f8a7d2026c.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "d5d0a4739256e39fbee74344dd54aefdbed8c1b575ad4f1b46752e1110de24b1"
+        },
+        {
+          "bytes": 1515,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/5f4047936004a59b1472f8ba74edc788ecb1b666d80872c96b2a8dcd43fb7e44.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "206799f7fc811d8a569d110587d7aa70b236f663c0ce1f53bc96c4c19164e0b1"
+        },
+        {
+          "bytes": 1605,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/67572b11dbfa1b03a2e590397c418f4a9222a0a56a9b5e6ee43371d580608866.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "0b4a086c2847949ed5bc0254c4544466af36411ebcb4d9a66a1e96316d71309f"
+        },
+        {
+          "bytes": 1396,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/726d78f269a0c8177dd3094f388d801930b10f6100fc61189319e2eda8c84c8e.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "5a3583c23252d20cf08ed2aa66ad5057f3358426a78280783ba5668eab36a9a9"
+        },
+        {
+          "bytes": 1602,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/7cee9ca4bffe27600bd9c34561a22596d2bfea45448012c00c6336fa4ec47221.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "21cdc95cd40b64f304bdc2d9eafcd92fffafd2af045d1bb600a69eb7f2c7fde3"
+        },
+        {
+          "bytes": 1398,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/80b4d9cb504c1e6085a3b2f77cf9ebb2393317888c9afd6cbf7559d238b6bb7f.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "b320387b4f5b61430f9e21ce5808ac6fc54532ed38efbe10d54009659c71c105"
+        },
+        {
+          "bytes": 1401,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/9ea4e383132e6704137f89ae1841145e07ed13e41ecf29dc30556824d6e3c394.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "d517137962dd0ec8610f5604334acaa2a194d59e079f797d726ebfdc0bde3c48"
+        },
+        {
+          "bytes": 1517,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/a3b74f3b8b1402f4025711fbc598921cabbc6e138776c181c819ffc014e695c8.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "6d34b23014f4b3d180706a60839ba60e77d156ed1b305c6c0137dbb290dd669e"
+        },
+        {
+          "bytes": 1396,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/a48f4db07d8566a9a4c14ce0b87fa310b59b5fdd37cbc1a945b4b4acb6a46c8e.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "6f53cb8a53f48e08b688dc2435f897f7c82c152ad6ad53ccffec0b5fb6d935f6"
+        },
+        {
+          "bytes": 1722,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/a87f2d5a5b6017b734d1f639433f5cdfed56981d5ae0823583e66d5278542da5.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "de3dd2774e2303a525088a5ecc4f009ede8670a13bd0ff4c0d0cef9135b683a1"
+        },
+        {
+          "bytes": 1521,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/b3f7887a9d98dc0d3258b82c4113fbdd3f15327bdb102b3a1b775723849eba33.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "6e5a7caff0721dc68b3fe3553770b6ae71e9e5d2c443a87fece9211f775aa1b7"
+        },
+        {
+          "bytes": 1512,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/b4366ba6b4edd1737b239de5146c597e0a48117d482c18b3f5f506b9e187d8af.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "bd3885ed2122d058b2c9c965fee2838ba565eeae1cc7b91d88e8d5707c7bbdae"
+        },
+        {
+          "bytes": 1708,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/bb0867678cca4eaae2c4e253c28365810deb7e4cfd7d204bc0db62f93f40683d.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "c72a4b27bd970a817214002667d04828ad25758bb4a5408e1e1b8c748214414a"
+        },
+        {
+          "bytes": 1524,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/c89ef8bf1fdda891338d7e738baed5eabd4f99ac3d66ba4168431ad47799b916.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "f0db36de62a5105cf02a89471e0781ed7b1abff4039cbc13d511159cbf07217c"
+        },
+        {
+          "bytes": 1602,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/cd50f8b9f6f85b92e06c127cd7d8aaafd32fadabf32c0175bdd05245c9a48df8.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "d8f15e246bae607833a056a662c3b7c07b1a7308d348f0de3b55d357378dd807"
+        },
+        {
+          "bytes": 1513,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/daaea92a054469b33bd488ade15eec79929595facd4035ccf6c59ba312504823.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "c35b4ff438033366b595b6e6bf074502809c5f45eec15218b3e77c891e6ea4ed"
+        },
+        {
+          "bytes": 1526,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/dd6d1f4846dac45ae6368792cd5ee6189f3b064d5b64e8a96c1152084dfbe54c.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "785d16b0e0ae8fc4cad86bb670f6c7180f4a068b4b991aac331673f327aecdf1"
+        },
+        {
+          "bytes": 1520,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/eaa59be09acc554dba143c61b35dcc4c63cc0a447ff56c721d28c4f447a62af4.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "da7fd451c1c2b81d804350f2711b3bcf33e826eb3b6abcb261a15d82f22b115a"
+        },
+        {
+          "bytes": 1824,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/eb6473a066accbfd5803d7522f0efecbd2a51e5dd1d89c59f77e14feab99ab6f.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "53e9f7862bea874912ba461f11e83cd4481709391deb4378838fe5ae96833067"
+        },
+        {
+          "bytes": 1403,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/f178a715c1dd79883865923ef3b3582f494f44f7a8a78f190ceae3c459419154.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "8f184f5fd792c21b6266eb1d75e198d5a6b7fe0cf97ba03d3191b8ca0c52144e"
+        },
+        {
+          "bytes": 1519,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/environments/fe1efdb58d1d0255587d326688e7c9dd7381399243e1cf3104f46f17147e496b.json",
+          "roles": [
+            "runtime_environment"
+          ],
+          "sha256": "396dbc5e99757b04f9ebcf81d489462aadee697f299d488192804db838fbcc28"
+        },
+        {
+          "bytes": 39269,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/frozen-implementation/9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178/snapshot.json",
+          "roles": [
+            "destination_implementation_snapshot_manifest"
+          ],
+          "sha256": "8d79dc65f3a5d44ea62c6a3f734ed1efe1af576ddb1655913a9e3f9f68667d6b"
+        },
+        {
+          "bytes": 112562,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/import-build-index.json",
+          "roles": [
+            "compatibility_import_build_index"
+          ],
+          "sha256": "ed59c52400f76778ac9a297f09dde1112343febd1f46e98df8f3bae543a3556b"
+        },
+        {
+          "bytes": 22355,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/suite-manifest.json",
+          "roles": [
+            "suite_manifest"
+          ],
+          "sha256": "688b65afa2bf61f20c44192faf96afd6f4205e386ca2aea502dc101b7cd4484d"
+        },
+        {
+          "bytes": 21692,
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/scripts/import_macro_baseline_builds.py",
+          "roles": [
+            "compatibility_importer"
+          ],
+          "sha256": "cdb97d43fda88de7635c6f867941e4c10e44d96af555775294c28410f904c48e"
+        }
+      ],
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4",
+      "selected_build_records": [
+        {
+          "build_id": "6263a9c0610c667a3af8b75c01730b290741a1781c8f792e3c8ed8bc2e0c8154",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/google_tcmalloc/1561bb34c2a18af6d312b9638888e60ff48fe9b47bdc6e32927994fbad6ce79d/build.json",
+          "sha256": "f100871aeb953e687d0d5b4bced44a381d99e7b867b45740b42d52518a7d7c69",
+          "target_id": "actix_web",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "105d883815b41a3f57a23e4705dfc3ed94b8501bfd96a612b1d2f7a55d5c832d",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/jemalloc/build.json",
+          "sha256": "4f0ada3601b41526d954ff01ede156fff26b311446b1fe28196a183f5a82675a",
+          "target_id": "actix_web",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "cfadd683f68f82d4a798237bddcdc493acc6248ed6ededa081e44d74555e4e04",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/mimalloc/build.json",
+          "sha256": "73a616dd92a293600ff7e2284fcaa357f5a4b486d0b8004dd972e636b7cd7465",
+          "target_id": "actix_web",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "99b46631de647e1bf9951fd85695fcc58d98884474f91a9a38ae129f18983d25",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/mimalloc_no_thp/53dd1a97f352ae0e4736a22d72422cd7454a41b65a9d17b528dcd6f0ff9bd6fb/build.json",
+          "sha256": "eefb498857255ff898f44301a3326ed5c8d01db4fd4da29e61c87850ffa8d60a",
+          "target_id": "actix_web",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "2bcdb44eb6ed7a27f2949ad960c6207a34737e2640d2493ee0e75ec404ecf95e",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/actix_web/unialloc/build.json",
+          "sha256": "382f8daff48b96bc454aa97ec7d10286961b93790975c25aac02342fb1128ecc",
+          "target_id": "actix_web",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "9ea87275d09da64b6c57074b8a9a1e443418738f631191f41188c220af52276e",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/google_tcmalloc/bc3be3ad384e91c823bb1b0aefb509c40ea54396ee08181c3cebeeb6812675dc/build.json",
+          "sha256": "cde6b3da57f004cef93395f34267bab9e0b6e25403c9b06d5467bb2bcd87e899",
+          "target_id": "collections",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "99785d3cb34b2020d8d8ccc2bef545204ca90d9114cc6ca9f5b076cfc5eb363b",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/jemalloc/build.json",
+          "sha256": "a7e5ce5ebd8e07a7eba83301a61c70f3f289fb02c14ab9f5b995c080e83b8078",
+          "target_id": "collections",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "ca6c07c17210786262076e8d953ae39d91d09abae11cd2b4c9e1f8f4795f5a32",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/mimalloc/build.json",
+          "sha256": "aa8fe4a76be6f96f26fd0bfb0022d0201ae609d013fe876da0d4b61bba173cd5",
+          "target_id": "collections",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "e9eb6fe54a1b352f3551283adf97b2645f90079febafedf3793673594d5453f8",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/mimalloc_no_thp/1ba3a0f6cc7420bd6240c47e06daf50e3d552b998533ddb9930d29f31d6badb8/build.json",
+          "sha256": "3bb4a24d620527ca44d4f203a2dd344f02ca5437cf60dce9e2048aaf3ec44724",
+          "target_id": "collections",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "ef02f1bdd69f4c9923645257fd6bc06fecd80e86084634f19f2f7beefc9e1c6a",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/collections/unialloc/build.json",
+          "sha256": "78109eff81dbeb3ba5ccf0678c4c11b97cd76963e1a750aaf614ec0a8eb66142",
+          "target_id": "collections",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "44290fd0862504ec66f7e5464284bcf41cd4290942d9cf4a3ecfdfd84ed367d7",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/google_tcmalloc/d8d608fbb734c9392a2847c0a45e54342d8d45acaa1752c9ec32b9c2bfb16aa4/build.json",
+          "sha256": "e9feee400d0d8f5d5d45e1765fadd3caf9678e7273fa5def2b58108dc51b4445",
+          "target_id": "oxipng",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "1f60c9ea2b337ac4ef6410a0cf60b2104f15a3c3d5be23dd82beaed9df1f7d8b",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/jemalloc/build.json",
+          "sha256": "c00867f25b888202ea4c5fc618644fda12e15549575a318b84680712da249b13",
+          "target_id": "oxipng",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "442cdd56e7014cd18f8a0cbabac441c27611785d16cc04b448500cc2a6ab4ae1",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/mimalloc/build.json",
+          "sha256": "cfeef93d5f868820c26cfa57121591146e8e94eebfaef1821e07a8f79bb28341",
+          "target_id": "oxipng",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "581e727e58d1b51cb6f9689bcf885178eca29ef9b2c8366621dc4b24958139df",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/mimalloc_no_thp/ed22c2444448528d5f111213c62a0223621bf8d8a5278fee174a9f93d6b0154a/build.json",
+          "sha256": "1df51bb58d41e108eb113e0c7d1fcc33f4c25a1760e108fe0e75dfc813ff3f10",
+          "target_id": "oxipng",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "3cfc9e4c0e1756736c26661170201b744be9c4decbcab61469a3e21cd8df10f1",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/oxipng/unialloc/build.json",
+          "sha256": "8f7d5d228b2dd61eeb67ce4905b617e23814a4bba8e4c104baff6948cbb87676",
+          "target_id": "oxipng",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "281557a060f7421cba07ccdd7a004bc6f6661ba9752f22d936b54e2f83725a0d",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/google_tcmalloc/ede5139152d88358e61d73fd20a17be5f57195c6bbfcd8235b9ae0507e48fb95/build.json",
+          "sha256": "1bed73075ddee2e0a650165129ee3b513808b2f4f2f8069b1e1e525ca6517da5",
+          "target_id": "polars",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "426cae83ad6c51f5f0f574d1f93079cb3da5df6434de04cd95d480978846068b",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/jemalloc/build.json",
+          "sha256": "eec99de988881e29cfe280f7edca6b8e39a0f08912768a4387ed2ce30d4839ef",
+          "target_id": "polars",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "381719bcb03a371001a8f349cb04eb60ca09e298faa115330d17456a3b558b33",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/mimalloc/build.json",
+          "sha256": "b9a26f77cd3deda659542ad81f64b5531998d6afbf5064e4fcd9d841796ae419",
+          "target_id": "polars",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "067262288517afafdfa80c9cd994cd2b04befc201baa92da93e92b85d2d6b4d0",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/mimalloc_no_thp/b354848c169fd267af216477de845d913005694d82b8dd09318b9ac453838d63/build.json",
+          "sha256": "5880c7b50eb0f3f14dd57ab45e80131507025cf98e36e01c85472d499f7cb548",
+          "target_id": "polars",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "ec0ac63f437e7fc0bc7781249634c579d3164cd2e162496b51ff2a72547a6ddb",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/polars/unialloc/build.json",
+          "sha256": "08b0bc251810831378065c09b4668f795fdd06e222d149cef1ee42db3eff6502",
+          "target_id": "polars",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "985b0d3fd01e53c5372e203f8f5be487013aa74e4985052684b251281b07848f",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/google_tcmalloc/4df19c32ad994f740ad6fb35236cbc7f35739b551344d3179861f714f3f4d4bc/build.json",
+          "sha256": "a8202e37662b628d933803bcee6fc423df13765c8693dbb663d1da3bfbe5b9ef",
+          "target_id": "redb",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "823c6ca9136b15d26c3d14177982fdaec108d8681cee922f9c5c6609d852b78f",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/jemalloc/build.json",
+          "sha256": "17710cdb8abcc6ac231fd8b5de409a0b2f341ffb16bc9f7f49c89f6d4e1a4d5c",
+          "target_id": "redb",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "79cd8538b44655af97ca58fdd9abae3f321811a81e812a6be306ebfed0c2fa42",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/mimalloc/build.json",
+          "sha256": "8de89457987381de2d8aef4d0f7ba7b32ffa4e1c801b45aa4b8c81321bdbe4be",
+          "target_id": "redb",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "b19e932e189a16b79967aae277416fb9b220fde86ca705fdf1c11d7f58a26d47",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/mimalloc_no_thp/dce65762cf77fc6d2d448b7b32427a9cd855e720d3ad87bdb17b59b9ee9753d3/build.json",
+          "sha256": "ec8e0df753bdcf291a2b22db3c2215e120fc80874d9ab4596e99313c97260dd9",
+          "target_id": "redb",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "cfd570ed8eba7fa0b84fce462a883480f2f7f73abe5ae745da2fdd881e114fb1",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/redb/unialloc/build.json",
+          "sha256": "bff097aee1c6f9f1dc77999dbd2b2cf1ac4f5a5c5f90bb0ec941df175d7815d4",
+          "target_id": "redb",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "ef33f412fb4c51bd123acaf8cb2a5be6c00aaf8598ee1f28d3084f13642f2c58",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/google_tcmalloc/3213a4f004ce6dfe3e1aa7094b5f61507980499ec6091a5f2a7694dcb272cd06/build.json",
+          "sha256": "90c77fe3b09f4b3673b3ede92910ead88f1c7a6a8329ca36dc8c9fe6a9a8880a",
+          "target_id": "rustpython",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "1fff3f279818255b9928608f911ad8196b7d79374e4e5420371347da4e8a84bc",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/jemalloc/build.json",
+          "sha256": "0b2cb129227d9120ebfc60998cfbc4701b731038131b3284fec5399603ae57dd",
+          "target_id": "rustpython",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "53cf183c3912e6b1ed26e1fa950d2c8ce2b375860d1be20f7cfd0e4d5041fa9a",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/mimalloc/build.json",
+          "sha256": "7b8b09d9bda7913d0f15445c4230d0eb474af8ad83c50a2a2d15f4cecaa464f0",
+          "target_id": "rustpython",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "1acfd3ef7900f7f7ffd5cb05d3228d538676fe224698c2313f6b24f71b16922f",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/mimalloc_no_thp/4af0418bd3a6f9d2b603435f630d741d7777fe5c84ef322f2d59bee2eb6ecc1a/build.json",
+          "sha256": "4d1476ff97e0bd463a2d75b3d126bdff5bc85d5e88f9fc0ae98806b13f4a38a2",
+          "target_id": "rustpython",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "f0943c858787dead878175ec0f515fabd5810ec03a3ae78fe2deba73d9df3b21",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/rustpython/unialloc/build.json",
+          "sha256": "38a43f36cd4df4cf23ba9f1c2f02a19d6000bcc23be76f1ddf842a30184a3626",
+          "target_id": "rustpython",
+          "variant": "unialloc"
+        },
+        {
+          "build_id": "4957e9195212c9b6c558ce327aee3ac1f9ca255165aedebf770ffe46ca6773c1",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/google_tcmalloc/6584524098d82b300b6be318a6c19b7363ebcec93ee1a3745301ce0be07ca7d5/build.json",
+          "sha256": "5dac4399f52898a48128077b73af59516d6d9dd1f73f93a2e4da320375174828",
+          "target_id": "swc",
+          "variant": "google_tcmalloc"
+        },
+        {
+          "build_id": "28627d008c2b10756e0e7507d2da703522a45a8c2ed515bb30bf7e8afd3f0eab",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/jemalloc/build.json",
+          "sha256": "5cc52893fb6106c3aa2eac8e8064d6a967d1bf321b8ba2d42d430323eed0a181",
+          "target_id": "swc",
+          "variant": "jemalloc"
+        },
+        {
+          "build_id": "967af99e1599f32b3c06f139323e56353c3a1124a15d08bcf4d693b35f467481",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/mimalloc/build.json",
+          "sha256": "9bf130f8c0dbccea96754df5cd91173bf7215942d36dff30fd78202e1baa9c4b",
+          "target_id": "swc",
+          "variant": "mimalloc"
+        },
+        {
+          "build_id": "6822100cf0778e2cb1c968ebec70f639a56b8a57e50cd880353baafbc58c656e",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/mimalloc_no_thp/2add596eae1854efe5080c4eb5fda6f02444e55afee58263e9afab504d24d2d3/build.json",
+          "sha256": "179f89918693f9fb6b44c455bd809dd668b748b83187a2e7d1a96b2f0c516f2e",
+          "target_id": "swc",
+          "variant": "mimalloc_no_thp"
+        },
+        {
+          "build_id": "d7d5d2a756f855d9ad6c7f61674e2332fd609eaa2767a44be0f70d0e899bb2cc",
+          "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/macro-allocator-baselines-v4/builds/swc/unialloc/build.json",
+          "sha256": "33010ad89d2c9ce863fe982382abe5c53391d8d172cf1963270ca710bb1bcb26",
+          "target_id": "swc",
+          "variant": "unialloc"
+        }
+      ],
+      "selector_sha256": "8c43a328b618f70248248a854c616f75b3063802d1e9fe4aa04611e69e8cfc3d",
+      "suite_copy_sha256": "688b65afa2bf61f20c44192faf96afd6f4205e386ca2aea502dc101b7cd4484d",
+      "summary_sha256": "8ff1bd4ace14fe971dc5e64cd783dcf120ca620efbc11c9188a3c6646f14729b",
+      "variant_ids": [
+        "mimalloc",
+        "mimalloc_no_thp",
+        "google_tcmalloc",
+        "jemalloc"
+      ]
+    },
+    "macro_feature": {
+      "path": "/home/hanqing/alloc/UniAlloc/benchmark-results/type-isolation-primary-v6-ce8af7b.json",
+      "sha256": "04fb361c42b28f945b26130a63a81546d3e5613bb100e3bf3f50115cc0880de6",
+      "target_count": 7,
+      "workload_count": 34
+    },
+    "micro_baseline": {
+      "benchmark_count": 468,
+      "campaign-config_json_sha256": "40762509ec0fb840bc732d183302c0ae323ba22d1893a17fa23c828cb4708d0a",
+      "campaign-selection_json_sha256": "83b1f1cfc52beaf068c69bbb80911ec0156ecddb6cd93435dbe2349fe560ad19",
+      "campaign-state_json_sha256": "2adf447e223e0d2c8edbb7520fa85e089ac03ea87ed4653d9ffddeec57d1cd5d",
+      "censored_benchmark_count": 1,
+      "censored_cell_count": 5,
+      "common_completed_benchmark_count": 467,
+      "common_completed_excluded_benchmark_count": 1,
+      "common_completed_excluded_benchmarks": [
+        "btree::map::iter_1m"
+      ],
+      "common_robust_benchmark_count": 237,
+      "common_robust_excluded_benchmark_count": 230,
+      "complete_comparable_benchmark_count": 467,
+      "provenance_json_sha256": "9cadda6430a67e07be0ffc60ae0fd4b4ec12ba0d67bbeaea0294b98716590bac",
+      "records_jsonl_sha256": "ead82ca48e902b09465ef692ff5b64fc4d8afaa50e0b8a8591db9b54e299a29e",
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-baselines-ce8af7b-v1",
+      "summary_json_sha256": "1c03a6332aa8427c6ece24a30936f7fd3bda0b5e76edf9a65aa7cc77f0ac232e",
+      "terminal_benchmark_count": 468,
+      "timeout_seconds_per_process": 30,
+      "variant_ids": [
+        "unialloc",
+        "jemalloc",
+        "mimalloc",
+        "mimalloc_no_thp",
+        "google_tcmalloc"
+      ]
+    },
+    "micro_feature": {
+      "benchmark_count": 468,
+      "cohort_id": "primary-ce8af7b-v8",
+      "common_completed_benchmark_count": 467,
+      "common_completed_excluded_benchmark_count": 1,
+      "common_completed_excluded_benchmarks": [
+        "btree::map::iter_1m"
+      ],
+      "common_robust_benchmark_count": 238,
+      "common_robust_excluded_benchmark_count": 229,
+      "common_robust_rule": "minimum three-round median ns_per_iter across every feature variant is at least 100 ns",
+      "index_sha256": "734c3089e3b2f5193e81acc1e1881790150eda979fbe0193bf851b9b00d2275c",
+      "measurement_session_id": "e72c273d-1241-4895-b431-6253985397e6",
+      "peer_timeout_blocked_cell_count": 2,
+      "protocol_sha256": "46190f76b4ea1b4c48b05c29e2809ec8b93a86c91d0227997f09b91db0ddc0bb",
+      "root": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-feature-ce8af7b-v8-final",
+      "selection_sha256": "396a3b4ea3d3b70a024e1ef0d7f4c1e03be47971cd0c72a10d7e3a0bf43a2e73",
+      "session_sha256": "673f3b24535d2202b8457174f0c98777f2046c6a5ad7adf308452990c5e4f993",
+      "terminal_accounting_sha256": "086170701fa23dae5ce060cdb9c259df43717c46511477d29823f26769c75bd0",
+      "terminal_benchmark_count": 468,
+      "timeout_censored_cell_count": 1,
+      "timeout_seconds": 30
+    }
+  },
+  "png_dpi": 300,
+  "schema_version": 2,
+  "suite_id": "type-isolation-primary-v6-ce8af7b"
+}

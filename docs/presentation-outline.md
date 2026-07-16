@@ -6,7 +6,7 @@
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
-> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-case Rust `std_bench` inventory: 466 cases have complete seven-way comparisons between default UniAlloc and six external allocators, and 236 pass the timing robustness gate. Macrobenchmarks cover 29 workloads across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. The primary macro comparison is Type Isolation versus default UniAlloc: total execution cost is `2.5770x`, compiler-route-equivalent execution cost is `1.0421x`, and fixed-work peak RSS is `1.0034x` (`+0.342%`). The matched typed-route ablation reports `1.0054x` policy execution cost and `1.0006x` (`+0.057%`) policy RSS. The five-case Collections Type Isolation diagnostic remains in the CSV/JSON appendix. The detailed seven-target figure and full heatmap remain audit-only backup evidence.
+> Current allocator figure boundary: use the four title-free figures in `docs/figures/allocator-evaluation-20260716/`. They are bound to frozen revision `ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503` and separate allocator baselines from Type Isolation ablations, execution cost from peak RSS, and the 468-case Rust `std_bench` population from 34 workloads across seven real-world Rust targets. Type Isolation end-to-end execution cost is `1.0035x` in Micro and `1.3509x` in Macro; fixed-work Macro peak RSS is `1.0405x`. Micro RSS remains diagnostic.
 >
 > Current lifetime/THP backup: physical slide 32 in `docs/UniAlloc-Qualifier-Core-Deck.pptx` is labeled B13 and uses the PNG companion of the editable `docs/figures/lifetime-resident-index-20260715/mixed-filler-fastpath-evidence-slide.svg`. It is a current source-bound diagnostic with `performance_claim_eligible=false` and `presentation_claim_eligible=false`; keep the boundary footer visible.
 
@@ -363,60 +363,46 @@ coverage, external-platform runtime, or publication-grade performance claim.
 
 #### Current two-tier allocator evaluation
 
-Use the canonical figures from `docs/figures/allocator-evaluation-20260714/`.
-The micro figure uses Rust `std_bench`; the macro figure uses real-world Rust
-programs. Type Isolation appears relative to default UniAlloc in the macro
-figure. Its five-case Collections microdiagnostic and the typed-route policy
-ablation remain in the appendix data.
+Use the four canonical figures from
+`docs/figures/allocator-evaluation-20260716/`. The left panel of each figure is
+the Rust `std_bench` Micro population; the right panel is the seven-target
+real-world Macro population. The two baseline figures compare jemalloc,
+mimalloc, mimalloc with THP disabled, and modern Google TCMalloc with default
+UniAlloc. The two feature figures separate the compiler route, incremental
+isolation policy, and end-to-end Type Isolation cost.
 
-> **Evidence badge:** current source-bound diagnostic; post-measurement
-> presentation-analysis amendment. The amendment changes taxonomy and
-> aggregation only; measured membership, variants, observations, and sampling
-> remain frozen.
+> **Evidence badge:** frozen source-bound evaluation at `ce8af7b`; one warm-up
+> and three measured rounds; immutable raw cells and digest-bound derived
+> views.
 
 The micro aggregate prevents the 129 `str`, 118 `vec`, and 100 `btree` cases
 from dominating. It takes the back-transformed median log-ratio within each of
 eight families and then the unweighted geometric mean across family medians.
-Performance uses 236 seven-way cases above the 100 ns/iter timer floor. Peak
-RSS from libtest is a process-observed adaptive-work diagnostic and uses hollow
-marks. The five Collections Type Isolation cases remain appendix data and are
-never pooled with the 468-case external-allocator matrix.
+The allocator-baseline matrix has 467 common-complete cases and 237 cases above
+the 100 ns/iteration timer floor. The feature matrix has 467 common-complete
+cases and 238 robust cases. Type Isolation end to end is `1.0035x` in Micro;
+the compiler route is `1.0070x` and the incremental isolation policy is
+`0.9971x`. Peak RSS from libtest is a process-observed adaptive-work diagnostic
+and uses hollow marks.
 
-The macro figure contains 29 workloads across Oxipng, redb, Polars, SWC,
-RustPython, and Actix Web. It takes the median of five paired-run ratios per
-workload, a geometric mean within each target, and an unweighted geometric mean
-across target summaries. Type Isolation relative to default UniAlloc has a
-`2.5770x` observed execution-cost ratio; the 11 route-equivalent workloads give
-`1.0421x`. Equal-work peak RSS is `1.0034x` (`+0.342%`) across 14 workloads in
-three targets. Adaptive RSS for SWC, RustPython, and Actix Web remains a hollow
-diagnostic outside the across-target RSS aggregate. The typed-route policy
-ablation is `1.0054x` execution cost and `1.0006x` (`+0.057%`) equal-work RSS.
-
-The older ripgrep/fd/Oxipng matrix uses a different implementation digest and
-cohort. Its compact historical ledger and machine artifact are linked from
-`docs/allocator-evaluation.md`. fd remains excluded from current
-presentation-grade performance aggregation.
+The Macro population contains 34 workloads across Collections, Oxipng, redb,
+Polars, SWC, RustPython, and Actix Web. It takes the median of three same-round
+ratios per workload, a geometric mean within each target, and a geometric mean
+across target summaries. Type Isolation end to end is `1.3509x`; the compiler
+route is `1.0358x` and the incremental isolation policy is `1.2993x`.
+Fixed-work peak RSS is `1.0405x` end to end across Oxipng, redb, and Polars.
+The SWC end-to-end execution-cost ratio is `2.8737x` and remains visible.
+RustPython `parse_mandelbrot` retains an explicit compiler-route attribution
+limit.
 
 Use this safe wording in the main talk:
 
-> **Current measurements bound the total cost of Type Isolation relative to default UniAlloc on six real-world Rust programs. Typed-route ablations explain attribution; the external-allocator cohort establishes competitiveness on its matched microbenchmark population.**
+> **On the complete Rust Micro population, Type Isolation adds `0.35%` execution cost. Across seven real-world targets, the observed end-to-end cost is `35.09%`, with SWC identifying the principal optimization target. Fixed-work Macro peak RSS increases `4.05%`.**
 
-Main Slide 28 should show only this stable conclusion and the four-tier ladder.
-Put live HEAD, probe artifacts, the freeze digest, and the stop record in
-B18/speaker notes, and refresh them on the defense date.
-
-Do not compare the raw timings of these 20 historical records. Do not describe diagnostic smoke, plan readiness, or incomplete timing records as performance conclusions. Relevant entry points:
-
-- `evaluation/results/claim_check_current.json`
-- `evaluation/results/overclaim_worklist.json`
-- `evaluation/results/paper_performance_gap_plan.json` (historical/deferred)
-- `evaluation/results/platform_matrix_audit.json`
-- `docs/allocator-evaluation.md#historical-g001-boundary`
-- `.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json`
-- `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`
-- `.omx/ultragoal/ledger.jsonl` (entry point for G001 supersession, G002 functional evidence, and current-source probes)
-
-Regenerate this slide's live HEAD and current probe summaries before the formal defense. Preserve the historical freeze digest and 20-record stop status unchanged.
+Use the performance figures in the main evaluation sequence and the RSS figures
+on the adjacent slide or immediate backup. Keep the frozen revision, estimator,
+diagnostic markers, RustPython attribution limit, and SWC result in the speaker
+notes. `docs/allocator-evaluation.md` is the detailed evidence ledger.
 
 ### G. Judgment, agenda, and close — 42:00--45:00 (Slides 29--31)
 
