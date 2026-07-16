@@ -92,7 +92,7 @@ from evaluation.scripts import type_isolation_suite_contract as suite_contract  
 
 PROTOCOL_SCHEMA_VERSION = 1
 RAW_RECORD_SCHEMA_VERSION = 3
-PROTOCOL_REVISION = "full-std-bench-feature-process-v4"
+PROTOCOL_REVISION = "full-std-bench-feature-process-v5"
 MEASUREMENT_SESSION_SCHEMA_VERSION = 2
 EXPECTED_CANONICAL_BENCHMARK_COUNT = full.EXPECTED_CANONICAL_BENCHMARK_COUNT
 DEFAULT_MEASURED_ROUNDS = full.MEASURED_ROUNDS
@@ -2025,13 +2025,28 @@ def build_protocol(
     *,
     source_identity: Mapping[str, Any],
     canonical_benchmarks: Sequence[str],
+    variant_ids: Sequence[str],
     toolchain: str,
     measured_rounds: int,
     timeout_seconds: int,
     cpus: Sequence[int],
     numa_node: int,
 ) -> dict[str, Any]:
+    selected = validate_variant_selection(variant_ids)
     inventory_bytes = ("\n".join(canonical_benchmarks) + "\n").encode()
+    evaluator_seeds = [
+        SCRIPT_PATH,
+        full.SCRIPT_PATH,
+        full.BASE_SCRIPT,
+        Path(matrix.__file__).resolve(),
+        Path(suite_contract.__file__).resolve(),
+        Path(immutable_evidence.__file__).resolve(),
+        Path(base.google_tcmalloc.__file__).resolve(),
+    ]
+    if LIFETIME_VARIANT_ID in selected:
+        evaluator_seeds.append(
+            SCRIPT_DIR / "lifetime_prior_six_program_campaign.py"
+        )
     compatibility = {
         "protocol_revision": PROTOCOL_REVISION,
         "raw_record_schema_version": RAW_RECORD_SCHEMA_VERSION,
@@ -2039,19 +2054,7 @@ def build_protocol(
         "full_runner_sha256": sha256_file(full.SCRIPT_PATH),
         "base_runner_sha256": sha256_file(full.BASE_SCRIPT),
         "transitive_evaluator_sha256": transitive_evaluator_digests(
-            tuple(
-                Path(path).resolve()
-                for path in (
-                    SCRIPT_PATH,
-                    full.SCRIPT_PATH,
-                    full.BASE_SCRIPT,
-                    Path(matrix.__file__).resolve(),
-                    Path(suite_contract.__file__).resolve(),
-                    Path(immutable_evidence.__file__).resolve(),
-                    Path(base.google_tcmalloc.__file__).resolve(),
-                    SCRIPT_DIR / "lifetime_prior_six_program_campaign.py",
-                )
-            )
+            tuple(Path(path).resolve() for path in evaluator_seeds)
         ),
         "source_head": source_identity["source_head"],
         "source_git_objects": source_identity["git_objects"],
@@ -2062,6 +2065,7 @@ def build_protocol(
         "measured_rounds": measured_rounds,
         "timeout_seconds": timeout_seconds,
         "cpus": list(cpus),
+        "variant_ids": list(selected),
         "lane_rule": "canonical benchmark index modulo cpus",
         "numa_node": numa_node,
         "command_contract": (
@@ -2072,7 +2076,8 @@ def build_protocol(
         "fixed_work_contract": False,
         "performance_claim_eligible_variants": [
             variant_id
-            for variant_id, variant in VARIANT_REGISTRY.items()
+            for variant_id in selected
+            for variant in (VARIANT_REGISTRY[variant_id],)
             if variant.performance_claim_eligible
         ],
         "peak_rss_claim_eligible": False,
@@ -2085,8 +2090,8 @@ def build_protocol(
         "measurement_anchor_variant": "unialloc",
         "anchor_order_contract": "unialloc-first-for-each-phase-round-benchmark",
         "variant_claim_contracts": {
-            variant_id: variant_claim_contract(variant)
-            for variant_id, variant in VARIANT_REGISTRY.items()
+            variant_id: variant_claim_contract(VARIANT_REGISTRY[variant_id])
+            for variant_id in selected
         },
     }
     return {
@@ -2194,6 +2199,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         build_protocol(
             source_identity=source_identity,
             canonical_benchmarks=canonical,
+            variant_ids=args.variants,
             toolchain=toolchain,
             measured_rounds=args.measured_rounds,
             timeout_seconds=args.timeout_seconds,

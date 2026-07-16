@@ -19,7 +19,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "evaluation" / "scripts" / "polars_swc_rustpython_primary_campaign.py"
 CURRENT_SUITE = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v3_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v4_ce8af7b.json"
 )
 SPEC = importlib.util.spec_from_file_location("primary_campaign", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -145,11 +145,11 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual(CURRENT_SUITE.resolve(), primary.suite)
         self.assertEqual(
             ROOT
-            / "evaluation/raw/type-isolation-primary-v3-ce8af7b/campaigns/polars-swc-rustpython",
+            / "evaluation/raw/type-isolation-primary-v4-ce8af7b/campaigns/polars-swc-rustpython",
             primary.raw_dir,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v3-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v4-ce8af7b/targets",
             primary.publication_dir,
         )
 
@@ -695,8 +695,9 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 encoding="utf-8",
             )
             upstream_lock = (
-                "version = 4\n\n[[package]]\nname = \"num_cpus\"\n"
-                f'version = "{campaign.SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}"\n'
+                "version = 4\n\n"
+                + campaign.SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY
+                + "\n"
             )
             (checkout / "Cargo.lock").write_text(upstream_lock, encoding="utf-8")
             (checkout / "crates/swc/benches/typescript.rs").write_text(
@@ -716,6 +717,10 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 "+num_cpus                  = \"=1.13.0\"",
                 pathlib.Path(prepared["patch"]).read_text(encoding="utf-8"),
             )
+            self.assertIn(
+                "+checksum = \"05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3\"",
+                pathlib.Path(prepared["patch"]).read_text(encoding="utf-8"),
+            )
             self.assertEqual(1, len(prepared["compatibility_patches"]))
             provenance = prepared["compatibility_patches"][0]
             self.assertEqual(
@@ -726,13 +731,27 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 provenance["manifest_before_sha256"],
                 provenance["manifest_after_sha256"],
             )
-            self.assertIn(campaign.SWC_NUM_CPUS_UPSTREAM_LINE, (checkout / "Cargo.toml").read_text(encoding="utf-8"))
-
-            resolved_lock = upstream_lock.replace(
-                campaign.SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION,
-                campaign.SWC_NUM_CPUS_COMPATIBILITY_VERSION,
+            self.assertEqual(
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM,
+                provenance["cargo_lock_after_num_cpus_checksum"],
             )
-            (worktree / "Cargo.lock").write_text(resolved_lock, encoding="utf-8")
+            self.assertEqual(
+                campaign.SUITE_IMPLEMENTATION_REVISION,
+                provenance["checksum_evidence"]["implementation_revision"],
+            )
+            self.assertEqual(
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM,
+                provenance["checksum_evidence"]["checksum"],
+            )
+            self.assertIn(
+                campaign.SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY,
+                (worktree / "Cargo.lock").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                campaign.SWC_NUM_CPUS_UPSTREAM_LINE,
+                (checkout / "Cargo.toml").read_text(encoding="utf-8"),
+            )
+
             resolution = campaign.resolve_swc_num_cpus_compatibility(
                 prepared, worktree / "Cargo.lock"
             )
@@ -741,9 +760,13 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 resolution[0]["cargo_lock_after_num_cpus_version"],
             )
             self.assertEqual(
-                campaign.sha256_bytes(resolved_lock.encode()),
+                provenance["cargo_lock_after_sha256"],
                 resolution[0]["cargo_lock_after_sha256"],
             )
+
+    def test_swc_build_command_is_always_locked(self) -> None:
+        spec = campaign.TARGET_SPECS["swc"]
+        self.assertIn("--locked", campaign.build_command(spec, locked=False))
 
     def test_force_load_wrapper_exposes_dependency_path_to_every_crate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -801,6 +824,33 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             )
             self.assertEqual(
                 f"force:unialloc={rlib}", selected_args[selected_index + 1]
+            )
+
+    def test_force_load_rlib_build_acquires_lock_before_building(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = pathlib.Path(temporary)
+            expected = {"success": True}
+            with mock.patch.object(
+                campaign,
+                "_build_unialloc_rlib_unlocked",
+                return_value=expected,
+            ) as build:
+                result = campaign.build_force_load_rlib(
+                    raw_dir,
+                    {"unialloc_implementation_sha256": "fixture"},
+                    jobs=4,
+                    timeout=30,
+                )
+
+            self.assertEqual(expected, result)
+            self.assertTrue((raw_dir / "force-load" / "build.lock").is_file())
+            build.assert_called_once_with(
+                raw_dir,
+                {"unialloc_implementation_sha256": "fixture"},
+                4,
+                30,
+                directory="force-load",
+                features=("type_isolation",),
             )
 
     def test_direct_load_wrapper_preserves_cargo_graph_and_targets_one_crate(

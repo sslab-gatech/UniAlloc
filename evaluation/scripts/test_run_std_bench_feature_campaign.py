@@ -414,6 +414,7 @@ class FeatureCampaignTest(unittest.TestCase):
         protocol = campaign.build_protocol(
             source_identity=source_identity,
             canonical_benchmarks=("family::bench",),
+            variant_ids=tuple(campaign.VARIANT_REGISTRY),
             toolchain="nightly",
             measured_rounds=3,
             timeout_seconds=30,
@@ -446,6 +447,30 @@ class FeatureCampaignTest(unittest.TestCase):
             compatibility["variant_claim_contracts"][
                 "lifetime_transport_all_unknown"
             ],
+        )
+
+        core_protocol = campaign.build_protocol(
+            source_identity=source_identity,
+            canonical_benchmarks=("family::bench",),
+            variant_ids=("unialloc", "typed_plain", "typeiso_perf"),
+            toolchain="nightly",
+            measured_rounds=3,
+            timeout_seconds=30,
+            cpus=(20,),
+            numa_node=0,
+        )
+        core_compatibility = core_protocol["compatibility"]
+        self.assertNotIn(
+            "evaluation/scripts/lifetime_prior_six_program_campaign.py",
+            core_compatibility["transitive_evaluator_sha256"],
+        )
+        self.assertEqual(
+            ["unialloc", "typed_plain", "typeiso_perf"],
+            core_compatibility["variant_ids"],
+        )
+        self.assertEqual(
+            {"unialloc", "typed_plain", "typeiso_perf"},
+            set(core_compatibility["variant_claim_contracts"]),
         )
 
         args = campaign.parse_args(

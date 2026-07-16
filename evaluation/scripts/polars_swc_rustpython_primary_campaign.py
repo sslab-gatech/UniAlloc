@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import difflib
+import fcntl
 import hashlib
 import io
 import json
@@ -77,6 +78,32 @@ SWC_NUM_CPUS_UPSTREAM_LINE = 'num_cpus                  = "1.13.1"'
 SWC_NUM_CPUS_COMPATIBILITY_LINE = 'num_cpus                  = "=1.13.0"'
 SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION = "1.16.0"
 SWC_NUM_CPUS_COMPATIBILITY_VERSION = "1.13.0"
+SWC_NUM_CPUS_UPSTREAM_CHECKSUM = (
+    "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
+)
+SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM = (
+    "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
+)
+SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY = f'''[[package]]
+name = "num_cpus"
+version = "{SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "{SWC_NUM_CPUS_UPSTREAM_CHECKSUM}"
+dependencies = [
+ "hermit-abi 0.3.9",
+ "libc",
+]
+'''
+SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY = f'''[[package]]
+name = "num_cpus"
+version = "{SWC_NUM_CPUS_COMPATIBILITY_VERSION}"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "{SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM}"
+dependencies = [
+ "hermit-abi 0.1.19",
+ "libc",
+]
+'''
 SWC_HSTR_NUM_CPUS_LINE = "num_cpus     = { workspace = true }"
 GNU_TIME_FORMAT = "UNIALLOC_PRIMARY_TIME\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
@@ -1323,6 +1350,51 @@ def cargo_lock_package_version(lock_path: pathlib.Path, package: str) -> str:
     return matches[0]
 
 
+def frozen_unialloc_num_cpus_evidence() -> dict[str, Any]:
+    """Read the compatibility checksum from the suite's frozen revision."""
+    result = execute(
+        ["git", "show", f"{SUITE_IMPLEMENTATION_REVISION}:Cargo.lock"],
+        cwd=ROOT,
+        env=os.environ.copy(),
+        timeout=120,
+    )
+    if result["exit_code"] != 0 or result["timed_out"]:
+        raise CampaignError(
+            "failed to read the frozen UniAlloc Cargo.lock:\n"
+            + result["stderr"].decode(errors="replace")[-4000:]
+        )
+    lock_bytes = result["stdout"]
+    lock_text = lock_bytes.decode("utf-8")
+    matches = [
+        "[[package]]" + block
+        for block in lock_text.split("[[package]]")
+        if re.search(r'(?m)^name = "num_cpus"$', block)
+    ]
+    if len(matches) != 1:
+        raise CampaignError(
+            "frozen UniAlloc Cargo.lock must contain exactly one num_cpus entry"
+        )
+    entry = matches[0].rstrip() + "\n"
+    version = re.search(r'(?m)^version = "([^"]+)"$', entry)
+    checksum = re.search(r'(?m)^checksum = "([^"]+)"$', entry)
+    if version is None or checksum is None:
+        raise CampaignError("frozen UniAlloc num_cpus entry is incomplete")
+    if (
+        version.group(1) != SWC_NUM_CPUS_COMPATIBILITY_VERSION
+        or checksum.group(1) != SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM
+    ):
+        raise CampaignError("frozen UniAlloc num_cpus compatibility pin drifted")
+    return {
+        "source": "suite-implementation-revision-cargo-lock",
+        "implementation_revision": SUITE_IMPLEMENTATION_REVISION,
+        "path": "Cargo.lock",
+        "cargo_lock_sha256": sha256_bytes(lock_bytes),
+        "num_cpus_entry_sha256": sha256_bytes(entry.encode()),
+        "version": version.group(1),
+        "checksum": checksum.group(1),
+    }
+
+
 def patch_swc_num_cpus_compatibility(
     worktree: pathlib.Path,
 ) -> tuple[dict[str, Any], str]:
@@ -1338,12 +1410,18 @@ def patch_swc_num_cpus_compatibility(
         raise CampaignError(f"SWC workspace num_cpus is already patched: {manifest}")
     if hstr_text.count(SWC_HSTR_NUM_CPUS_LINE) != 1:
         raise CampaignError(f"SWC hstr num_cpus inheritance drifted: {hstr_manifest}")
+    lock_before = lock.read_text(encoding="utf-8")
     lock_version = cargo_lock_package_version(lock, "num_cpus")
     if lock_version != SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION:
         raise CampaignError(
             "SWC upstream num_cpus lock version drifted: "
             f"expected {SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}, found {lock_version}"
         )
+    if lock_before.count(SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY) != 1:
+        raise CampaignError(f"SWC upstream num_cpus lock entry drifted: {lock}")
+    if SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY in lock_before:
+        raise CampaignError(f"SWC num_cpus lock entry is already patched: {lock}")
+    checksum_evidence = frozen_unialloc_num_cpus_evidence()
 
     after = before.replace(
         SWC_NUM_CPUS_UPSTREAM_LINE,
@@ -1351,6 +1429,12 @@ def patch_swc_num_cpus_compatibility(
         1,
     )
     manifest.write_text(after, encoding="utf-8")
+    lock_after = lock_before.replace(
+        SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY,
+        SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY,
+        1,
+    )
+    lock.write_text(lock_after, encoding="utf-8")
     record = {
         "id": "swc-num-cpus-unialloc-compatibility",
         "manifest": str(manifest.resolve()),
@@ -1361,10 +1445,23 @@ def patch_swc_num_cpus_compatibility(
         "upstream_requirement": "1.13.1",
         "compatibility_requirement": "=1.13.0",
         "cargo_lock": str(lock.resolve()),
-        "cargo_lock_before_sha256": sha256_file(lock),
+        "cargo_lock_before_sha256": sha256_bytes(lock_before.encode()),
         "cargo_lock_before_num_cpus_version": lock_version,
+        "cargo_lock_after_sha256": sha256_file(lock),
+        "cargo_lock_after_num_cpus_version": (
+            SWC_NUM_CPUS_COMPATIBILITY_VERSION
+        ),
+        "cargo_lock_after_num_cpus_checksum": (
+            SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM
+        ),
+        "checksum_evidence": checksum_evidence,
     }
-    return record, unified_patch("Cargo.toml", before, after)
+    return record, "".join(
+        (
+            unified_patch("Cargo.toml", before, after),
+            unified_patch("Cargo.lock", lock_before, lock_after),
+        )
+    )
 
 
 def resolve_swc_num_cpus_compatibility(
@@ -1381,6 +1478,8 @@ def resolve_swc_num_cpus_compatibility(
         )
     lock_sha256 = sha256_file(lock_path)
     for row in patches:
+        if row.get("cargo_lock_after_sha256") != lock_sha256:
+            raise CampaignError("SWC compatibility Cargo.lock changed after prepare")
         row["cargo_lock_after_sha256"] = lock_sha256
         row["cargo_lock_after_num_cpus_version"] = version
     return patches
@@ -1454,6 +1553,8 @@ def prepare_worktree(
 
 
 def build_command(spec: TargetSpec, *, locked: bool) -> list[str]:
+    if spec.target_id == "swc":
+        locked = True
     if spec.mode == "polars-driver":
         command = [
             "cargo",

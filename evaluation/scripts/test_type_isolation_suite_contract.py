@@ -15,7 +15,7 @@ from evaluation.scripts import type_isolation_suite_contract as contract
 ROOT = Path(__file__).resolve().parents[2]
 HISTORICAL_SUITE = ROOT / "evaluation/config/type_isolation_primary_suite.json"
 CURRENT_SUITE = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v3_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v4_ce8af7b.json"
 )
 
 
@@ -41,15 +41,15 @@ class TypeIsolationSuiteContractTests(unittest.TestCase):
         self.assertEqual(1, suite.warmup_rounds)
         self.assertEqual(3, suite.measured_rounds)
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v3-ce8af7b",
+            ROOT / "evaluation/raw/type-isolation-primary-v4-ce8af7b",
             suite.publication_root,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v3-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v4-ce8af7b/targets",
             suite.target_results_dir,
         )
         self.assertEqual(
-            ROOT / "benchmark-results/type-isolation-primary-v3-ce8af7b.json",
+            ROOT / "benchmark-results/type-isolation-primary-v4-ce8af7b.json",
             suite.assembled_result,
         )
         self.assertEqual(
