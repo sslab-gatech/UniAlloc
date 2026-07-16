@@ -11,6 +11,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import re
 import struct
 import sys
 import tempfile
@@ -55,11 +56,52 @@ class Fixture:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.suite = self._suite()
+        self.rss_view = self._rss_view()
         self.micro_feature = self._micro_feature()
         self.micro_baseline = self._micro_baseline()
         self.macro_feature = self._macro_feature()
         self.macro_baseline = self._macro_baseline()
         self.output = root / "published"
+
+    def _rss_view(self) -> Path:
+        value = {
+            "schema_version": 1,
+            "view_id": "fixture-macro-rss-eligibility-v1",
+            "suite": {
+                "id": "fixture-current-suite",
+                "sha256": sha256(self.suite),
+            },
+            "implementation": {
+                "git_revision": self.revision,
+                "canonical_sha256": self.implementation_sha256,
+            },
+            "harnesses": [
+                {
+                    "target_id": "fixed",
+                    "harness_id": "fixed_harness",
+                    "classification": "fixed_work",
+                    "reason": "The process executes one predeclared fixed operation set.",
+                    "work_attestation": {
+                        "input": "The fixture input is fixed before measurement.",
+                        "work": "The fixture operation count is fixed before measurement.",
+                        "measurement_boundary": "Peak RSS covers the complete measured process.",
+                    },
+                },
+                {
+                    "target_id": "adaptive",
+                    "harness_id": "adaptive_harness",
+                    "classification": "diagnostic",
+                    "reason": "The harness controls its own adaptive iteration count.",
+                    "work_attestation": {
+                        "input": "The fixture input is fixed before measurement.",
+                        "work": "The measured process may execute an adaptive amount of work.",
+                        "measurement_boundary": "Peak RSS includes harness startup and calibration.",
+                    },
+                },
+            ],
+        }
+        value["payload_sha256"] = MODULE.canonical_sha256(value)
+        return write_json(self.root / "rss-view.json", value)
 
     def artifact(self, stem: str, value: object | None = None) -> tuple[str, str]:
         path = write_json(
@@ -198,7 +240,7 @@ class Fixture:
                             "id": "fixed_harness",
                             "metric_direction": "lower_is_better",
                             "performance_unit": "seconds",
-                            "performance_source": "fixture-clock",
+                            "performance_source": "process-wall-seconds",
                         }
                     ],
                 },
@@ -1025,7 +1067,7 @@ class Fixture:
                 "selector": "fixture-fixed",
                 "metric_direction": "lower_is_better",
                 "performance_unit": "seconds",
-                "performance_source": "fixture-clock",
+                "performance_source": "process-wall-seconds",
             },
             "adaptive": {
                 "id": "adaptive_harness",
@@ -1560,6 +1602,7 @@ class Fixture:
     def export(self) -> Path:
         return MODULE.export(
             suite_path=self.suite,
+            rss_view_path=self.rss_view,
             micro_feature_path=self.micro_feature,
             micro_baseline_path=self.micro_baseline,
             macro_feature_path=self.macro_feature,
@@ -1572,16 +1615,22 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_suite_path = MODULE.CURRENT_SUITE_PATH
         self.original_suite_sha256 = MODULE.CURRENT_SUITE_SHA256
+        self.original_rss_view_path = MODULE.CURRENT_RSS_VIEW_PATH
+        self.original_rss_view_sha256 = MODULE.CURRENT_RSS_VIEW_SHA256
         self.original_std_bench_count = MODULE.CANONICAL_STD_BENCH_COUNT
         self.temporary = tempfile.TemporaryDirectory()
         self.fixture = Fixture(Path(self.temporary.name))
         MODULE.CURRENT_SUITE_PATH = self.fixture.suite.resolve()
         MODULE.CURRENT_SUITE_SHA256 = sha256(self.fixture.suite)
+        MODULE.CURRENT_RSS_VIEW_PATH = self.fixture.rss_view.resolve()
+        MODULE.CURRENT_RSS_VIEW_SHA256 = sha256(self.fixture.rss_view)
         MODULE.CANONICAL_STD_BENCH_COUNT = len(self.fixture.benchmarks)
 
     def tearDown(self) -> None:
         MODULE.CURRENT_SUITE_PATH = self.original_suite_path
         MODULE.CURRENT_SUITE_SHA256 = self.original_suite_sha256
+        MODULE.CURRENT_RSS_VIEW_PATH = self.original_rss_view_path
+        MODULE.CURRENT_RSS_VIEW_SHA256 = self.original_rss_view_sha256
         MODULE.CANONICAL_STD_BENCH_COUNT = self.original_std_bench_count
         self.temporary.cleanup()
 
@@ -1610,6 +1659,19 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         self.assertEqual(14, len(manifest["artifacts"]))
         presentation = json.loads((output / "presentation-data.json").read_text())
         self.assertEqual(presentation["inputs"], manifest["input_evidence"])
+        self.assertEqual(
+            {
+                "path": str(self.fixture.rss_view.resolve()),
+                "sha256": sha256(self.fixture.rss_view),
+                "view_id": "fixture-macro-rss-eligibility-v1",
+                "payload_sha256": json.loads(self.fixture.rss_view.read_text())[
+                    "payload_sha256"
+                ],
+                "fixed_work_harness_count": 1,
+                "diagnostic_harness_count": 1,
+            },
+            presentation["inputs"]["macro_rss_eligibility_view"],
+        )
         macro_input = presentation["inputs"]["macro_baseline"]
         self.assertEqual(
             sha256(self.fixture.macro_baseline / "build-index.json"),
@@ -1634,6 +1696,28 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
             width, height = struct.unpack(">II", png[16:24])
             self.assertEqual((4800, 2610), (width, height))
             self.assertGreater((output / f"{stem}.pdf").stat().st_size, 1000)
+        for stem in (
+            "allocator-baselines-peak-rss",
+            "unialloc-features-peak-rss",
+        ):
+            svg = (output / f"{stem}.svg").read_text(encoding="utf-8")
+            self.assertIn("diagnostic; process startup included", svg)
+            label_match = re.search(
+                r"<!-- \(diagnostic; process startup included\) -->\s*"
+                r'<g transform="translate\([^ ]+ ([0-9.]+)\)',
+                svg,
+            )
+            legend_match = re.search(
+                r"<!-- Family median / target geometric mean -->\s*"
+                r'<g transform="translate\([^ ]+ ([0-9.]+)\)',
+                svg,
+            )
+            self.assertIsNotNone(label_match)
+            self.assertIsNotNone(legend_match)
+            assert label_match is not None and legend_match is not None
+            self.assertGreaterEqual(
+                float(legend_match.group(1)) - float(label_match.group(1)), 20.0
+            )
 
     def test_formal_micro_baseline_contract_has_9360_processes(self) -> None:
         self.assertEqual(
@@ -1678,6 +1762,204 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         self.assertTrue(adaptive["diagnostic_only"])
         self.assertFalse(adaptive["eligible_for_headline"])
         self.assertAlmostEqual(1.02, aggregate["ratio"], places=12)
+
+    def test_mixed_target_rss_uses_only_fixed_work_harnesses(self) -> None:
+        suite = MODULE.SuiteContract(
+            path=self.fixture.suite,
+            digest=sha256(self.fixture.suite),
+            suite_id="mixed-suite",
+            implementation_revision=self.fixture.revision,
+            implementation_sha256=self.fixture.implementation_sha256,
+            measured_rounds=3,
+            warmup_rounds=1,
+            comparison_families=(),
+            harnesses=(
+                MODULE.SuiteHarness(
+                    "mixed",
+                    "Mixed",
+                    "cli",
+                    "lower_is_better",
+                    "fixed_work",
+                    "3" * 40,
+                    "seconds",
+                    "process-wall-seconds",
+                ),
+                MODULE.SuiteHarness(
+                    "mixed",
+                    "Mixed",
+                    "libtest",
+                    "lower_is_better",
+                    "fixed_work",
+                    "3" * 40,
+                    "ns_per_iter",
+                    "rust-libtest-benchmark-estimate",
+                ),
+            ),
+        )
+        view = MODULE.RssEligibilityView(
+            path=self.fixture.rss_view,
+            digest=sha256(self.fixture.rss_view),
+            payload_digest="a" * 64,
+            view_id="mixed-view",
+            harnesses={
+                ("mixed", "cli"): MODULE.RssHarnessEligibility(
+                    "fixed_work", "fixed CLI work", "input", "work", "boundary"
+                ),
+                ("mixed", "libtest"): MODULE.RssHarnessEligibility(
+                    "diagnostic",
+                    "adaptive libtest work",
+                    "input",
+                    "work",
+                    "boundary",
+                ),
+            },
+        )
+        rows = MODULE.macro_aggregate(
+            group="feature",
+            comparison_family="end_to_end",
+            metric="rss",
+            variant="typeiso_perf",
+            reference="unialloc",
+            observations={
+                ("mixed", "cli"): [(1, 2.0), (2, 2.0), (3, 2.0)],
+                ("mixed", "libtest"): [(1, 8.0), (2, 8.0), (3, 8.0)],
+            },
+            suite=suite,
+            rss_view=view,
+            source=self.fixture.rss_view,
+        )
+        target = next(
+            row for row in rows if row["aggregation_level"] == "target_geomean"
+        )
+        population = next(
+            row for row in rows if row["aggregation_level"] == "population_geomean"
+        )
+        libtest = next(
+            row
+            for row in rows
+            if row["aggregation_level"] == "workload_median"
+            and row["unit_id"] == "libtest"
+        )
+        self.assertAlmostEqual(2.0, target["ratio"], places=12)
+        self.assertAlmostEqual(2.0, population["ratio"], places=12)
+        self.assertTrue(target["eligible_for_headline"])
+        self.assertTrue(libtest["diagnostic_only"])
+
+    def _rewrite_rss_view(
+        self, transform: object, *, update_official_digest: bool = True
+    ) -> None:
+        value = json.loads(self.fixture.rss_view.read_text(encoding="utf-8"))
+        value.pop("payload_sha256")
+        transform(value)
+        value["payload_sha256"] = MODULE.canonical_sha256(value)
+        write_json(self.fixture.rss_view, value)
+        if update_official_digest:
+            MODULE.CURRENT_RSS_VIEW_SHA256 = sha256(self.fixture.rss_view)
+
+    def test_rss_view_missing_harness_fails_closed(self) -> None:
+        self._rewrite_rss_view(lambda value: value["harnesses"].pop())
+        with self.assertRaisesRegex(MODULE.EvidenceError, "coverage differs"):
+            self.fixture.export()
+
+    def test_rss_view_extra_harness_fails_closed(self) -> None:
+        def add_extra(value: dict[str, object]) -> None:
+            extra = dict(value["harnesses"][0])
+            extra["target_id"] = "outside-suite"
+            value["harnesses"].append(extra)
+
+        self._rewrite_rss_view(add_extra)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "coverage differs"):
+            self.fixture.export()
+
+    def test_rss_view_duplicate_harness_fails_closed(self) -> None:
+        def add_duplicate(value: dict[str, object]) -> None:
+            value["harnesses"].append(dict(value["harnesses"][0]))
+
+        self._rewrite_rss_view(add_duplicate)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "duplicate harness"):
+            self.fixture.export()
+
+    def test_rss_view_digest_mismatch_fails_closed(self) -> None:
+        value = json.loads(self.fixture.rss_view.read_text(encoding="utf-8"))
+        value["harnesses"][0]["reason"] = "tampered"
+        write_json(self.fixture.rss_view, value)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "view digest mismatch"):
+            self.fixture.export()
+
+    def _assert_fixed_work_source_requires_equal_work_override(
+        self, performance_source: str
+    ) -> None:
+        suite = MODULE.read_suite(self.fixture.suite)
+        original = suite.harnesses[0]
+        adaptive = MODULE.SuiteHarness(
+            original.target_id,
+            original.target_label,
+            original.harness_id,
+            original.direction,
+            original.rss_work_model,
+            original.source_commit,
+            original.performance_unit,
+            performance_source,
+        )
+        changed_suite = MODULE.SuiteContract(
+            path=suite.path,
+            digest=suite.digest,
+            suite_id=suite.suite_id,
+            implementation_revision=suite.implementation_revision,
+            implementation_sha256=suite.implementation_sha256,
+            measured_rounds=suite.measured_rounds,
+            warmup_rounds=suite.warmup_rounds,
+            comparison_families=suite.comparison_families,
+            harnesses=(adaptive, *suite.harnesses[1:]),
+        )
+        with self.assertRaisesRegex(MODULE.EvidenceError, "equal-work override"):
+            MODULE.read_rss_eligibility_view(self.fixture.rss_view, changed_suite)
+
+    def test_fixed_work_libtest_requires_equal_work_override(self) -> None:
+        self._assert_fixed_work_source_requires_equal_work_override(
+            "rust-libtest-benchmark-estimate"
+        )
+
+    def test_fixed_work_criterion_requires_equal_work_override(self) -> None:
+        self._assert_fixed_work_source_requires_equal_work_override(
+            "criterion-median-seconds-per-iteration"
+        )
+
+    def test_formal_ce8_rss_view_has_exact_fixed_work_membership(self) -> None:
+        fixture_suite_path = MODULE.CURRENT_SUITE_PATH
+        fixture_suite_sha256 = MODULE.CURRENT_SUITE_SHA256
+        fixture_view_path = MODULE.CURRENT_RSS_VIEW_PATH
+        fixture_view_sha256 = MODULE.CURRENT_RSS_VIEW_SHA256
+        try:
+            MODULE.CURRENT_SUITE_PATH = self.original_suite_path
+            MODULE.CURRENT_SUITE_SHA256 = self.original_suite_sha256
+            MODULE.CURRENT_RSS_VIEW_PATH = self.original_rss_view_path
+            MODULE.CURRENT_RSS_VIEW_SHA256 = self.original_rss_view_sha256
+            suite = MODULE.read_suite(self.original_suite_path)
+            view = MODULE.read_rss_eligibility_view(self.original_rss_view_path, suite)
+        finally:
+            MODULE.CURRENT_SUITE_PATH = fixture_suite_path
+            MODULE.CURRENT_SUITE_SHA256 = fixture_suite_sha256
+            MODULE.CURRENT_RSS_VIEW_PATH = fixture_view_path
+            MODULE.CURRENT_RSS_VIEW_SHA256 = fixture_view_sha256
+        self.assertEqual(34, len(view.harnesses))
+        self.assertEqual(("oxipng", "redb", "polars"), view.fixed_work_targets)
+        self.assertEqual(
+            {
+                ("oxipng", "cli_issue_141_t1"),
+                ("oxipng", "cli_issue_141_t4"),
+                ("redb", "bulk_small"),
+                ("redb", "transaction_churn"),
+                ("redb", "delete_reinsert"),
+                ("redb", "large_values"),
+                ("polars", "groupby_low_cardinality"),
+                ("polars", "groupby_high_cardinality"),
+                ("polars", "groupby_multikey"),
+                ("polars", "filter_retain"),
+                ("polars", "csv_scan"),
+            },
+            view.fixed_work_harnesses,
+        )
 
     def test_declared_feature_comparisons_use_their_exact_references(self) -> None:
         output = self.fixture.export()
@@ -1914,7 +2196,10 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         )
         write_json(attempt_artifact, {"wall_seconds": 0.1})
         suite = MODULE.read_suite(self.fixture.suite)
-        rows, identity = MODULE.read_macro_baseline(self.fixture.macro_baseline, suite)
+        view = MODULE.read_rss_eligibility_view(self.fixture.rss_view, suite)
+        rows, identity = MODULE.read_macro_baseline(
+            self.fixture.macro_baseline, suite, view
+        )
         self.assertTrue(rows)
         self.assertEqual(64, len(identity["cell_index_sha256"]))
 

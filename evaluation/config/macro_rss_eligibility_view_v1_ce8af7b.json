@@ -1,0 +1,389 @@
+{
+  "harnesses": [
+    {
+      "classification": "diagnostic",
+      "harness_id": "binary_heap_push",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "collections",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: binary_heap::bench_push.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "btree_set_clone_remove",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "collections",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: btree::set::clone_10k_and_remove_half.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "slice_random_inserts",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "collections",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: slice::random_inserts.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "vec_in_place_collect_droppable",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "collections",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: vec::bench_in_place_collect_droppable.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "vec_deque_grow_1025",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "collections",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: vec_deque::bench_grow_1025.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "cli_issue_141_t1",
+      "reason": "The CLI executes one fixed image-optimization job with a predeclared input, option level, and thread count.",
+      "target_id": "oxipng",
+      "work_attestation": {
+        "input": "The pinned issue-141.png input and optimizer options are identical across variants.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work CLI process.",
+        "work": "Each measured process optimizes the same image once at the declared thread count."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "cli_issue_141_t4",
+      "reason": "The CLI executes one fixed image-optimization job with a predeclared input, option level, and thread count.",
+      "target_id": "oxipng",
+      "work_attestation": {
+        "input": "The pinned issue-141.png input and optimizer options are identical across variants.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work CLI process.",
+        "work": "Each measured process optimizes the same image once at the declared thread count."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "filters_8bit_filter_0",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "oxipng",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: filters_8_bits_filter_0.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "filters_entropy",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "oxipng",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: filters_entropy.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "reductions_rgba_to_palette_8",
+      "reason": "Rust libtest chooses an adaptive iteration count, so process peak RSS includes an allocator-dependent amount of benchmark work.",
+      "target_id": "oxipng",
+      "work_attestation": {
+        "input": "The benchmark selector is fixed: reductions_rgba_to_palette_8.",
+        "measurement_boundary": "Peak RSS includes process startup, libtest calibration, and adaptive benchmark iterations.",
+        "work": "Libtest calibration chooses the iteration count inside each measured process."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "bulk_small",
+      "reason": "The standalone harness executes predeclared transaction, key, value, and operation counts.",
+      "target_id": "redb",
+      "work_attestation": {
+        "input": "The pinned redb database setup and selector are fixed: 200,000 u64 to 128-byte inserts in one non-durable transaction.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the same predeclared database operation counts."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "transaction_churn",
+      "reason": "The standalone harness executes predeclared transaction, key, value, and operation counts.",
+      "target_id": "redb",
+      "work_attestation": {
+        "input": "The pinned redb database setup and selector are fixed: 2,000 non-durable transactions with 64 inserts each.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the same predeclared database operation counts."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "delete_reinsert",
+      "reason": "The standalone harness executes predeclared transaction, key, value, and operation counts.",
+      "target_id": "redb",
+      "work_attestation": {
+        "input": "The pinned redb database setup and selector are fixed: preload 200,000 entries, remove 100,000, then insert 100,000.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the same predeclared database operation counts."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "large_values",
+      "reason": "The standalone harness executes predeclared transaction, key, value, and operation counts.",
+      "target_id": "redb",
+      "work_attestation": {
+        "input": "The pinned redb database setup and selector are fixed: 64 inserts with 512 KiB values.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the same predeclared database operation counts."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "groupby_low_cardinality",
+      "reason": "The standalone harness executes one predeclared query over a fixed deterministic data set.",
+      "target_id": "polars",
+      "work_attestation": {
+        "input": "The pinned deterministic Polars input and selector are fixed: H2Oai groupby q1 on 1,000,000 deterministic rows.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the selected query once over the same fixed row set."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "groupby_high_cardinality",
+      "reason": "The standalone harness executes one predeclared query over a fixed deterministic data set.",
+      "target_id": "polars",
+      "work_attestation": {
+        "input": "The pinned deterministic Polars input and selector are fixed: H2Oai groupby q3 on 1,000,000 deterministic rows.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the selected query once over the same fixed row set."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "groupby_multikey",
+      "reason": "The standalone harness executes one predeclared query over a fixed deterministic data set.",
+      "target_id": "polars",
+      "work_attestation": {
+        "input": "The pinned deterministic Polars input and selector are fixed: H2Oai groupby q10 on 1,000,000 deterministic rows.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the selected query once over the same fixed row set."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "filter_retain",
+      "reason": "The standalone harness executes one predeclared query over a fixed deterministic data set.",
+      "target_id": "polars",
+      "work_attestation": {
+        "input": "The pinned deterministic Polars input and selector are fixed: filter2 semantics on 1,000,000 deterministic rows.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the selected query once over the same fixed row set."
+      }
+    },
+    {
+      "classification": "fixed_work",
+      "harness_id": "csv_scan",
+      "reason": "The standalone harness executes one predeclared query over a fixed deterministic data set.",
+      "target_id": "polars",
+      "work_attestation": {
+        "input": "The pinned deterministic Polars input and selector are fixed: fixed local CSV scan with 1,000,000 deterministic rows.",
+        "measurement_boundary": "Peak RSS covers the complete fixed-work standalone process.",
+        "work": "Each measured process executes the selected query once over the same fixed row set."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "large_parser",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "swc",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: es/large/parser.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "large_fixer",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "swc",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: es/large/base/fixer.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "large_codegen_es2020",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "swc",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: es/large/codegen/es2020.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "large_all_es2020",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "swc",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: es/large/all/es2020.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "large_all_es5",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "swc",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: es/large/all/es5.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "parse_mandelbrot",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "rustpython",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: parse_to_ast/rustpython/mandelbrot.py.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "execute_mandelbrot",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "rustpython",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: execution/mandelbrot.py/rustpython.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "execute_nbody",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "rustpython",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: execution/nbody.py/rustpython.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "execute_fannkuch",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "rustpython",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: execution/fannkuch.py/rustpython.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "pystone_30000",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "rustpython",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: pystone/rustpython/30000.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "async_service_direct",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "actix_web",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: async_service_direct.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "async_web_service_direct",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "actix_web",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: async_web_service_direct.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "get_body_async_burst",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "actix_web",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: get_body_async_burst.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "compression_gzip",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "actix_web",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: compression responses/gzip.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    },
+    {
+      "classification": "diagnostic",
+      "harness_id": "router_actix",
+      "reason": "Criterion controls warmup, sampling, and iteration counts, so process peak RSS includes framework-managed adaptive work.",
+      "target_id": "actix_web",
+      "work_attestation": {
+        "input": "The benchmark selector and pinned source input are fixed: Compare Routers/actix.",
+        "measurement_boundary": "Peak RSS includes process startup, Criterion control work, and adaptive benchmark iterations.",
+        "work": "Criterion chooses sampling and iteration counts inside each measured process."
+      }
+    }
+  ],
+  "implementation": {
+    "canonical_sha256": "9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178",
+    "git_revision": "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503"
+  },
+  "payload_sha256": "decc6dddcc58d4699b03d217e5b59ed0641963e1979ba02f030ae4caaee158d3",
+  "schema_version": 1,
+  "suite": {
+    "id": "type-isolation-primary-v6-ce8af7b",
+    "sha256": "688b65afa2bf61f20c44192faf96afd6f4205e386ca2aea502dc101b7cd4484d"
+  },
+  "view_id": "macro-rss-eligibility-v1-ce8af7b"
+}

@@ -61,6 +61,12 @@ CURRENT_SUITE_PATH = suite_contract.CURRENT_SUITE_PATH.resolve()
 CURRENT_SUITE_SHA256 = (
     "688b65afa2bf61f20c44192faf96afd6f4205e386ca2aea502dc101b7cd4484d"
 )
+CURRENT_RSS_VIEW_PATH = (
+    REPOSITORY_ROOT / "evaluation/config/macro_rss_eligibility_view_v1_ce8af7b.json"
+).resolve()
+CURRENT_RSS_VIEW_SHA256 = (
+    "d7f963c71f5aad3a1c54cd75c5334c1149042022babcc8cba39822d5d65a971d"
+)
 REFERENCE = "unialloc"
 FEATURE_VARIANTS = ("unialloc", "typed_plain", "typeiso_perf")
 ALLOCATOR_BASELINE_VARIANTS = (
@@ -73,9 +79,12 @@ ALLOCATOR_BASELINE_VARIANTS = (
 CANONICAL_STD_BENCH_COUNT = 468
 ROBUST_FLOOR_NS = 100.0
 FIXED_WORK = "fixed_work"
+NATIVELY_FIXED_WORK_PERFORMANCE_SOURCES = frozenset(
+    {"benchmark-owned-operation-seconds", "process-wall-seconds"}
+)
 PROTOCOL_REVISION = "full-std-bench-feature-process-v6"
 MICRO_FEATURE_RAW_SCHEMA_VERSION = 4
-OUTPUT_SCHEMA_VERSION = 2
+OUTPUT_SCHEMA_VERSION = 3
 PNG_DPI = 300
 FIGURE_SIZE = (16.0, 8.7)
 MAX_DISPLAY_LOG2_RATIO = 3.0
@@ -193,6 +202,45 @@ class SuiteContract:
                 row.target_id
                 for row in self.harnesses
                 if row.rss_work_model == FIXED_WORK
+            )
+        )
+
+
+@dataclass(frozen=True)
+class RssHarnessEligibility:
+    classification: str
+    reason: str
+    input_attestation: str
+    work_attestation: str
+    measurement_boundary: str
+    equal_work_override: Mapping[str, Any] | None = None
+
+    @property
+    def is_fixed_work(self) -> bool:
+        return self.classification == FIXED_WORK
+
+
+@dataclass(frozen=True)
+class RssEligibilityView:
+    path: Path
+    digest: str
+    payload_digest: str
+    view_id: str
+    harnesses: Mapping[tuple[str, str], RssHarnessEligibility]
+
+    @property
+    def fixed_work_harnesses(self) -> frozenset[tuple[str, str]]:
+        return frozenset(
+            key for key, row in self.harnesses.items() if row.is_fixed_work
+        )
+
+    @property
+    def fixed_work_targets(self) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                target_id
+                for (target_id, _harness_id), row in self.harnesses.items()
+                if row.is_fixed_work
             )
         )
 
@@ -805,6 +853,168 @@ def read_suite(path: Path) -> SuiteContract:
         warmup_rounds=warmups,
         comparison_families=tuple(comparison_families),
         harnesses=tuple(harnesses),
+    )
+
+
+def read_rss_eligibility_view(path: Path, suite: SuiteContract) -> RssEligibilityView:
+    path = path.resolve()
+    fail(
+        path == CURRENT_RSS_VIEW_PATH,
+        f"RSS eligibility view must be the official current view: {CURRENT_RSS_VIEW_PATH}",
+    )
+    digest = sha256_file(path)
+    fail(
+        digest == CURRENT_RSS_VIEW_SHA256,
+        "official current RSS eligibility view digest mismatch",
+    )
+    value = load_object(path, "macro RSS eligibility view")
+    fail(
+        set(value)
+        == {
+            "schema_version",
+            "view_id",
+            "suite",
+            "implementation",
+            "harnesses",
+            "payload_sha256",
+        },
+        "macro RSS eligibility view fields are invalid",
+    )
+    payload = dict(value)
+    payload_digest = payload.pop("payload_sha256", None)
+    fail(
+        isinstance(payload_digest, str)
+        and len(payload_digest) == 64
+        and canonical_sha256(payload) == payload_digest,
+        "macro RSS eligibility view payload digest mismatch",
+    )
+    view_id = value.get("view_id")
+    fail(
+        value.get("schema_version") == 1 and isinstance(view_id, str) and view_id,
+        "macro RSS eligibility view identity is invalid",
+    )
+    suite_binding = value.get("suite")
+    fail(
+        isinstance(suite_binding, dict)
+        and suite_binding
+        == {
+            "id": suite.suite_id,
+            "sha256": suite.digest,
+        },
+        "macro RSS eligibility view suite binding mismatch",
+    )
+    implementation = value.get("implementation")
+    fail(
+        isinstance(implementation, dict)
+        and implementation
+        == {
+            "git_revision": suite.implementation_revision,
+            "canonical_sha256": suite.implementation_sha256,
+        },
+        "macro RSS eligibility view implementation binding mismatch",
+    )
+    raw_harnesses = value.get("harnesses")
+    fail(
+        isinstance(raw_harnesses, list),
+        "macro RSS eligibility view harnesses are missing",
+    )
+    harnesses: dict[tuple[str, str], RssHarnessEligibility] = {}
+    suite_harnesses = {(row.target_id, row.harness_id): row for row in suite.harnesses}
+    for raw in raw_harnesses:
+        base_fields = {
+            "target_id",
+            "harness_id",
+            "classification",
+            "reason",
+            "work_attestation",
+        }
+        fail(
+            isinstance(raw, dict)
+            and frozenset(raw)
+            in {
+                frozenset(base_fields),
+                frozenset((*base_fields, "equal_work_override")),
+            },
+            "macro RSS eligibility view harness row is invalid",
+        )
+        target_id = raw.get("target_id")
+        harness_id = raw.get("harness_id")
+        key = (target_id, harness_id)
+        fail(
+            isinstance(target_id, str)
+            and target_id
+            and isinstance(harness_id, str)
+            and harness_id,
+            "macro RSS eligibility view harness identity is invalid",
+        )
+        fail(
+            key not in harnesses,
+            f"macro RSS eligibility view contains a duplicate harness: {target_id}/{harness_id}",
+        )
+        classification = raw.get("classification")
+        reason = raw.get("reason")
+        attestation = raw.get("work_attestation")
+        equal_work_override = raw.get("equal_work_override")
+        fail(
+            classification in {FIXED_WORK, "diagnostic"}
+            and isinstance(reason, str)
+            and reason
+            and isinstance(attestation, dict)
+            and set(attestation) == {"input", "work", "measurement_boundary"}
+            and all(
+                isinstance(attestation.get(field), str) and attestation[field]
+                for field in ("input", "work", "measurement_boundary")
+            ),
+            f"macro RSS eligibility view attestation is invalid: {target_id}/{harness_id}",
+        )
+        suite_harness = suite_harnesses.get((str(target_id), str(harness_id)))
+        requires_override = (
+            classification == FIXED_WORK
+            and suite_harness is not None
+            and suite_harness.performance_source
+            not in NATIVELY_FIXED_WORK_PERFORMANCE_SOURCES
+        )
+        if requires_override:
+            fail(
+                isinstance(equal_work_override, dict)
+                and set(equal_work_override) == {"work_unit", "fixed_count", "evidence"}
+                and isinstance(equal_work_override.get("work_unit"), str)
+                and equal_work_override["work_unit"]
+                and type(equal_work_override.get("fixed_count")) is int
+                and equal_work_override["fixed_count"] > 0
+                and isinstance(equal_work_override.get("evidence"), str)
+                and equal_work_override["evidence"],
+                f"macro RSS eligibility fixed-work adaptive or unrecognized harness lacks an equal-work override: {target_id}/{harness_id}",
+            )
+        else:
+            fail(
+                equal_work_override is None,
+                f"macro RSS eligibility equal-work override is not applicable: {target_id}/{harness_id}",
+            )
+        harnesses[(str(target_id), str(harness_id))] = RssHarnessEligibility(
+            classification=str(classification),
+            reason=reason,
+            input_attestation=str(attestation["input"]),
+            work_attestation=str(attestation["work"]),
+            measurement_boundary=str(attestation["measurement_boundary"]),
+            equal_work_override=equal_work_override,
+        )
+    expected = {(row.target_id, row.harness_id) for row in suite.harnesses}
+    fail(
+        set(harnesses) == expected,
+        "macro RSS eligibility view harness coverage differs from the suite",
+    )
+    fail(
+        any(row.is_fixed_work for row in harnesses.values())
+        and any(not row.is_fixed_work for row in harnesses.values()),
+        "macro RSS eligibility view must contain fixed-work and diagnostic harnesses",
+    )
+    return RssEligibilityView(
+        path=path,
+        digest=digest,
+        payload_digest=payload_digest,
+        view_id=str(view_id),
+        harnesses=harnesses,
     )
 
 
@@ -1967,15 +2177,17 @@ def macro_aggregate(
     reference: str,
     observations: Mapping[tuple[str, str], Sequence[tuple[int, float]]],
     suite: SuiteContract,
+    rss_view: RssEligibilityView,
     source: Path,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     harness_map = {(row.target_id, row.harness_id): row for row in suite.harnesses}
     target_values: dict[str, list[float]] = defaultdict(list)
-    target_headline: dict[str, bool] = {}
+    target_fixed_work_values: dict[str, list[float]] = defaultdict(list)
     for key in sorted(observations):
         contract = harness_map[key]
-        eligible = metric == "performance" or contract.rss_work_model == FIXED_WORK
+        eligibility = rss_view.harnesses[key]
+        eligible = metric == "performance" or eligibility.is_fixed_work
         diagnostic = metric == "rss" and not eligible
         ratios = []
         for round_number, ratio in observations[key]:
@@ -2017,17 +2229,23 @@ def macro_aggregate(
             )
         )
         target_values[contract.target_id].append(median)
-        target_headline[contract.target_id] = eligible
+        if eligible:
+            target_fixed_work_values[contract.target_id].append(median)
     fail(
         set(target_values) == set(suite.target_ids),
         f"{group}/{metric}/{variant} target coverage is incomplete",
     )
     eligible_targets: list[float] = []
     for target_id in suite.target_ids:
-        ratio = geometric_mean(
-            target_values[target_id], f"{group}/{metric}/{variant}/{target_id}"
+        selected_values = (
+            target_fixed_work_values[target_id]
+            if metric == "rss" and target_fixed_work_values[target_id]
+            else target_values[target_id]
         )
-        eligible = target_headline[target_id]
+        ratio = geometric_mean(
+            selected_values, f"{group}/{metric}/{variant}/{target_id}"
+        )
+        eligible = metric == "performance" or bool(target_fixed_work_values[target_id])
         rows.append(
             normalized_row(
                 group=group,
@@ -2066,8 +2284,44 @@ def macro_aggregate(
     return rows
 
 
+def legacy_macro_aggregates(
+    *,
+    metric: str,
+    observations: Mapping[tuple[str, str], Sequence[tuple[int, float]]],
+    suite: SuiteContract,
+    context: str,
+) -> tuple[dict[str, float], float]:
+    """Reproduce the frozen suite's target-wide stored aggregate contract."""
+    target_values: dict[str, list[float]] = defaultdict(list)
+    for (target_id, _harness_id), raw_values in observations.items():
+        target_values[target_id].append(
+            statistics.median(ratio for _round_number, ratio in raw_values)
+        )
+    fail(
+        set(target_values) == set(suite.target_ids),
+        f"{context} legacy target coverage is incomplete",
+    )
+    targets = {
+        target_id: geometric_mean(
+            target_values[target_id], f"{context}/legacy/{target_id}"
+        )
+        for target_id in suite.target_ids
+    }
+    population_target_ids = (
+        suite.target_ids if metric == "performance" else suite.fixed_work_targets
+    )
+    fail(
+        bool(population_target_ids),
+        f"{context} legacy population has no eligible targets",
+    )
+    return targets, geometric_mean(
+        [targets[target_id] for target_id in population_target_ids],
+        f"{context}/legacy/population",
+    )
+
+
 def read_macro_feature(
-    path: Path, suite: SuiteContract
+    path: Path, suite: SuiteContract, rss_view: RssEligibilityView
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     path = path.resolve()
     result = load_object(path, "macro feature result")
@@ -2419,7 +2673,14 @@ def read_macro_feature(
     rows: list[dict[str, Any]] = []
     for comparison in suite.comparison_families:
         family_rows: dict[str, list[dict[str, Any]]] = {}
+        legacy_aggregates: dict[str, tuple[dict[str, float], float]] = {}
         for metric in ("performance", "rss"):
+            legacy_aggregates[metric] = legacy_macro_aggregates(
+                metric=metric,
+                observations=observations[comparison.family_id][metric],
+                suite=suite,
+                context=f"macro feature/{comparison.family_id}/{metric}",
+            )
             metric_rows = macro_aggregate(
                 group="feature",
                 comparison_family=comparison.family_id,
@@ -2428,6 +2689,7 @@ def read_macro_feature(
                 reference=comparison.reference,
                 observations=observations[comparison.family_id][metric],
                 suite=suite,
+                rss_view=rss_view,
                 source=path,
             )
             family_rows[metric] = metric_rows
@@ -2439,12 +2701,6 @@ def read_macro_feature(
             calculated_performance = next(
                 row["ratio"]
                 for row in family_rows["performance"]
-                if row["aggregation_level"] == "target_geomean"
-                and row["target_id"] == target_id
-            )
-            calculated_rss = next(
-                row["ratio"]
-                for row in family_rows["rss"]
                 if row["aggregation_level"] == "target_geomean"
                 and row["target_id"] == target_id
             )
@@ -2462,7 +2718,7 @@ def read_macro_feature(
                         stored.get("peak_rss_process_observed_ratio_geometric_mean"),
                         "macro feature stored target RSS aggregate",
                     ),
-                    calculated_rss,
+                    legacy_aggregates["rss"][0][target_id],
                     rel_tol=1e-12,
                 ),
                 f"macro feature stored target aggregate mismatch: {target_id}/{comparison.family_id}",
@@ -2471,11 +2727,6 @@ def read_macro_feature(
         calculated_population_performance = next(
             row["ratio"]
             for row in family_rows["performance"]
-            if row["aggregation_level"] == "population_geomean"
-        )
-        calculated_population_rss = next(
-            row["ratio"]
-            for row in family_rows["rss"]
             if row["aggregation_level"] == "population_geomean"
         )
         fail(
@@ -2492,7 +2743,7 @@ def read_macro_feature(
                     stored_population.get("fixed_work_peak_rss_ratio_geometric_mean"),
                     "macro feature stored population fixed-work RSS aggregate",
                 ),
-                calculated_population_rss,
+                legacy_aggregates["rss"][1],
                 rel_tol=1e-12,
             ),
             f"macro feature stored population aggregate mismatch: {comparison.family_id}",
@@ -3051,7 +3302,7 @@ def validate_macro_build_import(
 
 
 def read_macro_baseline(
-    path: Path, suite: SuiteContract
+    path: Path, suite: SuiteContract, rss_view: RssEligibilityView
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     root, plan_path, summary_path, selector = _resolve_selector(path)
     plan = load_object(plan_path, "macro baseline plan")
@@ -3955,6 +4206,12 @@ def read_macro_baseline(
     rows: list[dict[str, Any]] = []
     for variant in requested_variants:
         for metric in ("performance", "rss"):
+            legacy_targets, _legacy_population = legacy_macro_aggregates(
+                metric=metric,
+                observations=observations[variant][metric],
+                suite=suite,
+                context=f"macro baseline/{variant}/{metric}",
+            )
             variant_rows = macro_aggregate(
                 group="baseline",
                 comparison_family="allocator_baseline",
@@ -3963,15 +4220,10 @@ def read_macro_baseline(
                 reference=REFERENCE,
                 observations=observations[variant][metric],
                 suite=suite,
+                rss_view=rss_view,
                 source=summary_path,
             )
             for target_id in suite.target_ids:
-                calculated = next(
-                    row["ratio"]
-                    for row in variant_rows
-                    if row["aggregation_level"] == "target_geomean"
-                    and row["target_id"] == target_id
-                )
                 stored = targets[target_id][variant][
                     (
                         "equal_weight_harness_geomean_performance_cost_ratio"
@@ -3986,7 +4238,11 @@ def read_macro_baseline(
                     )
                 else:
                     fail(
-                        math.isclose(float(stored), calculated, rel_tol=1e-12),
+                        math.isclose(
+                            float(stored),
+                            legacy_targets[target_id],
+                            rel_tol=1e-12,
+                        ),
                         f"macro baseline stored target aggregate mismatch: {target_id}/{variant}/{metric}",
                     )
             rows.extend(variant_rows)
@@ -4231,9 +4487,10 @@ def save_figure(
     macro = select_summaries(rows, group, "macro", metric)
     figure, axes = plt.subplots(1, 2, figsize=FIGURE_SIZE, gridspec_kw={"wspace": 0.50})
     metric_label = "cost ratio" if metric == "performance" else "peak RSS ratio"
-    overflow = draw_panel(
-        axes[0], micro, f"Rust std_bench {metric_label} / reference", metric
-    )
+    micro_xlabel = f"Rust std_bench {metric_label} / reference"
+    if metric == "rss":
+        micro_xlabel += "\n(diagnostic; process startup included)"
+    overflow = draw_panel(axes[0], micro, micro_xlabel, metric)
     overflow = (
         draw_panel(
             axes[1], macro, f"Real-world target {metric_label} / reference", metric
@@ -4308,7 +4565,8 @@ def save_figure(
         fontsize=17,
         bbox_to_anchor=(0.5, 0.005),
     )
-    figure.subplots_adjust(left=0.17, right=0.985, top=0.965, bottom=0.20)
+    bottom_margin = 0.25 if metric == "rss" else 0.20
+    figure.subplots_adjust(left=0.17, right=0.985, top=0.965, bottom=bottom_margin)
     outputs: list[Path] = []
     metadata = {"Creator": "UniAlloc evaluation exporter", "Date": FIXED_DATE}
     for extension in ("svg", "pdf", "png"):
@@ -4379,6 +4637,7 @@ def publish_atomically(stage: Path, output: Path) -> None:
 def export(
     *,
     suite_path: Path,
+    rss_view_path: Path,
     micro_feature_path: Path,
     micro_baseline_path: Path,
     macro_feature_path: Path,
@@ -4386,6 +4645,7 @@ def export(
     output: Path,
 ) -> Path:
     suite = read_suite(suite_path)
+    rss_view = read_rss_eligibility_view(rss_view_path, suite)
     original_immutable_sha256_file = immutable_evidence.sha256_file
     immutable_evidence.sha256_file = sha256_file
     try:
@@ -4396,10 +4656,10 @@ def export(
             micro_baseline_path, suite
         )
         macro_feature_rows, macro_feature_identity = read_macro_feature(
-            macro_feature_path, suite
+            macro_feature_path, suite, rss_view
         )
         macro_baseline_rows, macro_baseline_identity = read_macro_baseline(
-            macro_baseline_path, suite
+            macro_baseline_path, suite, rss_view
         )
     finally:
         immutable_evidence.sha256_file = original_immutable_sha256_file
@@ -4421,6 +4681,15 @@ def export(
             "micro_baseline": micro_baseline_identity,
             "macro_feature": macro_feature_identity,
             "macro_baseline": macro_baseline_identity,
+            "macro_rss_eligibility_view": {
+                "path": str(rss_view.path),
+                "sha256": rss_view.digest,
+                "view_id": rss_view.view_id,
+                "payload_sha256": rss_view.payload_digest,
+                "fixed_work_harness_count": len(rss_view.fixed_work_harnesses),
+                "diagnostic_harness_count": len(rss_view.harnesses)
+                - len(rss_view.fixed_work_harnesses),
+            },
         }
         csv_path = stage / "normalized-observations.csv"
         data_path = stage / "presentation-data.json"
@@ -4437,7 +4706,16 @@ def export(
                     "implementation_sha256": suite.implementation_sha256,
                     "measured_rounds": suite.measured_rounds,
                     "target_ids": list(suite.target_ids),
-                    "fixed_work_rss_target_ids": list(suite.fixed_work_targets),
+                    "fixed_work_rss_target_ids": list(rss_view.fixed_work_targets),
+                    "fixed_work_rss_harnesses": [
+                        {"target_id": target_id, "harness_id": harness_id}
+                        for target_id, harness_id in sorted(
+                            rss_view.fixed_work_harnesses
+                        )
+                    ],
+                    "legacy_suite_fixed_work_rss_target_ids": list(
+                        suite.fixed_work_targets
+                    ),
                     "comparison_families": [
                         {
                             "id": family.family_id,
@@ -4459,7 +4737,10 @@ def export(
                     "macro_leaf": "median of complete same-round ratios",
                     "macro_target": "unweighted geometric mean across harness medians",
                     "macro_population": "unweighted geometric mean across eligible target aggregates",
-                    "macro_rss": "headline aggregate includes fixed-work targets only",
+                    "macro_rss": (
+                        "headline target aggregates include only fixed-work harnesses "
+                        "declared by the bound RSS eligibility view"
+                    ),
                 },
                 "inputs": input_identities,
                 "normalized_rows": rows,
@@ -4509,6 +4790,7 @@ def export(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", type=Path, default=CURRENT_SUITE_PATH)
+    parser.add_argument("--rss-view", type=Path, default=CURRENT_RSS_VIEW_PATH)
     parser.add_argument("--micro-feature", type=Path, required=True)
     parser.add_argument("--micro-baseline", type=Path, required=True)
     parser.add_argument("--macro-feature", type=Path, required=True)
@@ -4522,6 +4804,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         destination = export(
             suite_path=args.suite,
+            rss_view_path=args.rss_view,
             micro_feature_path=args.micro_feature,
             micro_baseline_path=args.micro_baseline,
             macro_feature_path=args.macro_feature,
