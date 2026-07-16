@@ -163,6 +163,20 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
             )
             value = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(value["suite_manifest"]["sha256"], binding["sha256"])
+            self.assertNotIn("reused", value["suite_manifest"])
+            reused_binding = type_isolation_suite_contract.bind_suite_manifest(
+                self.contract.suite, destination=root / "suite.json"
+            )
+            self.assertTrue(reused_binding["reused"])
+            self.assertEqual(
+                path,
+                campaign.ensure_campaign_manifest(
+                    root,
+                    self.protocol,
+                    reuse=True,
+                    suite_binding=reused_binding,
+                ),
+            )
             path.chmod(0o600)
             path.write_text("{}\n", encoding="utf-8")
             with self.assertRaisesRegex(campaign.CampaignError, "protocol mismatch"):

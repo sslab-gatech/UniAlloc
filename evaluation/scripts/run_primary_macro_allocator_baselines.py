@@ -751,12 +751,19 @@ def ensure_campaign_manifest(
 ) -> pathlib.Path:
     del reuse  # Exact manifests are always safe to retain; artifacts decide reuse.
     path = raw_dir / "campaigns" / protocol.fingerprint / "campaign.json"
+    stable_suite_binding = {
+        key: suite_binding[key]
+        for key in ("path", "sha256", "bytes")
+        if suite_binding is not None and key in suite_binding
+    }
+    if suite_binding is not None and len(stable_suite_binding) != 3:
+        raise CampaignError("suite binding lacks immutable artifact identity")
     expected = {
         "schema_version": PROTOCOL_SCHEMA_VERSION,
         "protocol_id": PROTOCOL_ID,
         "protocol_fingerprint": protocol.fingerprint,
         "protocol": protocol.payload,
-        "suite_manifest": dict(suite_binding or {}),
+        "suite_manifest": stable_suite_binding,
     }
     try:
         return immutable_evidence.persist_immutable_json(path, expected).path
