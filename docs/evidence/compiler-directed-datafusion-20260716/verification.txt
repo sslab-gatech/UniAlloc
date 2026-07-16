@@ -1,0 +1,19 @@
+DataFusion harness unit tests: 3/3 PASS
+DataFusion harness py_compile: PASS
+Compiler lifetime pass tests: 14/14 PASS
+Lifetime hugepage allocator integration tests: 32/32 PASS
+cargo fmt --all -- --check: PASS
+Compiler pass rustfmt --check: PASS
+git diff --check (staged and unstaged): PASS
+Manifest path/SHA references: 27/27 PASS
+
+Primary fixed-work gates:
+- same binary SHA-256 across all four arms: 393ca05c6348778d443ed0107c4c802c4293bad0cfbf0393d011dca914107e92
+- group_count=1024, target_partitions=1, query_iterations=896
+- zero discarded warmup
+- fresh process per arm
+- CPUs 120-123
+- fixed query/result/materialized/ApproxDistinct digests match
+- 917504 routed allocations per THP arm
+- 210/210 THP query-window samples physically backed
+- 16/16 collapse successes, 0 collapse errors
