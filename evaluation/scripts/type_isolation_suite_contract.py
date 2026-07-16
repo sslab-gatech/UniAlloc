@@ -19,7 +19,7 @@ from evaluation.scripts import immutable_evidence
 
 ROOT = Path(__file__).resolve().parents[2]
 CURRENT_SUITE_PATH = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v4_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v5_ce8af7b.json"
 )
 HISTORICAL_V1_SHA256 = (
     "ba386a779e45e0884e02cf8825c69985d1b5cf68d57366af78e7f77cfa8f6ccb"

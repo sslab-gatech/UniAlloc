@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (
     ROOT / "evaluation" / "scripts" / "type_isolation_primary_collections_oxipng.py"
 )
-SUITE = ROOT / "evaluation/config/type_isolation_primary_suite_v4_ce8af7b.json"
+SUITE = ROOT / "evaluation/config/type_isolation_primary_suite_v5_ce8af7b.json"
 IMPLEMENTATION_REVISION = "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503"
 IMPLEMENTATION_SHA256 = (
     "9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178"
@@ -208,11 +208,11 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual(SUITE.resolve(), args.suite)
         self.assertEqual(
             ROOT
-            / "evaluation/raw/type-isolation-primary-v4-ce8af7b/campaigns/collections-oxipng",
+            / "evaluation/raw/type-isolation-primary-v5-ce8af7b/campaigns/collections-oxipng",
             args.raw_root,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v4-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v5-ce8af7b/targets",
             args.publication_dir,
         )
 

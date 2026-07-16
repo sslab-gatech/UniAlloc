@@ -19,7 +19,7 @@ MANIFEST = (
     ROOT
     / "evaluation"
     / "config"
-    / "type_isolation_primary_suite_v4_ce8af7b.json"
+    / "type_isolation_primary_suite_v5_ce8af7b.json"
 )
 
 
@@ -153,11 +153,11 @@ class RedbActixCampaignTests(unittest.TestCase):
         self.assertEqual(MANIFEST.resolve(), primary.suite)
         self.assertEqual(
             ROOT
-            / "evaluation/raw/type-isolation-primary-v4-ce8af7b/campaigns/redb-actix",
+            / "evaluation/raw/type-isolation-primary-v5-ce8af7b/campaigns/redb-actix",
             primary.raw_dir,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v4-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v5-ce8af7b/targets",
             primary.publication_dir,
         )
         diagnostic = self.campaign.parse_args(

@@ -74,37 +74,6 @@ ROUTE_RATIO_MIN = 0.85
 ROUTE_RATIO_MAX = 1.15
 PRIMARY_ROUNDS = _DEFAULT_SUITE_CONTRACT.measured_rounds
 ALLOCATOR_MARKER = "// UniAlloc Polars/SWC/RustPython primary campaign allocator."
-SWC_NUM_CPUS_UPSTREAM_LINE = 'num_cpus                  = "1.13.1"'
-SWC_NUM_CPUS_COMPATIBILITY_LINE = 'num_cpus                  = "=1.13.0"'
-SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION = "1.16.0"
-SWC_NUM_CPUS_COMPATIBILITY_VERSION = "1.13.0"
-SWC_NUM_CPUS_UPSTREAM_CHECKSUM = (
-    "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
-)
-SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM = (
-    "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
-)
-SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY = f'''[[package]]
-name = "num_cpus"
-version = "{SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "{SWC_NUM_CPUS_UPSTREAM_CHECKSUM}"
-dependencies = [
- "hermit-abi 0.3.9",
- "libc",
-]
-'''
-SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY = f'''[[package]]
-name = "num_cpus"
-version = "{SWC_NUM_CPUS_COMPATIBILITY_VERSION}"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "{SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM}"
-dependencies = [
- "hermit-abi 0.1.19",
- "libc",
-]
-'''
-SWC_HSTR_NUM_CPUS_LINE = "num_cpus     = { workspace = true }"
 GNU_TIME_FORMAT = "UNIALLOC_PRIMARY_TIME\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
 """Expose UniAlloc metadata globally and force-load it for selected crates."""
@@ -1332,159 +1301,6 @@ def unified_patch(path: str, before: str, after: str) -> str:
     )
 
 
-def cargo_lock_package_version(lock_path: pathlib.Path, package: str) -> str:
-    matches: list[str] = []
-    for block in lock_path.read_text(encoding="utf-8").split("[[package]]"):
-        if not re.search(
-            rf'(?m)^name = {re.escape(json.dumps(package))}$', block
-        ):
-            continue
-        match = re.search(r'(?m)^version = "([^"]+)"$', block)
-        if match is None:
-            raise CampaignError(f"{package} lock entry has no version: {lock_path}")
-        matches.append(match.group(1))
-    if len(matches) != 1:
-        raise CampaignError(
-            f"expected one {package} lock entry in {lock_path}, found {len(matches)}"
-        )
-    return matches[0]
-
-
-def frozen_unialloc_num_cpus_evidence() -> dict[str, Any]:
-    """Read the compatibility checksum from the suite's frozen revision."""
-    result = execute(
-        ["git", "show", f"{SUITE_IMPLEMENTATION_REVISION}:Cargo.lock"],
-        cwd=ROOT,
-        env=os.environ.copy(),
-        timeout=120,
-    )
-    if result["exit_code"] != 0 or result["timed_out"]:
-        raise CampaignError(
-            "failed to read the frozen UniAlloc Cargo.lock:\n"
-            + result["stderr"].decode(errors="replace")[-4000:]
-        )
-    lock_bytes = result["stdout"]
-    lock_text = lock_bytes.decode("utf-8")
-    matches = [
-        "[[package]]" + block
-        for block in lock_text.split("[[package]]")
-        if re.search(r'(?m)^name = "num_cpus"$', block)
-    ]
-    if len(matches) != 1:
-        raise CampaignError(
-            "frozen UniAlloc Cargo.lock must contain exactly one num_cpus entry"
-        )
-    entry = matches[0].rstrip() + "\n"
-    version = re.search(r'(?m)^version = "([^"]+)"$', entry)
-    checksum = re.search(r'(?m)^checksum = "([^"]+)"$', entry)
-    if version is None or checksum is None:
-        raise CampaignError("frozen UniAlloc num_cpus entry is incomplete")
-    if (
-        version.group(1) != SWC_NUM_CPUS_COMPATIBILITY_VERSION
-        or checksum.group(1) != SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM
-    ):
-        raise CampaignError("frozen UniAlloc num_cpus compatibility pin drifted")
-    return {
-        "source": "suite-implementation-revision-cargo-lock",
-        "implementation_revision": SUITE_IMPLEMENTATION_REVISION,
-        "path": "Cargo.lock",
-        "cargo_lock_sha256": sha256_bytes(lock_bytes),
-        "num_cpus_entry_sha256": sha256_bytes(entry.encode()),
-        "version": version.group(1),
-        "checksum": checksum.group(1),
-    }
-
-
-def patch_swc_num_cpus_compatibility(
-    worktree: pathlib.Path,
-) -> tuple[dict[str, Any], str]:
-    """Pin SWC's workspace dependency to UniAlloc's exact build-time version."""
-    manifest = worktree / "Cargo.toml"
-    hstr_manifest = worktree / "crates/hstr/Cargo.toml"
-    lock = worktree / "Cargo.lock"
-    before = manifest.read_text(encoding="utf-8")
-    hstr_text = hstr_manifest.read_text(encoding="utf-8")
-    if before.count(SWC_NUM_CPUS_UPSTREAM_LINE) != 1:
-        raise CampaignError(f"SWC workspace num_cpus requirement drifted: {manifest}")
-    if SWC_NUM_CPUS_COMPATIBILITY_LINE in before:
-        raise CampaignError(f"SWC workspace num_cpus is already patched: {manifest}")
-    if hstr_text.count(SWC_HSTR_NUM_CPUS_LINE) != 1:
-        raise CampaignError(f"SWC hstr num_cpus inheritance drifted: {hstr_manifest}")
-    lock_before = lock.read_text(encoding="utf-8")
-    lock_version = cargo_lock_package_version(lock, "num_cpus")
-    if lock_version != SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION:
-        raise CampaignError(
-            "SWC upstream num_cpus lock version drifted: "
-            f"expected {SWC_NUM_CPUS_UPSTREAM_LOCK_VERSION}, found {lock_version}"
-        )
-    if lock_before.count(SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY) != 1:
-        raise CampaignError(f"SWC upstream num_cpus lock entry drifted: {lock}")
-    if SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY in lock_before:
-        raise CampaignError(f"SWC num_cpus lock entry is already patched: {lock}")
-    checksum_evidence = frozen_unialloc_num_cpus_evidence()
-
-    after = before.replace(
-        SWC_NUM_CPUS_UPSTREAM_LINE,
-        SWC_NUM_CPUS_COMPATIBILITY_LINE,
-        1,
-    )
-    manifest.write_text(after, encoding="utf-8")
-    lock_after = lock_before.replace(
-        SWC_NUM_CPUS_UPSTREAM_LOCK_ENTRY,
-        SWC_NUM_CPUS_COMPATIBILITY_LOCK_ENTRY,
-        1,
-    )
-    lock.write_text(lock_after, encoding="utf-8")
-    record = {
-        "id": "swc-num-cpus-unialloc-compatibility",
-        "manifest": str(manifest.resolve()),
-        "manifest_before_sha256": sha256_bytes(before.encode()),
-        "manifest_after_sha256": sha256_file(manifest),
-        "hstr_manifest": str(hstr_manifest.resolve()),
-        "hstr_manifest_sha256": sha256_file(hstr_manifest),
-        "upstream_requirement": "1.13.1",
-        "compatibility_requirement": "=1.13.0",
-        "cargo_lock": str(lock.resolve()),
-        "cargo_lock_before_sha256": sha256_bytes(lock_before.encode()),
-        "cargo_lock_before_num_cpus_version": lock_version,
-        "cargo_lock_after_sha256": sha256_file(lock),
-        "cargo_lock_after_num_cpus_version": (
-            SWC_NUM_CPUS_COMPATIBILITY_VERSION
-        ),
-        "cargo_lock_after_num_cpus_checksum": (
-            SWC_NUM_CPUS_COMPATIBILITY_CHECKSUM
-        ),
-        "checksum_evidence": checksum_evidence,
-    }
-    return record, "".join(
-        (
-            unified_patch("Cargo.toml", before, after),
-            unified_patch("Cargo.lock", lock_before, lock_after),
-        )
-    )
-
-
-def resolve_swc_num_cpus_compatibility(
-    prepared: Mapping[str, Any], lock_path: pathlib.Path
-) -> list[dict[str, Any]]:
-    patches = [dict(row) for row in prepared.get("compatibility_patches", [])]
-    if not patches:
-        return []
-    version = cargo_lock_package_version(lock_path, "num_cpus")
-    if version != SWC_NUM_CPUS_COMPATIBILITY_VERSION:
-        raise CampaignError(
-            "SWC compatibility resolution selected num_cpus "
-            f"{version}; expected {SWC_NUM_CPUS_COMPATIBILITY_VERSION}"
-        )
-    lock_sha256 = sha256_file(lock_path)
-    for row in patches:
-        if row.get("cargo_lock_after_sha256") != lock_sha256:
-            raise CampaignError("SWC compatibility Cargo.lock changed after prepare")
-        row["cargo_lock_after_sha256"] = lock_sha256
-        row["cargo_lock_after_num_cpus_version"] = version
-    return patches
-
-
 def prepare_worktree(
     spec: TargetSpec,
     checkout: pathlib.Path,
@@ -1493,7 +1309,6 @@ def prepare_worktree(
 ) -> dict[str, Any]:
     copy_checkout(checkout, worktree)
     patch_parts: list[str] = []
-    compatibility_patches: list[dict[str, Any]] = []
     if spec.mode == "polars-driver":
         package = worktree / "crates" / "polars-unialloc-primary"
         (package / "src").mkdir(parents=True)
@@ -1529,12 +1344,6 @@ def prepare_worktree(
             if spec.target_id == "swc"
             else worktree / "Cargo.toml"
         )
-        if spec.target_id == "swc":
-            compatibility, compatibility_patch = patch_swc_num_cpus_compatibility(
-                worktree
-            )
-            compatibility_patches.append(compatibility)
-            patch_parts.append(compatibility_patch)
     patch_path = raw_dir / "patches" / f"{spec.target_id}-allocator.patch"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
     patch_path.write_text("".join(patch_parts), encoding="utf-8")
@@ -1542,7 +1351,6 @@ def prepare_worktree(
         "manifest": manifest,
         "patch": patch_path,
         "patch_sha256": sha256_file(patch_path),
-        "compatibility_patches": compatibility_patches,
         "worktree": worktree,
         "allocator_source": (
             worktree / "crates" / "polars-unialloc-primary" / "src" / "main.rs"
@@ -1553,8 +1361,6 @@ def prepare_worktree(
 
 
 def build_command(spec: TargetSpec, *, locked: bool) -> list[str]:
-    if spec.target_id == "swc":
-        locked = True
     if spec.mode == "polars-driver":
         command = [
             "cargo",
@@ -1694,18 +1500,6 @@ def build_variants(
                 == build_wrapper_digest
                 and binary.is_file()
                 and cached.get("binary_sha256") == sha256_file(binary)
-                and (
-                    spec.target_id != "swc"
-                    or (
-                        cached.get("compatibility_patches")
-                        == prepared.get("compatibility_patches")
-                        and len(cached.get("compatibility_resolution", [])) == 1
-                        and cached["compatibility_resolution"][0].get(
-                            "cargo_lock_after_num_cpus_version"
-                        )
-                        == SWC_NUM_CPUS_COMPATIBILITY_VERSION
-                    )
-                )
             ):
                 binaries[variant] = cached
                 continue
@@ -1749,9 +1543,7 @@ def build_variants(
             # Adding the temporary Polars workspace package changes the
             # workspace lock graph even though every upstream dependency stays
             # source-pinned.  The before/after lock hashes are retained.
-            # The bounded SWC compatibility patch intentionally changes the
-            # selected num_cpus version; Cargo must derive and retain a new lock.
-            locked = spec.target_id not in {"polars", "swc"}
+            locked = spec.target_id != "polars"
         else:
             direct_target = (
                 spec.package.replace("-", "_")
@@ -1768,7 +1560,7 @@ def build_variants(
                     "UNIALLOC_DIRECT_LOAD_TARGET_CRATE": direct_target,
                 }
             )
-            locked = spec.target_id not in {"polars", "swc"}
+            locked = spec.target_id != "polars"
         command = build_command(spec, locked=locked)
         command.extend(["--jobs", str(jobs)])
         started = time.time()
@@ -1806,18 +1598,6 @@ def build_variants(
         if executable is not None:
             output_binary.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(executable, output_binary)
-        compatibility_resolution: list[dict[str, Any]] = []
-        compatibility_valid = spec.target_id != "swc"
-        if result["exit_code"] == 0 and not result["timed_out"]:
-            try:
-                compatibility_resolution = resolve_swc_num_cpus_compatibility(
-                    prepared, worktree / "Cargo.lock"
-                )
-                compatibility_valid = spec.target_id != "swc" or bool(
-                    compatibility_resolution
-                )
-            except CampaignError as caught:
-                error = str(caught)
         audit = None
         if (
             result["exit_code"] == 0
@@ -1843,7 +1623,6 @@ def build_variants(
             and output_binary.is_file()
             and bool(activation.get("success"))
             and (variant == "unialloc" or actual_mir)
-            and compatibility_valid
         )
         record: dict[str, Any] = {
             "success": success,
@@ -1893,8 +1672,6 @@ def build_variants(
             "pass_log_dir": str(pass_log_dir.resolve()),
             "allocator_patch": str(pathlib.Path(str(prepared["patch"])).resolve()),
             "allocator_patch_sha256": prepared["patch_sha256"],
-            "compatibility_patches": prepared.get("compatibility_patches", []),
-            "compatibility_resolution": compatibility_resolution,
             "cargo_lock_sha256": sha256_file(worktree / "Cargo.lock"),
             "error": error,
         }
