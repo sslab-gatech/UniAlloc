@@ -1127,6 +1127,14 @@ mod tests {
     ))]
     #[test]
     fn bump_alloc_releases_page_aligned_unused_prefix_when_replacing_chunk() {
+        const CHILD_ENV: &str = "UNIALLOC_BUMP_RELEASED_PREFIX_CHILD";
+        const TEST_NAME: &str =
+            "sc::tests::bump_alloc_releases_page_aligned_unused_prefix_when_replacing_chunk";
+
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         #[cfg(target_os = "linux")]
         unsafe fn os_can_map_exact_page(page_addr: usize) -> bool {
             debug_assert_eq!(page_addr % PAGE_SIZE, 0);

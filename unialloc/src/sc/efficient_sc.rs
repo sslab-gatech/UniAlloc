@@ -1381,6 +1381,18 @@ mod tests {
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
     fn radix_insert_failure_rollback_removes_mapping_and_destroys_new_page() {
+        const CHILD_ENV: &str = "UNIALLOC_RADIX_INSERT_ROLLBACK_CHILD";
+        const TEST_NAME: &str =
+            "sc::efficient_sc::tests::radix_insert_failure_rollback_removes_mapping_and_destroys_new_page";
+
+        // Rollback unmaps the page before the final global-radix assertion.
+        // A parallel slab test can legally reuse that virtual address and
+        // install its own mapping in the gap, so give this address lifecycle
+        // exclusive process ownership.
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         let mut alloc = SCAllocator::new(64, 1);
         let pg_num = alloc.pg_num;
         let pg_count = alloc.pg_count as usize;
@@ -1996,6 +2008,17 @@ mod tests {
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
     fn empty_slab_rotation_evicts_old_retained_slab_and_keeps_new_hot_slab() {
+        const CHILD_ENV: &str = "UNIALLOC_EMPTY_SLAB_ROTATION_CHILD";
+        const TEST_NAME: &str =
+            "sc::efficient_sc::tests::empty_slab_rotation_evicts_old_retained_slab_and_keeps_new_hot_slab";
+
+        // Eviction unmaps `oldest_ptr` before the stale-pointer assertion. A
+        // parallel slab test can reuse that address and publish a new global
+        // radix mapping, so keep this address lifecycle in a private process.
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         let mut alloc = SCAllocator::new(64, 1);
         let mut batches =
             [(core::ptr::null_mut::<u8>(), 0usize, 0usize); EMPTY_SLAB_RETAIN_LIMIT + 1];

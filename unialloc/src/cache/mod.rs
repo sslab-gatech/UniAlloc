@@ -1983,6 +1983,18 @@ mod tests {
 
     #[test]
     fn auto_realloc_does_not_reattribute_unrecorded_old_pointer() {
+        const CHILD_ENV: &str = "UNIALLOC_AUTO_REALLOC_UNRECORDED_CHILD";
+        const TEST_NAME: &str =
+            "cache::tests::auto_realloc_does_not_reattribute_unrecorded_old_pointer";
+
+        // This assertion exercises process-wide automatic-metadata and recovery
+        // state while also requiring a successful backing allocation. Run its
+        // semantic transaction in a fresh process so unrelated libtest workers
+        // cannot reset those globals or consume a bounded fixed heap mid-test.
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         let _guard = semantic_test_guard();
         let alloc = RustAllocator::new();
         let _cleanup = AutoMetadataRawAttributionCleanup::new(alloc);

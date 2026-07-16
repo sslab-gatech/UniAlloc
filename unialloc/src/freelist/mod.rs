@@ -1956,6 +1956,14 @@ mod tests {
         true
     }
 
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        any(target_os = "linux", target_os = "macos")
+    ))]
+    fn run_hosted_unmapping_test_in_fresh_process(child_env: &str, test_name: &str) -> bool {
+        crate::test_support::run_test_in_fresh_process(child_env, test_name)
+    }
+
     #[test]
     fn page_run_index_rejects_zero_and_rounding_overflow() {
         assert!(page_run_index_for_size(0).is_err());
@@ -2977,6 +2985,12 @@ mod tests {
     ))]
     #[test]
     fn hosted_warm_large_run_above_two_mib_is_unmapped() {
+        if run_hosted_unmapping_test_in_fresh_process(
+            "UNIALLOC_HOSTED_WARM_ABOVE_TWO_MIB_UNMAP_CHILD",
+            "freelist::tests::hosted_warm_large_run_above_two_mib_is_unmapped",
+        ) {
+            return;
+        }
         let run_pages = HOSTED_WARM_LARGE_RUN_MAX_BYTES / PAGE_SIZE + 1;
         let run_size = checked_page_size_from_count(run_pages).expect("above-warm run size");
         let freelist = FreeList::new();
@@ -3115,6 +3129,12 @@ mod tests {
     ))]
     #[test]
     fn hosted_free_above_active_warm_retention_policy_is_unmapped() {
+        if run_hosted_unmapping_test_in_fresh_process(
+            "UNIALLOC_HOSTED_ABOVE_RETENTION_UNMAP_CHILD",
+            "freelist::tests::hosted_free_above_active_warm_retention_policy_is_unmapped",
+        ) {
+            return;
+        }
         let freelist = FreeList::new();
         #[cfg(all(
             not(feature = "bitmap_page_allocator"),
@@ -3142,6 +3162,12 @@ mod tests {
     ))]
     #[test]
     fn hosted_free_unmaps_when_freelist_metadata_unavailable() {
+        if run_hosted_unmapping_test_in_fresh_process(
+            "UNIALLOC_HOSTED_METADATA_FAILURE_UNMAP_CHILD",
+            "freelist::tests::hosted_free_unmaps_when_freelist_metadata_unavailable",
+        ) {
+            return;
+        }
         let freelist = FreeList::new();
         let run_pages = if PAGE_SIZE == 4096 { 98 } else { 1 };
         let run_size = checked_page_size_from_count(run_pages).expect("faulted run size");
@@ -3174,6 +3200,12 @@ mod tests {
     ))]
     #[test]
     fn hosted_free_retainable_coalesced_run_unmaps_when_insert_fails() {
+        if run_hosted_unmapping_test_in_fresh_process(
+            "UNIALLOC_HOSTED_COALESCED_INSERT_FAILURE_UNMAP_CHILD",
+            "freelist::tests::hosted_free_retainable_coalesced_run_unmaps_when_insert_fails",
+        ) {
+            return;
+        }
         let freelist = FreeList::new();
         let retain_pages = hosted_free_run_retain_max_pages();
         if retain_pages < 2 {
@@ -4392,15 +4424,24 @@ mod test {
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     #[test]
     fn it_works() {
+        #[cfg(feature = "fixed_heap")]
+        let _fixed_heap_guard = crate::sc::fixed_heap_test_guard();
+
         let lay = Layout::from_size_align(4095, 1).expect("err");
         unsafe {
             let ptr = BuddySystemAllocator.alloc(lay);
+            assert!(!ptr.is_null());
             let ptr2 = BuddySystemAllocator.alloc(lay);
+            assert!(!ptr2.is_null());
             BuddySystemAllocator.dealloc(ptr, lay);
             BuddySystemAllocator.dealloc(ptr2, lay);
             let ptr3 = BuddySystemAllocator.alloc(lay);
+            assert!(!ptr3.is_null());
             let ptr4 = BuddySystemAllocator.alloc(lay);
-            assert_ne!(ptr3 as usize, ptr4 as usize)
+            assert!(!ptr4.is_null());
+            assert_ne!(ptr3 as usize, ptr4 as usize);
+            BuddySystemAllocator.dealloc(ptr3, lay);
+            BuddySystemAllocator.dealloc(ptr4, lay);
         }
     }
 }

@@ -48,6 +48,8 @@ mod sc;
 mod size_class;
 #[cfg(not(feature = "fixed_heap"))]
 mod sync;
+#[cfg(test)]
+mod test_support;
 mod zone;
 
 include!(concat!(env!("OUT_DIR"), "/consts.rs"));
@@ -602,6 +604,19 @@ mod fixed_heap_c_abi_tests {
     #[cfg(feature = "stats")]
     #[test]
     fn constrained_boot_sample_abi_reports_fixed_heap_and_allocator_counters() {
+        const CHILD_ENV: &str = "UNIALLOC_CONSTRAINED_BOOT_SAMPLE_STATS_CHILD";
+        const TEST_NAME: &str = concat!(
+            "fixed_heap_c_abi_tests::",
+            "constrained_boot_sample_abi_reports_fixed_heap_and_allocator_counters"
+        );
+
+        // The exported sample intentionally reads process-wide counters. Give
+        // its reset/workload/snapshot interval exclusive process ownership so a
+        // parallel stats test cannot reset or disable recording between events.
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         unsafe {
             let _fixed_heap_guard = ensure_ready();
             semantic_stats_reset();
