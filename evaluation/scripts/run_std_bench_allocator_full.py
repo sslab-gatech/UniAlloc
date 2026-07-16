@@ -21,7 +21,9 @@ import importlib.util
 import json
 import math
 import os
+import shutil
 import statistics
+import subprocess
 import sys
 import threading
 from contextlib import contextmanager
@@ -29,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable, Iterator, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 
 SCRIPT_PATH = Path(__file__).resolve()
@@ -57,6 +59,91 @@ def load_base_runner() -> ModuleType:
 
 base = load_base_runner()
 VARIANTS = base.VARIANTS
+Variant = base.Variant
+
+PUBLICATION_VARIANT_IDS = (
+    "unialloc",
+    "jemalloc",
+    "mimalloc",
+    "mimalloc_no_thp",
+    "google_tcmalloc",
+)
+EXTRA_VARIANTS = (
+    Variant("mimalloc_no_thp", "bench_mimalloc", "mimalloc (THP off)"),
+    Variant("google_tcmalloc", "bench_tcmalloc", "Google TCMalloc"),
+    Variant("system", "bench_ptmalloc", "System/ptmalloc"),
+)
+SUPPORTED_VARIANTS = (*VARIANTS, *EXTRA_VARIANTS)
+VARIANT_BY_ID = {variant.allocator: variant for variant in SUPPORTED_VARIANTS}
+SELECTION_SCHEMA_VERSION = 1
+MIMALLOC_THP_RUNTIME_SOURCE = r'''#define _GNU_SOURCE
+#include <stdlib.h>
+#include <string.h>
+#include <sys/prctl.h>
+#include <unistd.h>
+
+#ifndef PR_SET_THP_DISABLE
+#define PR_SET_THP_DISABLE 41
+#endif
+#ifndef PR_GET_THP_DISABLE
+#define PR_GET_THP_DISABLE 42
+#endif
+
+static const char *expected_text(void) {
+    const char *value = getenv("UNIALLOC_MIMALLOC_THP_EXPECTED");
+    if (value != NULL && (strcmp(value, "0") == 0 || strcmp(value, "1") == 0)) {
+        return value;
+    }
+    return NULL;
+}
+
+static void emit(const char *message) {
+    (void)write(STDERR_FILENO, message, strlen(message));
+}
+
+__attribute__((constructor)) static void set_and_prove_policy(void) {
+    const char *text = expected_text();
+    if (text == NULL) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=error\n");
+        _exit(86);
+    }
+    const int expected = text[0] - '0';
+    if (prctl(PR_SET_THP_DISABLE, expected, 0, 0, 0) != 0) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=error\n");
+        _exit(86);
+    }
+    const int observed = prctl(PR_GET_THP_DISABLE, 0, 0, 0, 0);
+    if (observed == 0) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=0\n");
+    } else if (observed == 1) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=1\n");
+    } else {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=error\n");
+    }
+    if (observed != expected) {
+        _exit(86);
+    }
+}
+
+__attribute__((destructor)) static void prove_final_policy(void) {
+    const char *text = expected_text();
+    const int observed = prctl(PR_GET_THP_DISABLE, 0, 0, 0, 0);
+    if (observed == 0) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=0\n");
+    } else if (observed == 1) {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=1\n");
+    } else {
+        emit("UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=error\n");
+    }
+    if (text == NULL || observed != text[0] - '0') {
+        _exit(86);
+    }
+}
+'''
+MIMALLOC_THP_RUNTIME_POLICY = (
+    "constructor PR_SET_THP_DISABLE plus initial and process-exit "
+    "PR_GET_THP_DISABLE proofs"
+)
 
 
 @dataclass(frozen=True)
@@ -77,6 +164,211 @@ class CellState:
 
 def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def parse_variant_ids(value: str) -> tuple[str, ...]:
+    variant_ids = tuple(item.strip() for item in value.split(",") if item.strip())
+    selected_variants(variant_ids)
+    return variant_ids
+
+
+def selected_variants(variant_ids: Sequence[str]) -> tuple[Any, ...]:
+    ids = tuple(str(item) for item in variant_ids)
+    if not ids:
+        raise ValueError("at least one allocator variant is required")
+    if len(ids) != len(set(ids)):
+        raise ValueError("allocator variant ids must be unique")
+    unknown = sorted(set(ids) - set(VARIANT_BY_ID))
+    if unknown:
+        raise ValueError(f"unknown allocator variant ids: {unknown}")
+    if "unialloc" not in ids:
+        raise ValueError("the unialloc baseline must be selected")
+    aliases = (
+        {"tcmalloc", "google_tcmalloc"},
+        {"ptmalloc", "system"},
+    )
+    for alias_set in aliases:
+        if alias_set.issubset(ids):
+            raise ValueError(
+                "allocator selector aliases cannot be selected together: "
+                f"{sorted(alias_set)}"
+            )
+    return tuple(VARIANT_BY_ID[variant_id] for variant_id in ids)
+
+
+def selection_payload(variants: Sequence[Any]) -> dict[str, Any]:
+    variant_rows = [variant.__dict__ for variant in variants]
+    variant_ids = [variant.allocator for variant in variants]
+    digest_payload = {
+        "variant_ids": variant_ids,
+        "variants": variant_rows,
+    }
+    return {
+        "schema_version": SELECTION_SCHEMA_VERSION,
+        **digest_payload,
+        "selection_sha256": sha256_bytes(
+            json.dumps(
+                digest_payload, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ),
+    }
+
+
+def bind_campaign_selection(output_dir: Path, variants: Sequence[Any]) -> dict[str, Any]:
+    """Bind the ordered variant set before any build or benchmark process starts."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    expected = selection_payload(variants)
+    path = output_dir / "campaign-selection.json"
+    if path.exists():
+        try:
+            observed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("existing campaign selection is unreadable") from error
+        if observed != expected:
+            raise RuntimeError(
+                "existing full campaign variant selection differs; "
+                "choose a new output directory"
+            )
+        return expected
+
+    legacy_config = output_dir / "campaign-config.json"
+    if legacy_config.exists():
+        try:
+            config = json.loads(legacy_config.read_text(encoding="utf-8"))
+            rows = config["variants"]
+        except (KeyError, TypeError, OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("existing campaign configuration is unreadable") from error
+        if rows != expected["variants"]:
+            raise RuntimeError(
+                "existing full campaign variant selection differs; "
+                "choose a new output directory"
+            )
+    elif (output_dir / "records.jsonl").exists():
+        raise RuntimeError(
+            "existing process records have no bound campaign selection"
+        )
+    base.write_json(path, expected)
+    return expected
+
+
+def ensure_mimalloc_thp_runtime(output_dir: Path) -> dict[str, Any]:
+    """Build or validate the process-wide THP policy and proof DSO."""
+
+    helper_dir = output_dir / "helpers" / "mimalloc-thp-runtime"
+    helper_dir.mkdir(parents=True, exist_ok=True)
+    source = helper_dir / "runtime.c"
+    binary = helper_dir / "libunialloc_mimalloc_thp_runtime.so"
+    record_path = helper_dir / "build.json"
+    compiler_version_path = helper_dir / "compiler.version"
+    build_stdout_path = helper_dir / "build.stdout"
+    build_stderr_path = helper_dir / "build.stderr"
+    source_bytes = MIMALLOC_THP_RUNTIME_SOURCE.encode("utf-8")
+    source_sha = sha256_bytes(source_bytes)
+    compiler = shutil.which("cc")
+    if compiler is None:
+        raise RuntimeError("required command is missing: cc")
+    command = [
+        compiler,
+        "-std=c11",
+        "-O2",
+        "-fPIC",
+        "-shared",
+        "-Wall",
+        "-Wextra",
+        "-Wl,-z,defs",
+        "-Wl,--build-id=none",
+        str(source),
+        "-o",
+        str(binary),
+    ]
+
+    if record_path.exists():
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("mimalloc THP runtime record is unreadable") from error
+        artifacts = (
+            source,
+            binary,
+            compiler_version_path,
+            build_stdout_path,
+            build_stderr_path,
+        )
+        if not all(path.is_file() for path in artifacts) or not os.access(
+            binary, os.X_OK
+        ):
+            raise RuntimeError("mimalloc THP runtime reuse failed identity validation")
+        expected_record = {
+            "schema_version": 1,
+            "source": str(source),
+            "source_sha256": source_sha,
+            "binary": str(binary),
+            "binary_sha256": base.sha256_file(binary),
+            "command": command,
+            "compiler_version": str(compiler_version_path),
+            "compiler_version_sha256": base.sha256_file(compiler_version_path),
+            "build_stdout": str(build_stdout_path),
+            "build_stdout_sha256": base.sha256_file(build_stdout_path),
+            "build_stderr": str(build_stderr_path),
+            "build_stderr_sha256": base.sha256_file(build_stderr_path),
+            "policy": MIMALLOC_THP_RUNTIME_POLICY,
+        }
+        if source.read_bytes() != source_bytes or record != expected_record:
+            raise RuntimeError("mimalloc THP runtime reuse failed identity validation")
+        return record
+
+    if any(
+        path.exists()
+        for path in (
+            source,
+            binary,
+            compiler_version_path,
+            build_stdout_path,
+            build_stderr_path,
+        )
+    ):
+        raise RuntimeError("mimalloc THP runtime artifacts lack a build record")
+    source.write_bytes(source_bytes)
+    compiler_version = subprocess.run(
+        [compiler, "--version"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    ).stdout
+    compiler_version_path.write_bytes(compiler_version)
+    build = subprocess.run(
+        command,
+        cwd=helper_dir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    build_stdout_path.write_bytes(build.stdout)
+    build_stderr_path.write_bytes(build.stderr)
+    if build.returncode != 0:
+        raise RuntimeError(
+            "mimalloc THP runtime build failed: "
+            + build.stderr.decode("utf-8", errors="replace")[-2000:]
+        )
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise RuntimeError("mimalloc THP runtime build produced no shared library")
+    record = {
+        "schema_version": 1,
+        "source": str(source),
+        "source_sha256": source_sha,
+        "binary": str(binary),
+        "binary_sha256": base.sha256_file(binary),
+        "command": command,
+        "compiler_version": str(compiler_version_path),
+        "compiler_version_sha256": sha256_bytes(compiler_version),
+        "build_stdout": str(build_stdout_path),
+        "build_stdout_sha256": sha256_bytes(build.stdout),
+        "build_stderr": str(build_stderr_path),
+        "build_stderr_sha256": sha256_bytes(build.stderr),
+        "policy": MIMALLOC_THP_RUNTIME_POLICY,
+    }
+    base.write_json(record_path, record)
+    return record
 
 
 def parse_cpu_list(value: str) -> tuple[int, ...]:
@@ -356,10 +648,12 @@ def summarize(
     timeout_seconds: int | None = None,
     jobs: int | None = None,
     cpus: Sequence[int] | None = None,
+    variants: Sequence[Any] = VARIANTS,
 ) -> dict[str, Any]:
     benchmark_order = tuple(benchmarks)
+    selected = tuple(variants)
     benchmark_set = set(benchmark_order)
-    allocator_set = {variant.allocator for variant in VARIANTS}
+    allocator_set = {variant.allocator for variant in selected}
     for record in records:
         if record.get("benchmark") not in benchmark_set:
             raise RuntimeError(f"record has an unknown benchmark: {record.get('benchmark')}")
@@ -371,7 +665,7 @@ def summarize(
     cell_map: dict[tuple[str, str], dict[str, Any]] = {}
     censored_cells: list[dict[str, Any]] = []
     for benchmark in benchmark_order:
-        for variant in VARIANTS:
+        for variant in selected:
             history = _cell_records(records, variant.allocator, benchmark)
             state = classify_cell_history(history, measured_rounds=measured_rounds)
             if require_terminal and state.status == "pending":
@@ -441,7 +735,7 @@ def summarize(
     robustness_exclusions: list[dict[str, Any]] = []
     for benchmark in benchmark_order:
         benchmark_cells = [
-            cell_map[(variant.allocator, benchmark)] for variant in VARIANTS
+            cell_map[(variant.allocator, benchmark)] for variant in selected
         ]
         if all(cell["status"] == "complete" for cell in benchmark_cells):
             complete_benchmarks.append(benchmark)
@@ -526,7 +820,7 @@ def summarize(
             )
 
     aggregates: list[dict[str, Any]] = []
-    for variant in VARIANTS:
+    for variant in selected:
         raw_rows = [
             (
                 benchmark,
@@ -566,7 +860,7 @@ def summarize(
         raise RuntimeError(
             "records disagree with the configured timeout_seconds_per_process"
         )
-    expected_warmups = len(benchmark_order) * len(VARIANTS)
+    expected_warmups = len(benchmark_order) * len(selected)
     if require_terminal and len(warmup_records) != expected_warmups:
         raise RuntimeError(
             f"all {expected_warmups} allocator/benchmark warmups must be attempted"
@@ -578,8 +872,8 @@ def summarize(
         "claim_grade": False,
         "methodology": {
             "benchmarks": list(benchmark_order),
-            "allocators": [variant.allocator for variant in VARIANTS],
-            "variants": [variant.__dict__ for variant in VARIANTS],
+            "allocators": [variant.allocator for variant in selected],
+            "variants": [variant.__dict__ for variant in selected],
             "warmup_fresh_processes_per_cell": 1,
             "measured_fresh_processes_per_complete_cell": measured_rounds,
             "measured_fresh_processes_per_cell": measured_rounds,
@@ -607,7 +901,7 @@ def summarize(
         },
         "coverage": {
             "canonical_inventory_count": len(benchmark_order),
-            "allocator_cells": len(benchmark_order) * len(VARIANTS),
+            "allocator_cells": len(benchmark_order) * len(selected),
             "complete_cells": sum(cell["status"] == "complete" for cell in cells),
             "censored_cells": len(censored_cells),
             "pending_cells": sum(cell["status"] == "pending" for cell in cells),
@@ -616,7 +910,10 @@ def summarize(
             "robust_benchmarks": len(robust_benchmarks),
         },
         "comparison_selection": {
-            "rule": "all seven allocator cells completed 3/3 rounds with positive medians",
+            "rule": (
+                f"all {len(selected)} selected allocator cells completed "
+                f"{measured_rounds}/{measured_rounds} rounds with positive medians"
+            ),
             "complete_all_allocator_benchmarks": complete_benchmarks,
             "comparable_benchmarks": ratio_benchmarks,
             "non_positive_median_benchmarks": non_positive_median_benchmarks,
@@ -625,7 +922,7 @@ def summarize(
         },
         "robustness_selection": {
             "rule": (
-                "all seven allocator cell medians are at least "
+                f"all {len(selected)} selected allocator cell medians are at least "
                 f"{RATIO_FLOOR_NS:g} ns/iter"
             ),
             "threshold_ns_per_iter": RATIO_FLOOR_NS,
@@ -761,13 +1058,18 @@ def write_summary_artifacts(output_dir: Path, summary: Mapping[str, Any]) -> Non
 
 
 def validate_timeout_identity(record: Mapping[str, Any], allocator: str) -> bool:
-    expected_markers = 1 if allocator == "scudo" else 0
+    expected_scudo_markers = 1 if allocator == "scudo" else 0
+    expected_tcmalloc_markers = (
+        1 if allocator in {"tcmalloc", "google_tcmalloc"} else 0
+    )
     reported = record.get("reported_benchmark")
     benchmark = record.get("benchmark")
     return bool(
         record.get("timed_out") is True
         and record.get("glibc_tunables_present") is False
-        and record.get("scudo_identity_marker_count") == expected_markers
+        and record.get("scudo_identity_marker_count") == expected_scudo_markers
+        and record.get("google_tcmalloc_identity_marker_count", 0)
+        == expected_tcmalloc_markers
         and reported in (None, benchmark)
         and int(record.get("benchmark_line_count", 0)) <= 1
     )
@@ -782,6 +1084,7 @@ def validate_process_record_identity(
     numa_node: int,
     timeout_seconds: int,
     scudo_runtime: Path | None,
+    mimalloc_thp_runtime_sha256: str | None = None,
 ) -> None:
     """Re-authenticate a fresh or resumed process record against this campaign."""
 
@@ -806,6 +1109,51 @@ def validate_process_record_identity(
             scudo_runtime
         ):
             raise RuntimeError(f"process record has a different Scudo runtime: {key}")
+
+    expected_tcmalloc_markers = 1 if base.is_google_tcmalloc_variant(variant) else 0
+    if (
+        record.get("google_tcmalloc_identity_marker_count", 0)
+        != expected_tcmalloc_markers
+    ):
+        raise RuntimeError(
+            f"process record has the wrong Google TCMalloc marker count: {key}"
+        )
+
+    expected_thp_state = base.mimalloc_thp_expected_state(variant)
+    if expected_thp_state is not None:
+        runtime = record.get("mimalloc_thp_runtime")
+        if (
+            not isinstance(runtime, Mapping)
+            or runtime.get("required") is not True
+            or runtime.get("initial_verified") is not True
+            or runtime.get("initial_marker_count") != 1
+            or runtime.get("initial_pr_get_thp_disable") != expected_thp_state
+        ):
+            raise RuntimeError(
+                f"process record has invalid initial mimalloc THP runtime proof: {key}"
+            )
+        if kind == "valid" and (
+            runtime.get("verified") is not True
+            or runtime.get("marker_count") != 1
+            or runtime.get("pr_get_thp_disable") != expected_thp_state
+        ):
+            raise RuntimeError(
+                f"process record has invalid final mimalloc THP runtime proof: {key}"
+            )
+        if (
+            mimalloc_thp_runtime_sha256 is None
+            or record.get("mimalloc_thp_runtime_sha256")
+            != mimalloc_thp_runtime_sha256
+        ):
+            raise RuntimeError(
+                f"process record has a different mimalloc THP runtime: {key}"
+            )
+    else:
+        runtime = record.get("mimalloc_thp_runtime")
+        if isinstance(runtime, Mapping) and runtime.get("marker_count", 0) != 0:
+            raise RuntimeError(
+                f"process record has an unexpected mimalloc THP marker: {key}"
+            )
 
     if kind == "timeout":
         if not validate_timeout_identity(record, variant.allocator):
@@ -837,9 +1185,32 @@ def annotate_process_record(
     return record
 
 
-def variant_order(benchmark_index: int, round_index: int) -> tuple[Any, ...]:
-    rotation = (benchmark_index + round_index) % len(VARIANTS)
-    return VARIANTS[rotation:] + VARIANTS[:rotation]
+def variant_order(
+    benchmark_index: int,
+    round_index: int,
+    variants: Sequence[Any] = VARIANTS,
+) -> tuple[Any, ...]:
+    selected = tuple(variants)
+    rotation = (benchmark_index + round_index) % len(selected)
+    return selected[rotation:] + selected[:rotation]
+
+
+def expected_process_slots(
+    benchmarks: Sequence[str],
+    variants: Sequence[Any],
+    *,
+    measured_rounds: int,
+) -> set[tuple[str, int, str, str]]:
+    phases = (
+        ("warmup", 0),
+        *(("measured", index) for index in range(1, measured_rounds + 1)),
+    )
+    return {
+        (phase, round_index, variant.allocator, benchmark)
+        for benchmark in benchmarks
+        for variant in variants
+        for phase, round_index in phases
+    }
 
 
 @contextmanager
@@ -882,6 +1253,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--numa-node", type=int, default=0)
     parser.add_argument("--timeout-seconds", type=int, default=30)
     parser.add_argument(
+        "--variants",
+        type=parse_variant_ids,
+        default=tuple(variant.allocator for variant in VARIANTS),
+        help=(
+            "comma-separated ordered allocator ids; publication set: "
+            + ",".join(PUBLICATION_VARIANT_IDS)
+        ),
+    )
+    parser.add_argument(
         "--tcmalloc-lib-dir", type=Path, default=base.default_tcmalloc_dir()
     )
     parser.add_argument("--scudo-runtime-library", type=Path)
@@ -896,38 +1276,106 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
-    base.ensure_host_tools()
     source_root = args.source_root.expanduser().resolve(strict=True)
     output_dir = args.output_dir.expanduser()
     if not output_dir.is_absolute():
         output_dir = (source_root / output_dir).resolve()
+    variant_ids = getattr(
+        args, "variants", tuple(variant.allocator for variant in VARIANTS)
+    )
+    if isinstance(variant_ids, str):
+        variant_ids = parse_variant_ids(variant_ids)
+    variants = selected_variants(variant_ids)
     with exclusive_campaign_lock(output_dir):
-        return _run_campaign_locked(args, source_root, output_dir)
+        selection = bind_campaign_selection(output_dir, variants)
+        base.ensure_host_tools()
+        return _run_campaign_locked(
+            args, source_root, output_dir, variants=variants, selection=selection
+        )
 
 
 def _run_campaign_locked(
-    args: argparse.Namespace, source_root: Path, output_dir: Path
+    args: argparse.Namespace,
+    source_root: Path,
+    output_dir: Path,
+    *,
+    variants: Sequence[Any] = VARIANTS,
+    selection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    selected = tuple(variants)
+    if selection is None:
+        selection = bind_campaign_selection(output_dir, selected)
     head = base.validate_clean_source(source_root)
-    tcmalloc_lib_dir = base.validate_tcmalloc_dir(args.tcmalloc_lib_dir)
-    tcmalloc_identity = base.tcmalloc_runtime_identity(tcmalloc_lib_dir)
-    scudo_runtime, scudo_authenticity = base.authenticate_scudo(
-        source_root, args.scudo_runtime_library
+    needs_tcmalloc = any(base.is_google_tcmalloc_variant(item) for item in selected)
+    tcmalloc_lib_dir = (
+        base.validate_tcmalloc_dir(args.tcmalloc_lib_dir) if needs_tcmalloc else None
     )
-    scudo_identity = scudo_authenticity.get("runtime_library_identity")
-    if not isinstance(scudo_identity, dict):
-        raise RuntimeError("Scudo authenticity evidence omitted runtime identity")
+    tcmalloc_identity = (
+        base.tcmalloc_runtime_identity(tcmalloc_lib_dir)
+        if tcmalloc_lib_dir is not None
+        else None
+    )
+    needs_scudo = any(item.allocator == "scudo" for item in selected)
+    if needs_scudo:
+        scudo_runtime, scudo_authenticity = base.authenticate_scudo(
+            source_root, args.scudo_runtime_library
+        )
+        scudo_identity = scudo_authenticity.get("runtime_library_identity")
+        if not isinstance(scudo_identity, dict):
+            raise RuntimeError("Scudo authenticity evidence omitted runtime identity")
+    else:
+        scudo_runtime = None
+        scudo_authenticity = None
+        scudo_identity = None
+
+    needs_mimalloc_runtime = any(
+        base.mimalloc_thp_expected_state(item) is not None for item in selected
+    )
+    mimalloc_thp_runtime = (
+        ensure_mimalloc_thp_runtime(output_dir)
+        if needs_mimalloc_runtime
+        else None
+    )
+    mimalloc_thp_runtime_path = (
+        Path(str(mimalloc_thp_runtime["binary"]))
+        if mimalloc_thp_runtime is not None
+        else None
+    )
+    mimalloc_thp_runtime_sha256 = (
+        str(mimalloc_thp_runtime["binary_sha256"])
+        if mimalloc_thp_runtime is not None
+        else None
+    )
 
     builds: dict[str, dict[str, Any]] = {}
-    for variant in VARIANTS:
-        builds[variant.allocator] = base.build_variant(
-            source_root, output_dir, variant, tcmalloc_lib_dir
-        )
+    builds_by_feature: dict[str, dict[str, Any]] = {}
+    for variant in selected:
+        if variant.feature in builds_by_feature:
+            original = builds_by_feature[variant.feature]
+            build = {
+                **original,
+                "allocator": variant.allocator,
+                "feature": variant.feature,
+                "label": variant.label,
+                "base_build_allocator": original["allocator"],
+                "binary_reused": True,
+            }
+            alias_dir = output_dir / "builds" / variant.allocator
+            alias_dir.mkdir(parents=True, exist_ok=True)
+            base.write_json(alias_dir / "base-build-alias.json", build)
+        else:
+            build = base.build_variant(
+                source_root, output_dir, variant, tcmalloc_lib_dir
+            )
+            build["base_build_allocator"] = variant.allocator
+            build["binary_reused"] = False
+            builds_by_feature[variant.feature] = build
+        builds[variant.allocator] = build
 
     inventories: dict[str, dict[str, Any]] = {}
     canonical: tuple[str, ...] | None = None
     canonical_sha: str | None = None
-    for variant in VARIANTS:
+    for variant in selected:
         inventory, evidence = base.inventory_variant(
             source_root,
             output_dir,
@@ -935,6 +1383,7 @@ def _run_campaign_locked(
             Path(str(builds[variant.allocator]["binary"])),
             tcmalloc_lib_dir=tcmalloc_lib_dir,
             scudo_runtime=scudo_runtime,
+            mimalloc_thp_runtime=mimalloc_thp_runtime_path,
         )
         validated = validate_canonical_inventory(inventory)
         if canonical is None:
@@ -965,7 +1414,9 @@ def _run_campaign_locked(
         "benchmark_inventory_sha256": base.sha256_file(
             output_dir / "benchmark-inventory.txt"
         ),
-        "variants": [variant.__dict__ for variant in VARIANTS],
+        "variant_ids": [variant.allocator for variant in selected],
+        "variants": [variant.__dict__ for variant in selected],
+        "selection_sha256": selection["selection_sha256"],
         "warmups": 1,
         "measured_rounds": MEASURED_ROUNDS,
         "timeout_seconds": args.timeout_seconds,
@@ -974,9 +1425,14 @@ def _run_campaign_locked(
         "lane_rule": "canonical benchmark index modulo jobs",
         "numa_node": args.numa_node,
         "ratio_floor_ns_per_iter": RATIO_FLOOR_NS,
-        "tcmalloc_runtime_sha256": tcmalloc_identity["sha256"],
-        "scudo_runtime": str(scudo_runtime),
-        "scudo_runtime_sha256": scudo_identity["sha256"],
+        "tcmalloc_runtime_sha256": (
+            tcmalloc_identity["sha256"] if tcmalloc_identity is not None else None
+        ),
+        "scudo_runtime": str(scudo_runtime) if scudo_runtime is not None else None,
+        "scudo_runtime_sha256": (
+            scudo_identity["sha256"] if scudo_identity is not None else None
+        ),
+        "mimalloc_thp_runtime_sha256": mimalloc_thp_runtime_sha256,
     }
     config_bytes = (json.dumps(config, indent=2, sort_keys=True) + "\n").encode()
     config_path = output_dir / "campaign-config.json"
@@ -1009,6 +1465,7 @@ def _run_campaign_locked(
         "jobs": args.jobs,
         "cpus": list(args.cpus),
         "numa_node": args.numa_node,
+        "variant_selection": selection,
         "lane_assignment": [
             {
                 "lane": lane.index,
@@ -1025,6 +1482,7 @@ def _run_campaign_locked(
         "inventories": inventories,
         "scudo_runtime_authenticity": scudo_authenticity,
         "tcmalloc_runtime": tcmalloc_identity,
+        "mimalloc_thp_runtime": mimalloc_thp_runtime,
     }
     base.write_json(output_dir / "provenance.json", provenance)
 
@@ -1033,16 +1491,10 @@ def _run_campaign_locked(
     lane_cpu = {
         benchmark: lane.cpu for lane in lanes for benchmark in lane.benchmarks
     }
-    variants_by_allocator = {variant.allocator: variant for variant in VARIANTS}
-    expected_slots = {
-        (phase, round_index, variant.allocator, benchmark)
-        for benchmark in benchmarks
-        for variant in VARIANTS
-        for phase, round_index in [
-            ("warmup", 0),
-            *(("measured", index) for index in range(1, MEASURED_ROUNDS + 1)),
-        ]
-    }
+    variants_by_allocator = {variant.allocator: variant for variant in selected}
+    expected_slots = expected_process_slots(
+        benchmarks, selected, measured_rounds=MEASURED_ROUNDS
+    )
     unexpected = set(completed) - expected_slots
     if unexpected:
         raise RuntimeError(f"records.jsonl contains unexpected process keys: {sorted(unexpected)}")
@@ -1057,9 +1509,10 @@ def _run_campaign_locked(
             numa_node=args.numa_node,
             timeout_seconds=args.timeout_seconds,
             scudo_runtime=scudo_runtime,
+            mimalloc_thp_runtime_sha256=mimalloc_thp_runtime_sha256,
         )
     for benchmark in benchmarks:
-        for variant in VARIANTS:
+        for variant in selected:
             classify_cell_history(
                 _cell_records(list(completed.values()), variant.allocator, benchmark),
                 measured_rounds=MEASURED_ROUNDS,
@@ -1118,6 +1571,7 @@ def _run_campaign_locked(
             timeout_seconds=args.timeout_seconds,
             tcmalloc_lib_dir=tcmalloc_lib_dir,
             scudo_runtime=scudo_runtime,
+            mimalloc_thp_runtime=mimalloc_thp_runtime_path,
         )
         annotate_process_record(
             record, allocator=variant.allocator, output_dir=output_dir
@@ -1142,6 +1596,7 @@ def _run_campaign_locked(
             numa_node=args.numa_node,
             timeout_seconds=args.timeout_seconds,
             scudo_runtime=scudo_runtime,
+            mimalloc_thp_runtime_sha256=mimalloc_thp_runtime_sha256,
         )
         persist(record)
 
@@ -1157,12 +1612,12 @@ def _run_campaign_locked(
             if stop_event.is_set():
                 return
             benchmark_index = benchmark_indexes[benchmark]
-            for variant in variant_order(benchmark_index, 0):
+            for variant in variant_order(benchmark_index, 0, selected):
                 state = current_state(variant.allocator, benchmark)
                 if state.status == "pending" and not state.valid_measured_rounds:
                     execute_one(lane, benchmark, "warmup", 0, variant)
             for round_index in range(1, MEASURED_ROUNDS + 1):
-                for variant in variant_order(benchmark_index, round_index):
+                for variant in variant_order(benchmark_index, round_index, selected):
                     state = current_state(variant.allocator, benchmark)
                     if state.status in ("complete", "censored"):
                         continue
@@ -1192,6 +1647,7 @@ def _run_campaign_locked(
         timeout_seconds=args.timeout_seconds,
         jobs=args.jobs,
         cpus=args.cpus,
+        variants=selected,
     )
     base.write_json(
         output_dir / "campaign-state.json",

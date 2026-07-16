@@ -169,6 +169,7 @@ def clean_environment() -> dict[str, str]:
         "UNIALLOC_TCMALLOC_LIB_DIR",
         "UNIALLOC_GOOGLE_TCMALLOC_LIBRARY",
         "UNIALLOC_GOOGLE_TCMALLOC_PREFIX",
+        "UNIALLOC_MIMALLOC_THP_EXPECTED",
     }
     prefixes = ("MIMALLOC_", "TCMALLOC_")
     for name in list(env):
@@ -184,7 +185,7 @@ def build_environment(
 ) -> dict[str, str]:
     env = clean_environment()
     env["CARGO_TARGET_DIR"] = str(target_dir)
-    if variant.allocator == "tcmalloc":
+    if is_google_tcmalloc_variant(variant):
         if tcmalloc_lib_dir is None:
             raise RuntimeError("TCMalloc requires --tcmalloc-lib-dir")
         env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(tcmalloc_lib_dir)
@@ -206,7 +207,7 @@ def runtime_environment(
     scudo_runtime: Path | None,
 ) -> dict[str, str]:
     env = clean_environment()
-    if variant.allocator == "tcmalloc":
+    if is_google_tcmalloc_variant(variant):
         if tcmalloc_lib_dir is None:
             raise RuntimeError("TCMalloc requires --tcmalloc-lib-dir")
         env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(tcmalloc_lib_dir)
@@ -222,7 +223,115 @@ def runtime_environment(
             raise RuntimeError("Scudo requires an authenticated runtime")
         env["UNIALLOC_SCUDO_RUNTIME_LIBRARY"] = str(scudo_runtime)
         env["LD_PRELOAD"] = str(scudo_runtime)
+    if variant.allocator in {"mimalloc", "mimalloc_no_thp"}:
+        expected = "0" if variant.allocator == "mimalloc_no_thp" else "1"
+        env["MIMALLOC_ALLOW_THP"] = expected
     return env
+
+
+def is_google_tcmalloc_variant(variant: Variant) -> bool:
+    """Recognize both the legacy runner id and publication-facing id."""
+
+    return variant.feature == "bench_tcmalloc"
+
+
+def mimalloc_thp_expected_state(variant: Variant) -> int | None:
+    if variant.allocator == "mimalloc":
+        return 0
+    if variant.allocator == "mimalloc_no_thp":
+        return 1
+    return None
+
+
+def mimalloc_thp_runtime_evidence(
+    variant: Variant,
+    stderr: bytes,
+    *,
+    required: bool,
+    allow_missing_final: bool = False,
+) -> dict[str, Any]:
+    """Validate initial and process-exit PR_GET_THP_DISABLE proofs."""
+
+    initial_values = [
+        match.group(1).decode("ascii")
+        for match in re.finditer(
+            rb"^UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=(0|1|error)$",
+            stderr,
+            re.MULTILINE,
+        )
+    ]
+    final_values = [
+        match.group(1).decode("ascii")
+        for match in re.finditer(
+            rb"^UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=(0|1|error)$",
+            stderr,
+            re.MULTILINE,
+        )
+    ]
+    expected = mimalloc_thp_expected_state(variant)
+    if expected is None:
+        if initial_values or final_values:
+            raise RuntimeError(
+                f"{variant.allocator} unexpectedly emitted a mimalloc THP marker"
+            )
+        return {
+            "applicable": False,
+            "required": False,
+            "verified": True,
+            "initial_verified": True,
+            "initial_marker_count": 0,
+            "marker_count": 0,
+            "pr_get_thp_disable": None,
+        }
+    if not required:
+        if initial_values or final_values:
+            raise RuntimeError(
+                f"{variant.allocator} emitted mimalloc THP markers without a runtime proof DSO"
+            )
+        return {
+            "applicable": True,
+            "required": False,
+            "verified": True,
+            "initial_verified": False,
+            "initial_marker_count": 0,
+            "marker_count": 0,
+            "pr_get_thp_disable": None,
+        }
+    expected_text = str(expected)
+    if initial_values != [expected_text]:
+        raise RuntimeError(
+            f"mimalloc initial PR_GET_THP_DISABLE mismatch for {variant.allocator}: "
+            f"expected {[expected_text]}, got {initial_values}"
+        )
+    final_verified = final_values == [expected_text]
+    if not final_verified and not (allow_missing_final and not final_values):
+        raise RuntimeError(
+            f"mimalloc final PR_GET_THP_DISABLE mismatch for {variant.allocator}: "
+            f"expected {[expected_text]}, got {final_values}"
+        )
+    return {
+        "applicable": True,
+        "required": True,
+        "verified": final_verified,
+        "initial_verified": True,
+        "initial_marker_count": 1,
+        "marker_count": len(final_values),
+        "pr_get_thp_disable": expected if final_verified else None,
+        "initial_pr_get_thp_disable": expected,
+    }
+
+
+def mimalloc_thp_runtime_command_prefix(
+    variant: Variant, runtime: Path | None
+) -> list[str]:
+    expected = mimalloc_thp_expected_state(variant)
+    if expected is None or runtime is None:
+        return []
+    return [
+        "/usr/bin/env",
+        f"LD_PRELOAD={runtime}",
+        f"UNIALLOC_MIMALLOC_THP_EXPECTED={expected}",
+    ]
 
 
 def load_paper_driver(source_root: Path) -> ModuleType:
@@ -450,12 +559,22 @@ def inventory_variant(
     *,
     tcmalloc_lib_dir: Path | None,
     scudo_runtime: Path | None,
+    mimalloc_thp_runtime: Path | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     env = runtime_environment(
-        variant, tcmalloc_lib_dir=tcmalloc_lib_dir, scudo_runtime=scudo_runtime
+        variant,
+        tcmalloc_lib_dir=tcmalloc_lib_dir,
+        scudo_runtime=scudo_runtime,
     )
+    command = [
+        *mimalloc_thp_runtime_command_prefix(variant, mimalloc_thp_runtime),
+        str(binary),
+        "--list",
+        "--format",
+        "terse",
+    ]
     proc = subprocess.run(
-        [str(binary), "--list", "--format", "terse"],
+        command,
         cwd=source_root,
         env=env,
         stdout=subprocess.PIPE,
@@ -463,6 +582,14 @@ def inventory_variant(
     )
     marker_count = scudo_marker_count(proc.stderr)
     tcmalloc_marker_count = google_tcmalloc_marker_count(proc.stderr)
+    mimalloc_thp = mimalloc_thp_runtime_evidence(
+        variant,
+        proc.stderr,
+        required=(
+            mimalloc_thp_expected_state(variant) is not None
+            and mimalloc_thp_runtime is not None
+        ),
+    )
     if proc.returncode != 0:
         raise RuntimeError(
             f"{variant.allocator} inventory failed ({proc.returncode}): "
@@ -472,12 +599,12 @@ def inventory_variant(
         raise RuntimeError(f"Scudo inventory emitted {marker_count} identity markers")
     if variant.allocator != "scudo" and marker_count != 0:
         raise RuntimeError(f"{variant.allocator} unexpectedly emitted a Scudo marker")
-    if variant.allocator == "tcmalloc" and tcmalloc_marker_count != 1:
+    if is_google_tcmalloc_variant(variant) and tcmalloc_marker_count != 1:
         raise RuntimeError(
             "TCMalloc inventory emitted "
             f"{tcmalloc_marker_count} google/tcmalloc identity markers"
         )
-    if variant.allocator != "tcmalloc" and tcmalloc_marker_count != 0:
+    if not is_google_tcmalloc_variant(variant) and tcmalloc_marker_count != 0:
         raise RuntimeError(
             f"{variant.allocator} unexpectedly emitted a google/tcmalloc marker"
         )
@@ -497,7 +624,7 @@ def inventory_variant(
         stderr=subprocess.STDOUT,
     ).stdout
     (build_dir / "ldd.txt").write_bytes(ldd)
-    if variant.allocator == "tcmalloc":
+    if is_google_tcmalloc_variant(variant):
         assert tcmalloc_lib_dir is not None
         ldd_text = ldd.decode("utf-8", errors="replace")
         expected = str((tcmalloc_lib_dir / GOOGLE_TCMALLOC_LIBRARY).resolve())
@@ -513,6 +640,15 @@ def inventory_variant(
         "stderr_sha256": sha256_bytes(proc.stderr),
         "scudo_identity_marker_count": marker_count,
         "google_tcmalloc_identity_marker_count": tcmalloc_marker_count,
+        "mimalloc_thp_runtime": mimalloc_thp,
+        "mimalloc_thp_runtime_library": (
+            str(mimalloc_thp_runtime) if mimalloc_thp_runtime is not None else None
+        ),
+        "mimalloc_thp_runtime_sha256": (
+            sha256_file(mimalloc_thp_runtime)
+            if mimalloc_thp_runtime is not None
+            else None
+        ),
         "ldd_sha256": sha256_bytes(ldd),
         "runtime_env_contract": {
             "glibc_tunables_present": "GLIBC_TUNABLES" in env,
@@ -597,6 +733,7 @@ def run_one(
     timeout_seconds: int,
     tcmalloc_lib_dir: Path | None,
     scudo_runtime: Path | None,
+    mimalloc_thp_runtime: Path | None = None,
 ) -> dict[str, Any]:
     safe_name = benchmark.replace("::", "__").replace("/", "_")
     run_dir = (
@@ -622,6 +759,7 @@ def run_one(
         "taskset",
         "-c",
         str(cpu),
+        *mimalloc_thp_runtime_command_prefix(variant, mimalloc_thp_runtime),
         str(binary),
         "--bench",
         "--exact",
@@ -629,7 +767,9 @@ def run_one(
         "--test-threads=1",
     ]
     env = runtime_environment(
-        variant, tcmalloc_lib_dir=tcmalloc_lib_dir, scudo_runtime=scudo_runtime
+        variant,
+        tcmalloc_lib_dir=tcmalloc_lib_dir,
+        scudo_runtime=scudo_runtime,
     )
     write_json(run_dir / "command.json", command)
     started = utc_now()
@@ -662,6 +802,27 @@ def run_one(
     stderr_path.write_bytes(stderr)
     marker_count = scudo_marker_count(stderr)
     tcmalloc_marker_count = google_tcmalloc_marker_count(stderr)
+    try:
+        mimalloc_thp = mimalloc_thp_runtime_evidence(
+            variant,
+            stderr,
+            required=(
+                mimalloc_thp_expected_state(variant) is not None
+                and mimalloc_thp_runtime is not None
+            ),
+            allow_missing_final=timed_out,
+        )
+    except RuntimeError as error:
+        mimalloc_thp = {
+            "applicable": mimalloc_thp_expected_state(variant) is not None,
+            "required": mimalloc_thp_runtime is not None,
+            "verified": False,
+            "initial_verified": False,
+            "initial_marker_count": 0,
+            "marker_count": 0,
+            "pr_get_thp_disable": None,
+            "error": str(error),
+        }
     record: dict[str, Any] = {
         "schema_version": 1,
         "diagnostic_label": "current-toolchain allocation-heavy std_bench subset; non-paper-exact",
@@ -685,6 +846,15 @@ def run_one(
         "libc_rseq_policy": "glibc default; GLIBC_TUNABLES absent",
         "scudo_identity_marker_count": marker_count,
         "google_tcmalloc_identity_marker_count": tcmalloc_marker_count,
+        "mimalloc_thp_runtime": mimalloc_thp,
+        "mimalloc_thp_runtime_library": (
+            str(mimalloc_thp_runtime) if mimalloc_thp_runtime is not None else None
+        ),
+        "mimalloc_thp_runtime_sha256": (
+            sha256_file(mimalloc_thp_runtime)
+            if mimalloc_thp_runtime is not None
+            else None
+        ),
         "scudo_runtime_library": env.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY"),
         "start_loadavg": start_loadavg,
         "end_loadavg": None,
@@ -723,9 +893,10 @@ def run_one(
     )
     tcmalloc_marker_valid = (
         tcmalloc_marker_count == 1
-        if variant.allocator == "tcmalloc"
+        if is_google_tcmalloc_variant(variant)
         else tcmalloc_marker_count == 0
     )
+    mimalloc_thp_valid = bool(mimalloc_thp["verified"])
     record["valid"] = bool(
         not timed_out
         and proc.returncode == 0
@@ -736,6 +907,7 @@ def run_one(
         and record.get("glibc_tunables_present") is False
         and scudo_marker_valid
         and tcmalloc_marker_valid
+        and mimalloc_thp_valid
     )
     write_json(run_dir / "record.json", record)
     return record

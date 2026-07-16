@@ -85,6 +85,115 @@ class CampaignHelpersTest(unittest.TestCase):
             f"/tmp/google-tcmalloc/lib/{campaign.GOOGLE_TCMALLOC_LIBRARY}",
         )
 
+        publication_variant = campaign.Variant(
+            "google_tcmalloc", "bench_tcmalloc", "Google TCMalloc"
+        )
+        publication_env = campaign.build_environment(
+            publication_variant, Path("/tmp/target-publication"), lib_dir
+        )
+        self.assertEqual(
+            publication_env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"],
+            f"/tmp/google-tcmalloc/lib/{campaign.GOOGLE_TCMALLOC_LIBRARY}",
+        )
+
+    def test_mimalloc_thp_runtime_contract_is_exact(self) -> None:
+        normal = campaign.Variant("mimalloc", "bench_mimalloc", "mimalloc")
+        disabled = campaign.Variant(
+            "mimalloc_no_thp", "bench_mimalloc", "mimalloc (THP off)"
+        )
+        self.assertEqual(
+            "1",
+            campaign.runtime_environment(
+                normal, tcmalloc_lib_dir=None, scudo_runtime=None
+            )["MIMALLOC_ALLOW_THP"],
+        )
+        self.assertEqual(
+            "0",
+            campaign.runtime_environment(
+                disabled, tcmalloc_lib_dir=None, scudo_runtime=None
+            )["MIMALLOC_ALLOW_THP"],
+        )
+        runtime = Path("/tmp/libunialloc_mimalloc_thp_runtime.so")
+        self.assertEqual(
+            [
+                "/usr/bin/env",
+                f"LD_PRELOAD={runtime}",
+                "UNIALLOC_MIMALLOC_THP_EXPECTED=1",
+            ],
+            campaign.mimalloc_thp_runtime_command_prefix(disabled, runtime),
+        )
+        evidence = campaign.mimalloc_thp_runtime_evidence(
+            disabled,
+            (
+                b"UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=1\n"
+                b"UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=1\n"
+            ),
+            required=True,
+        )
+        self.assertTrue(evidence["initial_verified"])
+        self.assertTrue(evidence["verified"])
+        with self.assertRaisesRegex(RuntimeError, "final"):
+            campaign.mimalloc_thp_runtime_evidence(
+                disabled,
+                b"UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=1\n",
+                required=True,
+            )
+
+    def test_mimalloc_thp_preload_is_scoped_to_the_benchmark_child(self) -> None:
+        disabled = campaign.Variant(
+            "mimalloc_no_thp", "bench_mimalloc", "mimalloc (THP off)"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "raw"
+            binary = root / "std-bench"
+            binary.write_bytes(b"binary")
+            runtime = root / "libunialloc_mimalloc_thp_runtime.so"
+            runtime.write_bytes(b"runtime")
+            benchmark = "vec::bench_from_elem_1000"
+            proc = mock.Mock()
+            proc.returncode = 0
+            proc.communicate.return_value = (
+                f"test {benchmark} ... bench: 1,000 ns/iter\n".encode(),
+                (
+                    b"UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE_START=1\n"
+                    b"UNIALLOC_MIMALLOC_PR_GET_THP_DISABLE=1\n"
+                ),
+            )
+            with mock.patch.object(
+                campaign.subprocess, "Popen", return_value=proc
+            ) as popen:
+                campaign.run_one(
+                    source_root=root,
+                    output_dir=output,
+                    variant=disabled,
+                    binary=binary,
+                    benchmark=benchmark,
+                    phase="warmup",
+                    round_index=0,
+                    cpu=0,
+                    numa_node=0,
+                    timeout_seconds=30,
+                    tcmalloc_lib_dir=None,
+                    scudo_runtime=None,
+                    mimalloc_thp_runtime=runtime,
+                )
+
+            command = popen.call_args.args[0]
+            env_index = command.index("/usr/bin/env")
+            self.assertEqual(["taskset", "-c", "0"], command[env_index - 3 : env_index])
+            self.assertFalse(
+                any(argument.startswith("LD_PRELOAD=") for argument in command[:env_index])
+            )
+            self.assertEqual(f"LD_PRELOAD={runtime}", command[env_index + 1])
+            self.assertEqual(
+                "UNIALLOC_MIMALLOC_THP_EXPECTED=1", command[env_index + 2]
+            )
+            self.assertEqual(str(binary), command[env_index + 3])
+            child_env = popen.call_args.kwargs["env"]
+            self.assertNotIn("LD_PRELOAD", child_env)
+            self.assertEqual("0", child_env["MIMALLOC_ALLOW_THP"])
+
     def test_summary_uses_three_sample_cell_medians_and_ratio_geomean(self) -> None:
         records = []
         for benchmark_index, benchmark in enumerate(campaign.BENCHMARKS):
