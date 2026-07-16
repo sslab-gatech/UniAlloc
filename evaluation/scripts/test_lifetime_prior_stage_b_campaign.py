@@ -47,6 +47,35 @@ def complete_outcome_fields(values: dict[str, object]) -> dict[str, object]:
     }
 
 
+def minimal_baseline_build(target_id: str = "oxipng") -> dict[str, object]:
+    return {
+        "success": True,
+        "build_group": "all-unknown",
+        "automatic_rust_lifetime_prior": False,
+        "runtime_instrumentation_sha256": "7" * 64,
+        "binary_sha256": "8" * 64,
+        "compiler_build_environment": {
+            "rustflags": campaign.stage_a.stage_a_rustflags(
+                target_id, "all-unknown"
+            ),
+            "automatic_rust_lifetime_prior": None,
+        },
+    }
+
+
+def minimal_baseline_compile_contract() -> dict[str, object]:
+    return campaign.baseline_compile_contract(
+        {
+            "targets": {
+                "oxipng": {
+                    "builds": {"all-unknown": minimal_baseline_build()}
+                }
+            }
+        },
+        "oxipng",
+    )
+
+
 def minimal_cell_protocol() -> dict[str, object]:
     return {
         "schema_version": campaign.STAGE_B_PROTOCOL_SCHEMA_VERSION,
@@ -64,6 +93,7 @@ def minimal_cell_protocol() -> dict[str, object]:
             "work_units": 1,
             "pinned_cpu": 18,
             "criterion_warm_up_seconds": None,
+            "baseline_compile_contract": minimal_baseline_compile_contract(),
             "arms": [
                 {
                     "arm": arm_name,
@@ -547,7 +577,14 @@ class LifetimePriorStageBCampaignTests(unittest.TestCase):
                     "allocator_revision": "1" * 40,
                     "unialloc_implementation_sha256": "2" * 64,
                     "campaign_snapshot_sha256": "3" * 64,
-                }
+                },
+                "targets": {
+                    "swc": {
+                        "builds": {
+                            "all-unknown": minimal_baseline_build("swc")
+                        }
+                    }
+                },
             }
             common = {
                 "document": document,
@@ -573,6 +610,50 @@ class LifetimePriorStageBCampaignTests(unittest.TestCase):
             with self.assertRaises(campaign.stage_a.CampaignContractError):
                 campaign.ensure_stage_b_protocol(root / "raw", changed)
 
+    def test_baseline_compile_contract_names_transport_semantics(self) -> None:
+        contract = minimal_baseline_compile_contract()
+        self.assertEqual(
+            campaign.TRANSPORT_POLICY_DISABLED_ARM,
+            contract["baseline_arm"],
+        )
+        self.assertTrue(
+            contract["lifetime_transport_instrumentation_compiled"]
+        )
+        self.assertFalse(contract["automatic_rust_lifetime_prior"])
+        self.assertEqual(
+            {"name": "disabled", "numeric_value": 0},
+            contract["runtime_policy"],
+        )
+
+        invalid = minimal_baseline_build()
+        invalid["automatic_rust_lifetime_prior"] = True
+        with self.assertRaises(campaign.stage_a.CampaignContractError):
+            campaign.baseline_compile_contract(
+                {
+                    "targets": {
+                        "oxipng": {
+                            "builds": {"all-unknown": invalid}
+                        }
+                    }
+                },
+                "oxipng",
+            )
+
+    def test_comparison_names_identify_policy_disabled_baseline(self) -> None:
+        comparison_names = {
+            name for name, _, _ in campaign.STAGE_B_COMPARISON_ARMS
+        }
+        self.assertIn(
+            "runtime_only_vs_transport_policy_disabled", comparison_names
+        )
+        self.assertIn(
+            "compiler_thp_end_to_end_vs_transport_policy_disabled",
+            comparison_names,
+        )
+        self.assertFalse(
+            any(name.endswith("_vs_default") for name in comparison_names)
+        )
+
     def test_stage_b_session_reuse_requires_immutable_record(self) -> None:
         protocol = minimal_cell_protocol()
         with tempfile.TemporaryDirectory() as directory:
@@ -592,6 +673,10 @@ class LifetimePriorStageBCampaignTests(unittest.TestCase):
                     target_id="oxipng",
                     repeat=0,
                 ),
+            )
+            self.assertEqual(
+                protocol["compatibility"]["baseline_compile_contract"],
+                first["baseline_compile_contract"],
             )
             path.chmod(0o600)
             with self.assertRaises(

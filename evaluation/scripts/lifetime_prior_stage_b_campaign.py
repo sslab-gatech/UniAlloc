@@ -79,7 +79,7 @@ UNIT_SECONDS = {
     "s": 1.0,
 }
 DEFAULT_MEASUREMENT_LOCK = suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK
-STAGE_B_PROTOCOL_SCHEMA_VERSION = 1
+STAGE_B_PROTOCOL_SCHEMA_VERSION = 2
 STAGE_B_EVIDENCE_SCHEMA_VERSION = 1
 GNU_TIME_KEYS = {
     "User time (seconds)": "user_seconds",
@@ -88,6 +88,39 @@ GNU_TIME_KEYS = {
     "Maximum resident set size (kbytes)": "peak_rss_kib",
     "Exit status": "time_exit_status",
 }
+
+STAGE_B_COMPARISON_ARMS = (
+    (
+        "runtime_only_vs_transport_policy_disabled",
+        TRANSPORT_POLICY_DISABLED_ARM,
+        "adaptive-ordinary-all-unknown",
+    ),
+    (
+        "compiler_prior_vs_runtime_only",
+        "adaptive-ordinary-all-unknown",
+        "adaptive-ordinary-compiler-prior",
+    ),
+    (
+        "runtime_thp_vs_runtime_ordinary",
+        "adaptive-ordinary-all-unknown",
+        "adaptive-selective-thp-all-unknown",
+    ),
+    (
+        "compiler_prior_thp_vs_runtime_thp",
+        "adaptive-selective-thp-all-unknown",
+        "adaptive-selective-thp-compiler-prior",
+    ),
+    (
+        "selective_thp_vs_compiler_ordinary",
+        "adaptive-ordinary-compiler-prior",
+        "adaptive-selective-thp-compiler-prior",
+    ),
+    (
+        "compiler_thp_end_to_end_vs_transport_policy_disabled",
+        TRANSPORT_POLICY_DISABLED_ARM,
+        "adaptive-selective-thp-compiler-prior",
+    ),
+)
 
 
 def transitive_evaluator_digests(
@@ -871,6 +904,64 @@ def _validate_stage_b_repeats(repeats: int) -> None:
         )
 
 
+def baseline_compile_contract(
+    document: Mapping[str, Any], target_id: str
+) -> dict[str, Any]:
+    """Describe and validate the policy-disabled transport baseline binary."""
+
+    target = document.get("targets", {}).get(target_id, {})
+    build = target.get("builds", {}).get("all-unknown", {})
+    compiler_environment = build.get("compiler_build_environment", {})
+    baseline_arm = _stage_a_arm(TRANSPORT_POLICY_DISABLED_ARM)
+    expected_rustflags = stage_a.stage_a_rustflags(target_id, "all-unknown")
+    required_digests = {
+        "runtime_instrumentation_sha256": build.get(
+            "runtime_instrumentation_sha256"
+        ),
+        "binary_sha256": build.get("binary_sha256"),
+    }
+    if (
+        baseline_arm.name != "default"
+        or baseline_arm.build_group != "all-unknown"
+        or baseline_arm.automatic_rust_lifetime_prior
+        or baseline_arm.expected_policy != 0
+        or build.get("success") is not True
+        or build.get("build_group") != "all-unknown"
+        or build.get("automatic_rust_lifetime_prior") is not False
+        or compiler_environment.get("automatic_rust_lifetime_prior") is not None
+        or compiler_environment.get("rustflags") != expected_rustflags
+        or any(
+            not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            for digest in required_digests.values()
+        )
+    ):
+        raise stage_a.CampaignContractError(
+            "Stage-B transport-policy-disabled baseline compile contract is invalid"
+        )
+    return {
+        "source": "unialloc-stage-b-baseline-compile-contract-v1",
+        "baseline_arm": TRANSPORT_POLICY_DISABLED_ARM,
+        "stage_a_arm": baseline_arm.name,
+        "build_group": baseline_arm.build_group,
+        "lifetime_transport_instrumentation_compiled": True,
+        "automatic_rust_lifetime_prior": False,
+        "runtime_policy": {
+            "name": "disabled",
+            "numeric_value": baseline_arm.expected_policy,
+        },
+        "compiler_build_environment": {
+            "rustflags": expected_rustflags,
+            "automatic_rust_lifetime_prior": None,
+        },
+        **required_digests,
+        "comparison_interpretation": (
+            "lifetime transport instrumentation compiled with automatic compiler "
+            "prior disabled and runtime policy disabled"
+        ),
+    }
+
+
 def build_stage_b_protocol(
     *,
     document: Mapping[str, Any],
@@ -910,6 +1001,9 @@ def build_stage_b_protocol(
                 Path(immutable_evidence.__file__).resolve(),
                 Path(suite_contract.__file__).resolve(),
             )
+        ),
+        "baseline_compile_contract": baseline_compile_contract(
+            document, target_id
         ),
         "arms": [
             {
@@ -1023,20 +1117,26 @@ def ensure_stage_b_measurement_session(
             ) from error
     else:
         value = {
-            "schema_version": 1,
+            "schema_version": 2,
             "protocol_sha256": protocol["protocol_sha256"],
             "target_id": target_id,
             "repeat": repeat,
             "measurement_session_id": str(uuid.uuid4()),
             "anchor_arm": TRANSPORT_POLICY_DISABLED_ARM,
+            "baseline_compile_contract": compatibility[
+                "baseline_compile_contract"
+            ],
         }
         immutable_evidence.persist_immutable_json(path, value)
     expected = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol_sha256": protocol["protocol_sha256"],
         "target_id": target_id,
         "repeat": repeat,
         "anchor_arm": TRANSPORT_POLICY_DISABLED_ARM,
+        "baseline_compile_contract": compatibility[
+            "baseline_compile_contract"
+        ],
     }
     if any(value.get(field) != expected_value for field, expected_value in expected.items()):
         raise stage_a.CampaignContractError(
@@ -1549,11 +1649,14 @@ def persist_stage_b_repeat_result(
             "smaps_measurement_phase": row["smaps_measurement_phase"],
         }
     value = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol_sha256": protocol["protocol_sha256"],
         "target_id": target_id,
         "repeat": repeat,
         "measurement_session_id": measurement_session_id,
+        "baseline_compile_contract": protocol["compatibility"][
+            "baseline_compile_contract"
+        ],
         "cells": cells,
         "arms": arms,
         "thp_pair_backing_gates": [dict(gate) for gate in thp_gates],
@@ -1625,12 +1728,15 @@ def persist_stage_b_pair_result(
             }
         )
     value = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol_sha256": protocol["protocol_sha256"],
         "target_id": target_id,
         "comparison_name": name,
         "baseline_arm": baseline_arm,
         "candidate_arm": candidate_arm,
+        "baseline_compile_contract": protocol["compatibility"][
+            "baseline_compile_contract"
+        ],
         "cell_pairs": pairs,
         "comparison": dict(comparison),
     }
@@ -1974,38 +2080,7 @@ def run_campaign(
         }
 
     paired_comparisons: dict[str, Any] = {}
-    for name, baseline_arm, candidate_arm in (
-        (
-            "runtime_only_vs_default",
-            TRANSPORT_POLICY_DISABLED_ARM,
-            "adaptive-ordinary-all-unknown",
-        ),
-        (
-            "compiler_prior_vs_runtime_only",
-            "adaptive-ordinary-all-unknown",
-            "adaptive-ordinary-compiler-prior",
-        ),
-        (
-            "runtime_thp_vs_runtime_ordinary",
-            "adaptive-ordinary-all-unknown",
-            "adaptive-selective-thp-all-unknown",
-        ),
-        (
-            "compiler_prior_thp_vs_runtime_thp",
-            "adaptive-selective-thp-all-unknown",
-            "adaptive-selective-thp-compiler-prior",
-        ),
-        (
-            "selective_thp_vs_compiler_ordinary",
-            "adaptive-ordinary-compiler-prior",
-            "adaptive-selective-thp-compiler-prior",
-        ),
-        (
-            "compiler_thp_end_to_end_vs_default",
-            TRANSPORT_POLICY_DISABLED_ARM,
-            "adaptive-selective-thp-compiler-prior",
-        ),
-    ):
+    for name, baseline_arm, candidate_arm in STAGE_B_COMPARISON_ARMS:
         pairs: list[dict[str, Any]] = []
         for repeat in range(repeats):
             baseline = next(
@@ -2168,7 +2243,7 @@ def run_campaign(
         for name, comparison in paired_comparisons.items()
     ]
     result = {
-        "schema_version": 3,
+        "schema_version": 4,
         "campaign": "rust-lifetime-prior-stage-b-fast-v3",
         "target_id": target_id,
         "target_source_commit": stage_a.TARGETS[target_id].source_commit,
@@ -2177,6 +2252,9 @@ def run_campaign(
         "stage_a_results_sha256": stage_a.sha256_file(stage_a_results),
         "stage_b_protocol": str((raw_dir / "stage-b-protocol.json").resolve()),
         "stage_b_protocol_sha256": protocol["protocol_sha256"],
+        "baseline_compile_contract": protocol["compatibility"][
+            "baseline_compile_contract"
+        ],
         "stage_b_evaluator": {
             "path": str(Path(__file__).resolve()),
             "sha256": stage_a.sha256_file(Path(__file__).resolve()),

@@ -239,6 +239,95 @@ class FeatureCampaignTest(unittest.TestCase):
                     output, raw_record("unialloc", ns_per_iter=9999.0)
                 )
 
+    def test_measurement_session_binds_full_ordered_variant_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            protocol = {"protocol_sha256": "a" * 64}
+            selected = ("unialloc", "typed_plain")
+            session = campaign.ensure_measurement_session(
+                output,
+                protocol=protocol,
+                cohort_id="primary",
+                variant_ids=selected,
+            )
+            self.assertEqual(
+                campaign.MEASUREMENT_SESSION_SCHEMA_VERSION,
+                session["schema_version"],
+            )
+            self.assertEqual(list(selected), session["variant_ids"])
+            reused = campaign.ensure_measurement_session(
+                output,
+                protocol=protocol,
+                cohort_id="primary",
+                variant_ids=selected,
+            )
+            self.assertEqual(
+                session["measurement_session_id"], reused["measurement_session_id"]
+            )
+
+            for changed in (
+                ("unialloc", "typed_plain", "typeiso_perf"),
+                ("typed_plain", "unialloc"),
+                ("unialloc",),
+            ):
+                with self.subTest(changed=changed), self.assertRaisesRegex(
+                    campaign.CampaignError, "variant selection"
+                ):
+                    campaign.ensure_measurement_session(
+                        output,
+                        protocol=protocol,
+                        cohort_id="primary",
+                        variant_ids=changed,
+                    )
+
+    def test_selection_drift_rejects_before_any_process_or_view_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            protocol = {"protocol_sha256": "a" * 64}
+            selected = ("unialloc", "typed_plain")
+            campaign.ensure_measurement_session(
+                output,
+                protocol=protocol,
+                cohort_id="primary",
+                variant_ids=selected,
+            )
+            selection_path = campaign.persist_selection(
+                output,
+                cohort_id="primary",
+                variant_ids=selected,
+            )
+            original_selection = selection_path.read_bytes()
+            args = campaign.parse_args(
+                [
+                    "--source-root",
+                    str(campaign.ROOT),
+                    "--output-dir",
+                    str(output),
+                    "--cohort-id",
+                    "primary",
+                    "--variants",
+                    "unialloc,typed_plain,typeiso_perf",
+                    "--build-only",
+                    "--jobs",
+                    "1",
+                    "--cpus",
+                    "20",
+                ]
+            )
+            with (
+                mock.patch.object(campaign, "ensure_host_tools") as host_tools,
+                mock.patch.object(campaign.subprocess, "run") as run,
+                mock.patch.object(campaign.subprocess, "Popen") as popen,
+            ):
+                with self.assertRaisesRegex(
+                    campaign.CampaignError, "variant selection"
+                ):
+                    campaign.run_campaign(args)
+            host_tools.assert_not_called()
+            run.assert_not_called()
+            popen.assert_not_called()
+            self.assertEqual(original_selection, selection_path.read_bytes())
+
     def test_protocol_mismatch_fails_closed_without_touching_raw_records(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)

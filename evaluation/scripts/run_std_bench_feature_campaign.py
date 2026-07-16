@@ -2,12 +2,12 @@
 """Run an incremental full-std_bench UniAlloc feature campaign.
 
 The raw store is append-only at the process-record level.  Variant selection is
-a mutable view over immutable ``cohort/variant/benchmark/round`` shards, so a
-new variant can be collected without rewriting any earlier observation and a
-removed variant only changes the view manifest.  Raw records contain absolute
-time and diagnostic peak-RSS measurements; ratios and aggregates belong to
-later derivation.  Every libtest leaf chooses its own adaptive iteration count,
-so no std_bench variant has a fixed-work RSS contract.
+a mutable view until a cohort receives its immutable measurement session.  The
+session binds the full ordered variant selection, so later selection changes
+use a new cohort.  Raw records contain absolute time and diagnostic peak-RSS
+measurements; ratios and aggregates belong to later derivation.  Every libtest
+leaf chooses its own adaptive iteration count, so no std_bench variant has a
+fixed-work RSS contract.
 
 ``typed_plain`` and ``typeiso_perf`` are built through the actual MIR wrapper
 with policy flags 0 and 1.  The only Lifetime entry is deliberately named
@@ -92,7 +92,8 @@ from evaluation.scripts import type_isolation_suite_contract as suite_contract  
 
 PROTOCOL_SCHEMA_VERSION = 1
 RAW_RECORD_SCHEMA_VERSION = 3
-PROTOCOL_REVISION = "full-std-bench-feature-process-v3"
+PROTOCOL_REVISION = "full-std-bench-feature-process-v4"
+MEASUREMENT_SESSION_SCHEMA_VERSION = 2
 EXPECTED_CANONICAL_BENCHMARK_COUNT = full.EXPECTED_CANONICAL_BENCHMARK_COUNT
 DEFAULT_MEASURED_ROUNDS = full.MEASURED_ROUNDS
 MEASUREMENT_LOCK = suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK
@@ -499,16 +500,26 @@ def validate_variant_registry(
 validate_variant_registry(VARIANT_REGISTRY)
 
 
+def validate_variant_selection(variant_ids: Sequence[str]) -> tuple[str, ...]:
+    """Return one complete, ordered variant selection or fail closed."""
+
+    selected = tuple(variant_ids)
+    if not selected or len(selected) != len(set(selected)):
+        raise CampaignError("variant selection must contain unique variants")
+    unknown = sorted(set(selected) - set(VARIANT_REGISTRY))
+    if unknown:
+        raise CampaignError(
+            "variant selection contains unknown variants: " + ",".join(unknown)
+        )
+    return selected
+
+
 def parse_variant_ids(value: str) -> tuple[str, ...]:
     values = tuple(item.strip() for item in value.split(",") if item.strip())
-    if not values:
-        raise argparse.ArgumentTypeError("variant selection cannot be empty")
-    if len(values) != len(set(values)):
-        raise argparse.ArgumentTypeError("variant selection contains duplicates")
-    unknown = sorted(set(values) - set(VARIANT_REGISTRY))
-    if unknown:
-        raise argparse.ArgumentTypeError("unknown variants: " + ",".join(unknown))
-    return values
+    try:
+        return validate_variant_selection(values)
+    except CampaignError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def validate_cohort_id(value: str) -> str:
@@ -569,10 +580,12 @@ def ensure_measurement_session(
     *,
     protocol: Mapping[str, Any],
     cohort_id: str,
+    variant_ids: Sequence[str],
 ) -> dict[str, Any]:
     """Create one fresh immutable session and UniAlloc anchor contract per cohort."""
 
     cohort_id = validate_cohort_id(cohort_id)
+    selected = validate_variant_selection(variant_ids)
     path = output_dir / "sessions" / cohort_id / "measurement-session.json"
     raw_root = output_dir / "raw" / cohort_id
     existing_records = list(raw_root.glob("*/**/record.json")) if raw_root.exists() else []
@@ -588,21 +601,30 @@ def ensure_measurement_session(
             raise CampaignError("measurement session record is unreadable") from error
     else:
         value = {
-            "schema_version": 1,
+            "schema_version": MEASUREMENT_SESSION_SCHEMA_VERSION,
             "protocol_sha256": protocol["protocol_sha256"],
             "cohort_id": cohort_id,
             "measurement_session_id": str(uuid.uuid4()),
             "anchor_variant_id": "unialloc",
             "anchor_contract": "fresh-unialloc-process-before-each-comparison-cell",
+            "variant_ids": list(selected),
         }
         immutable_evidence.persist_immutable_json(path, value)
     expected = {
-        "schema_version": 1,
+        "schema_version": MEASUREMENT_SESSION_SCHEMA_VERSION,
         "protocol_sha256": protocol["protocol_sha256"],
         "cohort_id": cohort_id,
         "anchor_variant_id": "unialloc",
         "anchor_contract": "fresh-unialloc-process-before-each-comparison-cell",
+        "variant_ids": list(selected),
     }
+    if (
+        value.get("schema_version") != MEASUREMENT_SESSION_SCHEMA_VERSION
+        or value.get("variant_ids") != list(selected)
+    ):
+        raise CampaignError(
+            "measurement session variant selection differs from the requested cohort"
+        )
     if any(value.get(key) != expected_value for key, expected_value in expected.items()):
         raise CampaignError("measurement session differs from its cohort protocol")
     try:
@@ -614,18 +636,37 @@ def ensure_measurement_session(
     return dict(value)
 
 
+def validate_existing_session_selection(
+    output_dir: Path, *, cohort_id: str, variant_ids: Sequence[str]
+) -> None:
+    """Reject cohort selection drift before launching any external process."""
+
+    cohort_id = validate_cohort_id(cohort_id)
+    selected = validate_variant_selection(variant_ids)
+    path = output_dir / "sessions" / cohort_id / "measurement-session.json"
+    if not path.is_file():
+        return
+    immutable_evidence.validate_committed_file(path)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CampaignError("measurement session record is unreadable") from error
+    if (
+        value.get("schema_version") != MEASUREMENT_SESSION_SCHEMA_VERSION
+        or value.get("variant_ids") != list(selected)
+    ):
+        raise CampaignError(
+            "measurement session variant selection differs from the requested cohort"
+        )
+
+
 def persist_selection(
     output_dir: Path, *, cohort_id: str, variant_ids: Sequence[str]
 ) -> Path:
     """Replace a view manifest without modifying any raw shard."""
 
     cohort_id = validate_cohort_id(cohort_id)
-    selected = tuple(variant_ids)
-    if not selected or len(selected) != len(set(selected)):
-        raise RuntimeError("selection must contain unique variants")
-    unknown = sorted(set(selected) - set(VARIANT_REGISTRY))
-    if unknown:
-        raise RuntimeError("selection contains unknown variants: " + ",".join(unknown))
+    selected = validate_variant_selection(variant_ids)
     path = output_dir / "views" / cohort_id / "selection.json"
     value = {
         "schema_version": 1,
@@ -2139,6 +2180,11 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         raise CampaignError(
             "measurement cohorts require UniAlloc as the fresh anchor variant"
         )
+    validate_existing_session_selection(
+        output_dir,
+        cohort_id=args.cohort_id,
+        variant_ids=args.variants,
+    )
 
     ensure_host_tools()
     source_identity = validate_clean_implementation_source(source_root)
@@ -2230,6 +2276,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             output_dir,
             protocol=protocol,
             cohort_id=args.cohort_id,
+            variant_ids=args.variants,
         )
         measurement_session_id = str(session["measurement_session_id"])
         lanes = full.assign_benchmark_lanes(canonical, args.cpus)
@@ -2437,7 +2484,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--variants",
         type=parse_variant_ids,
         default=DEFAULT_VARIANT_IDS,
-        help="comma-separated registry ids; selection changes never delete raw shards",
+        help=(
+            "comma-separated registry ids; a measurement session freezes the "
+            "ordered selection for its cohort"
+        ),
     )
     parser.add_argument("--jobs", type=int, required=True)
     parser.add_argument("--cpus", type=full.parse_cpu_list, required=True)
