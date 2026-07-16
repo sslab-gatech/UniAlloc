@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "source": "unialloc-tantivy-borrowed-vec-lifetime-gap-summary-v1",
+  "claim_scope": "real-program compiler-coverage motivation plus fixture-verified compiler/runtime mechanism",
+  "performance_claim_eligible": false,
+  "real_program_rerun_with_new_rule": false,
+  "provenance": {
+    "repository": "https://github.com/quickwit-oss/tantivy.git",
+    "version": "0.26.1",
+    "commit": "d8f4c0b703120ed98f06297724dc1522df6019b9",
+    "tree": "fe2469071989c602bd83ee4b8b6b2054747a44c9",
+    "single_process": true,
+    "documents_indexed": 442368,
+    "commits_and_query_phases": 216,
+    "query_evaluations": 27648,
+    "elapsed_seconds": 20.346176869,
+    "correctness": true
+  },
+  "ground_truth_definition": {
+    "long": "the object survived at least 8 MiB of subsequent process-wide requested allocation pressure",
+    "boundary": "workload-relative diagnostic outcome rather than a universal duration threshold"
+  },
+  "missed_long_site": {
+    "source_location": "src/store/compression_lz4_block.rs:36:18",
+    "mir_function": "store::compression_lz4_block::decompress",
+    "callee": "alloc::vec::Vec::reserve<u8, Global>",
+    "compiler_receiver": "direct MIR argument _2: &mut Vec<u8, Global>",
+    "key3": {
+      "callsite": 4226783994097609613,
+      "type_id": 6244285338172962182,
+      "module_id": 17758972008924355275
+    },
+    "runtime_key5_subcohorts": {
+      "requested_sizes": [
+        15290,
+        15298,
+        15299,
+        15300,
+        15308,
+        15309,
+        15310
+      ],
+      "align": 1,
+      "subcohort_count": 7
+    },
+    "tracked_allocations": 432,
+    "requested_bytes": 6610902,
+    "long_outcomes": 432,
+    "short_outcomes": 0,
+    "censored_outcomes": 0,
+    "old_static_prior": 0,
+    "old_compiler_basis": "automatic_rust_lifetime_prior_owner_live_call_unknown",
+    "old_join_status": "ineligible_dynamic_layout"
+  },
+  "same_size_counterexample": {
+    "source_location": "src/query/union/buffered_union.rs:97:21",
+    "mir_function": "query::union::buffered_union::BufferedUnionScorer::build",
+    "semantic_object_type": "Box<[TScoreCombiner; 4096], Global>",
+    "key5": {
+      "callsite": 10636284271828093159,
+      "type_id": 12134128565810433006,
+      "module_id": 17758972008924355275,
+      "requested_size": 16384,
+      "align": 4
+    },
+    "tracked_allocations": 235648,
+    "requested_bytes": 3860856832,
+    "long_outcomes": 0,
+    "short_outcomes": 235646,
+    "censored_outcomes": 2,
+    "decisive_short_fraction": 1.0,
+    "conclusion": "requested size cannot determine performance lifetime"
+  },
+  "implemented_rule": {
+    "exact_def_ids": [
+      "alloc::vec::Vec::reserve",
+      "alloc::vec::Vec::reserve_exact",
+      "alloc::vec::Vec::try_reserve",
+      "alloc::vec::Vec::try_reserve_exact"
+    ],
+    "receiver_contract": "exact Global Vec behind a direct mutable MIR argument or its compiler-generated one-step reborrow",
+    "negative_contract": "local aliases, parameter aliases, projected receivers, custom allocators, and unsupported methods abstain",
+    "compiler_transport": "0xA103 observation-only borrowed-receiver Long candidate with authenticated KEY3",
+    "runtime_layout": "allocator supplies requested size and alignment to form exact KEY5 subcohorts",
+    "runtime_admission": "only 4-32 KiB layouts are observed; ordinary placement remains active until eight decisive online outcomes confirm Long",
+    "thp_admission": "physical THP promotion still requires the existing runtime-confirmed 75% Long-byte density gate",
+    "size_only_routing": false
+  },
+  "verification": {
+    "compiler_fixture_verified": true,
+    "runtime_unit_verified": true,
+    "panic_abort_fixture_verified": true,
+    "panic_unwind_scope_balance_verified": true,
+    "tantivy_rebuilt_with_new_rule": false,
+    "tantivy_performance_measured_with_new_rule": false
+  },
+  "artifacts": {
+    "runtime_sites": {
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/run/runtime-sites.json",
+      "bytes": 108376,
+      "sha256": "8b2311b4c972e24d023f4c91082a7bef1a58d29f4671fb5550ca18eb910dbade"
+    },
+    "compiler_audit": {
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/build/compiler-audits/tantivy-33393045427aafc8.json",
+      "bytes": 37976712,
+      "sha256": "a93c3c48d6ce84b868641307262168cc23856f51dccb9b0dfc481ef6239be5f3"
+    },
+    "compiler_runtime_join": {
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/run/compiler-runtime-exact-join.json",
+      "bytes": 2734088,
+      "sha256": "98a1f934b723f928563151de8cc39810b6663c14b4add1c80bbc3795209af9da"
+    },
+    "result": {
+      "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/result.json",
+      "bytes": 40669,
+      "sha256": "3e77947d1297df6c3d6755385bf4d91704debc354a712a7da0495adb4ce43b92"
+    }
+  },
+  "claim_boundary": "The old real-program run establishes the missed Long site and the same-size Short counterexample. The new rule is compiler-fixture and runtime-unit verified. End-to-end Tantivy coverage, THP backing, timing, and RSS with the new rule remain unmeasured."
+}

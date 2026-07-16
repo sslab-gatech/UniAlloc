@@ -51,7 +51,7 @@ use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     BasicBlock, BasicBlockData, Body, CastKind, Local, LocalDecl, Location, Operand, Place, Rvalue,
-    SourceInfo, StatementKind, Terminator, TerminatorKind, RETURN_PLACE,
+    ProjectionElem, SourceInfo, StatementKind, Terminator, TerminatorKind, RETURN_PLACE,
 };
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::{CallSource, UnwindAction, UnwindTerminateReason};
@@ -1145,8 +1145,9 @@ fn automatic_rust_lifetime_prior_decision(
         return Some(AutomaticRustLifetimePriorDecision::CleanupOrUnwindUnknown);
     }
 
-    // An exact alloc Vec reserve call with a direct `&mut Vec<T, Global>`
-    // receiver identifies a useful dynamic-layout observation boundary. It
+    // An exact alloc Vec reserve call whose `&mut Vec<T, Global>` receiver is a
+    // formal MIR argument or its compiler-generated one-step reborrow identifies
+    // a useful dynamic-layout observation boundary. It
     // says nothing about how long the caller keeps the Vec: transport only an
     // observation request, leaving ordinary placement in force until exact
     // runtime size/align outcomes confirm Long. Cleanup/unwind remains the
@@ -11114,6 +11115,9 @@ fn exact_borrowed_vec_reserve_semantic_scope<'tcx>(
         Some(place) if place.projection.is_empty() => place,
         _ => return false,
     };
+    if !receiver_is_direct_mut_argument_or_reborrow(body, receiver_place) {
+        return false;
+    }
     let receiver_ty = receiver_place.ty(&body.local_decls, tcx).ty;
     let owner_ty = match receiver_ty.kind() {
         ty::Ref(_, owner_ty, rustc_ast::Mutability::Mut) => *owner_ty,
@@ -11124,6 +11128,48 @@ fn exact_borrowed_vec_reserve_semantic_scope<'tcx>(
         && direct_outer_vec_receiver_owner(tcx, receiver_ty).as_deref()
             == Some(candidate.semantic_object_type.as_str())
         && compiler_semantic_type_id(tcx, owner_ty) == candidate.compiler_type_id
+}
+
+fn receiver_is_direct_mut_argument_or_reborrow<'tcx>(
+    body: &Body<'tcx>,
+    receiver: Place<'tcx>,
+) -> bool {
+    if body.args_iter().any(|argument| argument == receiver.local) {
+        return true;
+    }
+
+    let mut source_argument = None;
+    let mut definition_count = 0usize;
+    for data in body_basic_blocks!(body).iter() {
+        for statement in &data.statements {
+            let (destination, rvalue) = match &statement.kind {
+                StatementKind::Assign(assigned) => &**assigned,
+                _ => continue,
+            };
+            if !destination.projection.is_empty() || destination.local != receiver.local {
+                continue;
+            }
+            definition_count += 1;
+            let candidate_argument = match rvalue {
+                Rvalue::Ref(_, _, source)
+                    if source.projection.len() == 1
+                        && matches!(source.projection[0], ProjectionElem::Deref)
+                        && body.args_iter().any(|argument| argument == source.local)
+                        && body.local_decls[source.local].ty
+                            == body.local_decls[receiver.local].ty =>
+                {
+                    Some(source.local)
+                }
+                _ => None,
+            };
+            match (source_argument, candidate_argument) {
+                (None, Some(argument)) => source_argument = Some(argument),
+                (Some(existing), Some(argument)) if existing == argument => {}
+                _ => return false,
+            }
+        }
+    }
+    definition_count == 1 && source_argument.is_some()
 }
 
 fn exact_global_buffer_with_capacity_semantic_scope<'tcx>(
@@ -15982,7 +16028,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         RUST_LIFETIME_PRIOR_LONG_CONFIDENCE
     );
     json.push_str(
-        "    \"automatic_rust_lifetime_prior_contract\": \"Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Exact alloc Vec reserve with a direct &mut Vec<T, Global>, plus exact Global Vec/String with_capacity scopes whose existing ownership proof reaches Return/Escape but whose layout is dynamic, emit only observation tag 0xA103. Actual 4--32 KiB runtime Layout subcohorts stay ordinary until online outcomes confirm Long. Owner-live cleanup/unwind, projected receivers, custom allocators, and unsupported ownership abstain\",\n",
+        "    \"automatic_rust_lifetime_prior_contract\": \"Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Exact alloc Vec reserve whose &mut Vec<T, Global> receiver is a formal MIR argument or its compiler-generated one-step reborrow, plus exact Global Vec/String with_capacity scopes whose existing ownership proof reaches Return/Escape but whose layout is dynamic, emit only observation tag 0xA103. Actual 4--32 KiB runtime Layout subcohorts stay ordinary until online outcomes confirm Long. Owner-live cleanup/unwind, local or aliased receivers, projected receivers, custom allocators, and unsupported ownership abstain\",\n",
     );
     let _ = writeln!(
         json,

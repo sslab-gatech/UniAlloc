@@ -521,6 +521,12 @@ fn borrowed_try_reserve_exact_candidate(owner: &mut Vec<u8>) {
 }
 
 #[inline(never)]
+fn borrowed_try_reserve_candidate(owner: &mut Vec<u8>) {
+    owner.try_reserve(4096).unwrap();
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
 fn borrowed_reserve_short_lived(owner: &mut Vec<u8>) {
     owner.reserve_exact(8192);
     std::hint::black_box(owner.capacity());
@@ -530,6 +536,38 @@ fn borrowed_reserve_short_lived(owner: &mut Vec<u8>) {
 fn borrowed_reserve_tiny(owner: &mut Vec<u8>) {
     owner.reserve_exact(64);
     std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn local_borrowed_reserve_must_abstain() {
+    let mut owner: Vec<u8> = Vec::new();
+    let borrowed = &mut owner;
+    borrowed.reserve_exact(8192);
+    std::hint::black_box(borrowed.capacity());
+    drop(owner);
+}
+
+#[inline(never)]
+fn aliased_parameter_reserve_must_abstain(owner: &mut Vec<u8>) {
+    let alias = owner;
+    alias.reserve_exact(8192);
+    std::hint::black_box(alias.capacity());
+}
+
+struct BorrowedHolder<'a> {
+    owner: &'a mut Vec<u8>,
+}
+
+#[inline(never)]
+fn projected_parameter_reserve_must_abstain(holder: &mut BorrowedHolder<'_>) {
+    holder.owner.reserve_exact(8192);
+    std::hint::black_box(holder.owner.capacity());
+}
+
+#[inline(never)]
+unsafe fn raw_pointer_reserve_must_abstain(owner: *mut Vec<u8>) {
+    (&mut *owner).reserve_exact(8192);
+    std::hint::black_box((&*owner).capacity());
 }
 
 #[inline(never)]
@@ -566,12 +604,18 @@ fn main() {
     let mut owner = Vec::new();
     borrowed_reserve_loop_candidate(&mut owner, 2);
     borrowed_try_reserve_exact_candidate(&mut owner);
+    borrowed_try_reserve_candidate(&mut owner);
     let mut short = Vec::new();
     borrowed_reserve_short_lived(&mut short);
     drop(short);
     let mut tiny = Vec::new();
     borrowed_reserve_tiny(&mut tiny);
     drop(tiny);
+    local_borrowed_reserve_must_abstain();
+    aliased_parameter_reserve_must_abstain(&mut owner);
+    let mut holder = BorrowedHolder { owner: &mut owner };
+    projected_parameter_reserve_must_abstain(&mut holder);
+    unsafe { raw_pointer_reserve_must_abstain(&mut owner) };
     let mut custom = Vec::new_in(System);
     custom_allocator_reserve(&mut custom);
     drop(custom);
@@ -1289,13 +1333,14 @@ fn main() {
                 (
                     "borrowed_reserve_loop_candidate",
                     "borrowed_try_reserve_exact_candidate",
+                    "borrowed_try_reserve_candidate",
                     "borrowed_reserve_short_lived",
                     "borrowed_reserve_tiny",
                 )
             )
             and "reserve" in str(row.get("callee") or "")
         ]
-        self.assertEqual(len(reserve_rows), 4, reserve_rows)
+        self.assertEqual(len(reserve_rows), 5, reserve_rows)
         for row in reserve_rows:
             self.assertEqual(row["lifetime_hint"], 0xA103, row)
             self.assertEqual(row["lifetime_hint_confidence"], 70, row)
@@ -1372,7 +1417,29 @@ fn main() {
             if str(row.get("mir_function") or "").endswith("custom_allocator_reserve")
             and "reserve" in str(row.get("callee") or "")
         ]
+        self.assertEqual(len(custom_rows), 1, custom_rows)
         for row in custom_rows:
+            self.assertNotEqual(row["lifetime_hint"], 0xA103, row)
+            features = row.get("lifetime_analysis_features") or {}
+            self.assertFalse(
+                features.get("borrowed_vec_reserve_prior_eligible", False), row
+            )
+
+        indirect_borrow_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if str(row.get("mir_function") or "").endswith(
+                (
+                    "local_borrowed_reserve_must_abstain",
+                    "aliased_parameter_reserve_must_abstain",
+                    "projected_parameter_reserve_must_abstain",
+                    "raw_pointer_reserve_must_abstain",
+                )
+            )
+            and "reserve" in str(row.get("callee") or "")
+        ]
+        self.assertEqual(len(indirect_borrow_rows), 4, indirect_borrow_rows)
+        for row in indirect_borrow_rows:
             self.assertNotEqual(row["lifetime_hint"], 0xA103, row)
             features = row.get("lifetime_analysis_features") or {}
             self.assertFalse(
@@ -1432,6 +1499,37 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=", completed.stdout)
+
+    def test_borrowed_vec_reserve_prior_balances_default_unwind_scope(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-borrowed-vec-reserve-unwind",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.borrowed_vec_reserve_fixture,
+            panic_abort=False,
+        )
+        reserve_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and str(row.get("mir_function") or "").endswith(
+                (
+                    "borrowed_reserve_loop_candidate",
+                    "borrowed_try_reserve_exact_candidate",
+                    "borrowed_try_reserve_candidate",
+                    "borrowed_reserve_short_lived",
+                    "borrowed_reserve_tiny",
+                )
+            )
+            and "reserve" in str(row.get("callee") or "")
+        ]
+        self.assertEqual(len(reserve_rows), 5, reserve_rows)
+        for row in reserve_rows:
+            self.assertEqual(row["lifetime_hint"], 0xA103, row)
+            self.assertTrue(row["semantic_scope_unwind_pop_inserted"], row)
+            self.assertEqual(
+                row["lifetime_analysis_features"]["cleanup_successor_count"], 0, row
+            )
 
 
 if __name__ == "__main__":

@@ -624,6 +624,28 @@ Use `B1`--`B19` directly as slide numbers and record each jump target in the mai
   `performance_claim_eligible=false` and `presentation_claim_eligible=false`
   visible on the slide.
 
+### Lifetime-classifier defense note
+
+- **Why size is insufficient:** the Tantivy force-track run observed one exact
+  `Vec::reserve` site with 432/432 Long outcomes across 15,290--15,310-byte
+  KEY5 subcohorts. A 16,384-byte Box-array site in the same process produced
+  235,646/235,646 decisive Short outcomes, plus two censored outcomes.
+- **What Rust contributes:** exact inherent `Vec::{reserve,reserve_exact,
+  try_reserve,try_reserve_exact}` DefIds and a formal `&mut Vec<T, Global>` MIR
+  receiver identify a dynamic backing-buffer observation boundary that layout
+  alone cannot express. A compiler-generated one-step reborrow preserves this
+  provenance; aliases and projected receivers abstain.
+- **What runtime contributes:** tag `0xA103` enrolls the KEY3 site without a
+  Long placement vote. The allocator observes actual `(size, align)` KEY5
+  subcohorts on ordinary backing and requires eight decisive outcomes before a
+  Long route. Physical THP still requires 75% runtime-confirmed Long-byte
+  density.
+- **Claim boundary:** the old real-program run proves the coverage gap and the
+  same-size counterexample. The repair is compiler-fixture, runtime-unit, and
+  evaluator-join verified. A post-repair Tantivy run is still required for an
+  end-to-end coverage, backing, timing, or RSS claim. Source:
+  `docs/evidence/lifetime-resident-index-20260715/tantivy-borrowed-vec-gap-summary.json`.
+
 ## 10. Opening, transition, and closing scripts
 
 ### 60-second opening (rehearse verbatim)

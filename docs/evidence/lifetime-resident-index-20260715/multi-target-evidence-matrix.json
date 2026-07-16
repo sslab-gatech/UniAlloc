@@ -65,13 +65,23 @@
       }
     },
     {
-      "claim_boundary": "Single-run ground-truth and fail-closed admission evidence only. The selective smoke issued zero THP advice and realized zero physical THP, so its time and RSS cannot support a THP performance comparison.",
+      "claim_boundary": "Single-run ground-truth and fail-closed admission evidence only. The selective smoke issued zero THP advice and realized zero physical THP, so its time and RSS cannot support a THP performance comparison. The new borrowed-Vec rule is component-verified and has not been rerun end to end on Tantivy.",
       "claim_flags": {
         "performance_claim_eligible": false,
         "presentation_claim_eligible_field_present": false
       },
       "compiler_coverage": {
         "applied_allocation_rewrites": 499,
+        "borrowed_vec_reserve_gap": {
+          "long_outcomes": 432,
+          "new_rule_fixture_verified": true,
+          "old_join_status": "ineligible_dynamic_layout",
+          "old_static_prior": 0,
+          "post_repair_real_program_rerun": false,
+          "requested_bytes": 6610902,
+          "runtime_key5_subcohorts": 7,
+          "tracked_allocations": 432
+        },
         "classified_candidates": 140,
         "dependency_internal_sites_measured": true,
         "executed_exact_prior_sites": 10,
@@ -86,6 +96,10 @@
       },
       "provenance": {
         "binary_sha256": "9d48c984638893f36b5b3478f95ab3762504951ecc4ac3e3e5c6f5248802d33b",
+        "borrowed_vec_gap_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/tantivy-borrowed-vec-gap-summary.json",
+          "sha256": "cf55db909660308942406cf38d986fa11a4f4bf12f87d7a0ad4092d793fb0fae"
+        },
         "compact_summary": {
           "path": "docs/evidence/lifetime-resident-index-20260715/tantivy-ground-truth-summary.json",
           "sha256": "0b6b1ea7b7a7b33c24e312de73684b1793d53cbae6fd94c5a91d4d7ad38d7e25"
@@ -113,7 +127,13 @@
         "long_requested_bytes": 9220049,
         "runtime_exact_sites": 104,
         "runtime_predictor_byte_precision": 0.9982596801421276,
-        "runtime_predictor_byte_recall": 0.9834957405691502
+        "runtime_predictor_byte_recall": 0.9834957405691502,
+        "same_size_short_counterexample": {
+          "censored_outcomes": 2,
+          "decisive_short_outcomes": 235646,
+          "long_outcomes": 0,
+          "requested_size": 16384
+        }
       },
       "target": "Tantivy 0.26.1 resident in-memory index",
       "time": {

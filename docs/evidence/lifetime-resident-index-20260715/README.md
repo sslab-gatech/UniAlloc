@@ -148,6 +148,41 @@ reached the 75% runtime-confirmed Long-byte threshold, THP advice remained zero,
 and all 17 procfs samples reported zero `AnonHugePages`. This is a fail-closed
 density diagnosis.
 
+### Tantivy: exact borrowed-`Vec` coverage gap and bounded repair
+
+The same force-track process exposes one narrower compiler opportunity. The
+exact `Vec::reserve` call in `store/compression_lz4_block.rs:36` receives a
+direct `&mut Vec<u8, Global>` MIR argument. Its seven runtime KEY5 subcohorts
+span 15,290--15,310 requested bytes and contain 432/432 Long outcomes,
+6,610,902 requested bytes, zero Short outcomes, and zero censored outcomes.
+The old compiler emitted
+`automatic_rust_lifetime_prior_owner_live_call_unknown`, so every subcohort
+carried static prior zero.
+
+Requested size cannot recover this signal. In the same run, the 16,384-byte
+`Box<[TScoreCombiner; 4096]>` site in `query/union/buffered_union.rs:97`
+produced 235,646/235,646 decisive Short outcomes; two additional outcomes were
+censored.
+
+The implemented repair authenticates only the exact inherent Global-`Vec`
+DefIds for `reserve`, `reserve_exact`, `try_reserve`, and
+`try_reserve_exact`. The receiver must be a formal mutable MIR argument or its
+compiler-generated one-step reborrow. Local aliases, parameter aliases,
+projected receivers, raw-pointer receivers, custom allocators, and other
+methods abstain. The compiler emits observation tag `0xA103` with KEY3 identity;
+the allocator supplies actual size and alignment, splits learning into KEY5
+subcohorts, and keeps ordinary placement until eight decisive online outcomes
+confirm Long. The existing 75% runtime-confirmed Long-byte density gate remains
+authoritative for physical THP promotion.
+
+Compiler fixtures cover all four exact methods, the positive receiver shape,
+the negative receiver shapes, backedges, opaque calls, and panic-abort plus
+balanced panic-unwind scopes. Runtime and evaluator tests cover the 4--32 KiB
+layout gate, ordinary-until-confirmed routing, and KEY3-to-multiple-KEY5 joins.
+These are component-level mechanism tests. The original Tantivy run motivates
+the rule; it predates the repair and supplies no post-repair coverage, backing,
+timing, or RSS result.
+
 ### DataFusion: exact resident-site success
 
 The resident target uses DataFusion 54.0.0 at commit
@@ -375,6 +410,11 @@ lane selector; exact runtime survival continues to correct its admission.
 - **Precision boundary:** broad static Long admission reached 0.0207% byte
   precision on Tantivy, while the exact DataFusion site matched 1/1 and produced
   only Long target outcomes.
+- **Compiler coverage repair:** an exact Tantivy `Vec::reserve` site produced
+  432/432 Long outcomes across seven 15,290--15,310-byte KEY5 subcohorts, while
+  a 16,384-byte Box-array site produced 235,646/235,646 decisive Short outcomes.
+  The implemented rule uses receiver provenance to request online observation;
+  size never selects lifetime.
 - **Admission boundary:** natural DataFusion produced eight THP-candidate
   mappings and zero physical THP; Oxipng routed four tiny objects while its
   4--16 KiB image buffers had no compiler hint.
@@ -393,6 +433,9 @@ Tracked compact evidence:
   `syn-retention-after.json` -- mapping-retention invariants and counters;
 - `tantivy-ground-truth-summary.json` -- resident fixed work, exact runtime
   outcomes, broad-prior matrix, and classifier metrics;
+- `tantivy-borrowed-vec-gap-summary.json` -- exact missed Long site,
+  same-size Short counterexample, narrow compiler matcher, runtime admission,
+  and the fixture-versus-real-program claim boundary;
 - `datafusion-resident-summary.json` -- exact compiler/runtime join,
   live-survivor mechanism, per-pair backing, preliminary timing, and provenance;
 - `datafusion-natural-minute-summary.json` -- minute-scale dependency compiler
