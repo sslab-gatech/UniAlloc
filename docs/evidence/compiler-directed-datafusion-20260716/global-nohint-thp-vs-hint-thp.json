@@ -1,0 +1,115 @@
+{
+  "aggregate": {
+    "all_arms_physically_thp_backed": true,
+    "all_fixed_work_match": true,
+    "both_pairs_hint_faster": true,
+    "maximum_hint_query_speedup_percent_vs_global_nohint": 3.5005850304190123,
+    "median_hint_peak_rss_change_percent_vs_global_nohint": -0.8078067976962977,
+    "median_hint_query_speedup_percent_vs_global_nohint": 2.063859374332994,
+    "minimum_hint_query_speedup_percent_vs_global_nohint": 0.627133718246975,
+    "pair_count": 2
+  },
+  "claim_boundary": "two opposite-order pinned-core directional macro pairs; global mmap-wide THP and selective compiler-directed density-collapse THP have deliberately different placement mechanisms and AHP coverage",
+  "classification": "global-nohint-thp-vs-compiler-hint-thp-datafusion-g1024-p1-q896",
+  "cpu_affinity": [
+    120,
+    121,
+    122,
+    123
+  ],
+  "fixed_work": {
+    "batches_per_table": 256,
+    "group_count": 1024,
+    "query_iterations": 896,
+    "target_partitions": 1
+  },
+  "interpretation_boundary": "This tests naive/global THP without lifetime hints versus the complete compiler-directed selective THP mechanism. It does not equalize AHP bytes or isolate hint selection from density packing, synchronous collapse, and exact-key reuse.",
+  "pairs": [
+    {
+      "compiler_hint": {
+        "all_query_samples_physically_backed": true,
+        "collapse_errors": 0,
+        "collapse_successes": 8,
+        "extent_mappings": 8,
+        "peak_anon_hugepages_kib": 16384,
+        "peak_anonymous_kib": 75160,
+        "peak_pss_kib": 124352,
+        "peak_rss_kib": 126544,
+        "positive_backing_sample_count": 107,
+        "query_sample_count": 107,
+        "query_seconds": 19.035695756,
+        "reuse_hits": 7160,
+        "routed_allocations": 917504
+      },
+      "fixed_work_match": true,
+      "global_nohint": {
+        "all_query_samples_physically_backed": true,
+        "peak_anon_hugepages_kib": 6144,
+        "peak_anonymous_kib": 75852,
+        "peak_pss_kib": 125768,
+        "peak_rss_kib": 127960,
+        "positive_backing_sample_count": 107,
+        "query_sample_count": 107,
+        "query_seconds": 19.155828415,
+        "routed_allocations": 0
+      },
+      "hint_peak_rss_change_percent_vs_global_nohint": -1.1065958111910024,
+      "hint_query_speedup_percent_vs_global_nohint": 0.627133718246975,
+      "label": "pair-01",
+      "paths": {
+        "compiler_hint": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/global-nohint-vs-hint-thp-g1024-p1-q896/pair-01-compiler_hint/run.json",
+        "global_nohint": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/global-nohint-vs-hint-thp-g1024-p1-q896/pair-01-global_nohint/run.json"
+      },
+      "run_order": [
+        "global_nohint",
+        "compiler_hint"
+      ]
+    },
+    {
+      "compiler_hint": {
+        "all_query_samples_physically_backed": true,
+        "collapse_errors": 0,
+        "collapse_successes": 8,
+        "extent_mappings": 8,
+        "peak_anon_hugepages_kib": 16384,
+        "peak_anonymous_kib": 74896,
+        "peak_pss_kib": 124495,
+        "peak_rss_kib": 126656,
+        "positive_backing_sample_count": 107,
+        "query_sample_count": 107,
+        "query_seconds": 18.799334587,
+        "reuse_hits": 7160,
+        "routed_allocations": 917504
+      },
+      "fixed_work_match": true,
+      "global_nohint": {
+        "all_query_samples_physically_backed": true,
+        "peak_anon_hugepages_kib": 6144,
+        "peak_anonymous_kib": 75780,
+        "peak_pss_kib": 125108,
+        "peak_rss_kib": 127304,
+        "positive_backing_sample_count": 108,
+        "query_sample_count": 108,
+        "query_seconds": 19.481293843,
+        "routed_allocations": 0
+      },
+      "hint_peak_rss_change_percent_vs_global_nohint": -0.509017784201593,
+      "hint_query_speedup_percent_vs_global_nohint": 3.5005850304190123,
+      "label": "pair-02",
+      "paths": {
+        "compiler_hint": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/global-nohint-vs-hint-thp-g1024-p1-q896/pair-02-compiler_hint/run.json",
+        "global_nohint": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/global-nohint-vs-hint-thp-g1024-p1-q896/pair-02-global_nohint/run.json"
+      },
+      "run_order": [
+        "compiler_hint",
+        "global_nohint"
+      ]
+    }
+  ],
+  "performance_claim_eligible": false,
+  "same_binary_sha256": "393ca05c6348778d443ed0107c4c802c4293bad0cfbf0393d011dca914107e92",
+  "schema_version": 1,
+  "shim_sha256": "e3d47d8a3fb1ad0892788089974733a768513770553cc18935a926f979e76343",
+  "shim_source_sha256": "e5f2764b830b55b1c547771aecc8d2db79200df56fd64635ab8316749e193f2e",
+  "warmup_iterations": 0
+}

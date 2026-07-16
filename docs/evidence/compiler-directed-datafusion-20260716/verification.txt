@@ -5,7 +5,21 @@ Lifetime hugepage allocator integration tests: 32/32 PASS
 cargo fmt --all -- --check: PASS
 Compiler pass rustfmt --check: PASS
 git diff --check (staged and unstaged): PASS
-Manifest path/SHA references: 27/27 PASS
+Manifest path/SHA references: 24/24 PASS
+
+Global no-hint THP control:
+- same binary SHA-256 across all four arms: 393ca05c6348778d443ed0107c4c802c4293bad0cfbf0393d011dca914107e92
+- global control leaves UniAlloc on policy 0 with 0 routed compiler-hint allocations
+- preload shim requests MADV_HUGEPAGE for every eligible private anonymous mmap >= 2 MiB
+- group_count=1024, target_partitions=1, query_iterations=896, warmup=0
+- fixed work and result digests match across all four arms
+- every query-window sample in every arm has physical THP backing
+- compiler-directed speedups in opposite orders: 0.627133718% and 3.500585030%
+- median compiler-directed speedup over global no-hint THP: 2.063859374%
+- median compiler-directed peak-RSS change: -0.807806798%
+- independent recomputation of sample counts, gates, pair deltas, and medians: PASS
+- result SHA-256: 24eb37274db8474fec7e5969141cbf46ab7a28241aaba2d3442ca7770c256549
+- shim source SHA-256: e5f2764b830b55b1c547771aecc8d2db79200df56fd64635ab8316749e193f2e
 
 Primary fixed-work gates:
 - same binary SHA-256 across all four arms: 393ca05c6348778d443ed0107c4c802c4293bad0cfbf0393d011dca914107e92
