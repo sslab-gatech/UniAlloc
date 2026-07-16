@@ -2253,6 +2253,25 @@ def compiler_route_equivalence(
     return 0.85 <= median_ratio <= 1.15, median_ratio
 
 
+def measurement_binary(
+    spec: TargetSpec,
+    harness: HarnessSpec,
+    build: Mapping[str, Any],
+) -> pathlib.Path:
+    if spec.id == "redb":
+        try:
+            return pathlib.Path(str(build["binary"]))
+        except KeyError as error:
+            raise CampaignError("redb build has no measurement binary") from error
+    _package, bench, _selector = actix_benchmark_selection(harness.id)
+    try:
+        return pathlib.Path(str(build["executables"][bench]))
+    except (KeyError, TypeError) as error:
+        raise CampaignError(
+            f"Actix build has no executable for {harness.id}/{bench}"
+        ) from error
+
+
 def measured_command(
     spec: TargetSpec,
     harness: HarnessSpec,
@@ -2260,10 +2279,10 @@ def measured_command(
     run_dir: pathlib.Path,
 ) -> tuple[list[str], pathlib.Path]:
     run_dir.mkdir(parents=True, exist_ok=True)
+    binary = measurement_binary(spec, harness, build)
     if spec.id == "redb":
-        return [str(build["binary"]), harness.id, str(run_dir / "database")], run_dir
+        return [str(binary), harness.id, str(run_dir / "database")], run_dir
     _package, bench, selector = actix_benchmark_selection(harness.id)
-    binary = build["executables"][bench]
     return (
         [
             str(binary),
@@ -2335,7 +2354,7 @@ def persist_measurement(
         },
         "artifacts": {
             "binary": immutable_evidence.artifact_ref(
-                pathlib.Path(str(build["binary"]))
+                measurement_binary(spec, harness, build)
             ),
             "stdout": immutable_evidence.artifact_ref(stdout_path),
             "stderr": immutable_evidence.artifact_ref(stderr_path),
@@ -2439,7 +2458,7 @@ def execute_one(
     phase = "warmup" if warmup else f"round-{round_index:02d}"
     run_root = raw_dir / "runs" / spec.id / harness.id / phase / variant
     output_path = run_root / "measurement.json"
-    binary = pathlib.Path(str(build["binary"]))
+    binary = measurement_binary(spec, harness, build)
     identity = {
         "suite_id": contract.suite_id,
         "suite_manifest_sha256": contract.manifest_sha256,

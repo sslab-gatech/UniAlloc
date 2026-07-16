@@ -316,6 +316,97 @@ class RedbActixCampaignTests(unittest.TestCase):
         self.assertIn("--bench", command)
         self.assertLess(command.index("--bench"), command.index("async_service_direct"))
 
+    def test_actix_measurement_identity_uses_selected_bench_executable(self) -> None:
+        spec = self.campaign.TARGETS["actix_web"]
+        harness = next(
+            row for row in spec.harnesses if row.id == "get_body_async_burst"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            server = root / "server-bench"
+            service = root / "service-bench"
+            server.write_bytes(b"server executable")
+            service.write_bytes(b"service executable")
+            build_path = root / "build.json"
+            build_path.write_text("{}\n", encoding="utf-8")
+            build = {
+                "executables": {
+                    "server": str(server),
+                    "service": str(service),
+                },
+                "build_path": str(build_path),
+                "audit": None,
+            }
+            implementation = self.campaign.ImplementationSnapshot(
+                revision="revision",
+                sha256="implementation",
+                path=root,
+                manifest_path=root / "snapshot.json",
+                file_count=1,
+                size_bytes=1,
+                repository=root,
+            )
+            contract = mock.Mock(
+                suite_id="suite",
+                manifest_sha256="manifest",
+            )
+
+            def measured_result(command, **kwargs):
+                rss_path = kwargs["rss_path"]
+                rss_path.parent.mkdir(parents=True, exist_ok=True)
+                rss_path.write_text(
+                    "UNIALLOC_GNU_TIME\t0.1\t0.1\t100%\t4096\t0\t1\t0\t0\t0\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "stdout": b"time:   [1.0 us 1.1 us 1.2 us]\n",
+                    "stderr": b"",
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "peak_rss_kib": 4096,
+                    "command": ["/usr/bin/time", *command],
+                    "measured_command": command,
+                    "wall_seconds": 0.1,
+                    "gnu_time_exit_status": 0,
+                }
+
+            with mock.patch.object(
+                self.campaign.matrix,
+                "run_measured",
+                side_effect=measured_result,
+            ):
+                summary = self.campaign.execute_one(
+                    spec,
+                    harness,
+                    "typeiso_perf",
+                    build,
+                    raw_dir=root / "raw",
+                    round_index=0,
+                    timeout=30,
+                    warmup=True,
+                    implementation=implementation,
+                    contract=contract,
+                    suite_binding={},
+                )
+
+            record = json.loads(
+                Path(summary["record_path"]).read_text(encoding="utf-8")
+            )
+            selected_sha256 = hashlib.sha256(server.read_bytes()).hexdigest()
+            self.assertEqual(str(server), record["measured_command"][0])
+            self.assertEqual(
+                selected_sha256,
+                record["identity"]["binary_sha256"],
+            )
+            self.assertEqual(
+                str(server.resolve()),
+                record["artifacts"]["binary"]["path"],
+            )
+            self.assertEqual(
+                selected_sha256,
+                record["artifacts"]["binary"]["sha256"],
+            )
+
     def test_actix_baseline_force_wrapper_preserves_upstream_lock(self) -> None:
         source = self.campaign.BASELINE_FORCE_WRAPPER_SOURCE
         self.assertIn("rustc = pathlib.Path(arguments.pop(0))", source)
