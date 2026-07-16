@@ -47,6 +47,11 @@ PROTOCOL_SCHEMA_VERSION = 1
 CELL_SCHEMA_VERSION = 1
 BUILD_SCHEMA_VERSION = 1
 BUILD_ADAPTER_VERSION = 2
+SWC_JEMALLOC_DIRECT_LOAD_ROUTE = "rustc-workspace-wrapper-direct-jemalloc-v1"
+SWC_JEMALLOC_VERSION = "0.7.0"
+SWC_JEMALLOC_SYS_VERSION = (
+    "0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8"
+)
 GNU_TIME = pathlib.Path("/usr/bin/time")
 DEFAULT_TOOLCHAIN = "nightly-2026-06-11"
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation/external/_checkouts"
@@ -106,6 +111,86 @@ DIRECT_LOAD_TARGET_CRATES: Mapping[str, tuple[str, ...]] = {
         )
     ),
 }
+
+SWC_JEMALLOC_DIRECT_LOAD_MANIFEST = f'''[package]
+name = "unialloc-direct-jemallocator"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+jemallocator = {{ package = "tikv-jemallocator", version = "={SWC_JEMALLOC_VERSION}" }}
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "unwind"
+strip = "symbols"
+
+[workspace]
+'''
+
+SWC_JEMALLOC_DIRECT_LOAD_WRAPPER = r'''#!/usr/bin/env python3
+"""Expose the frozen standalone jemallocator rlib to the SWC benchmark."""
+
+import os
+import pathlib
+import sys
+
+
+def fail(message: str) -> "None":
+    print(f"SWC jemalloc direct-load wrapper: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def normalized(value: str) -> str:
+    return value.strip().replace("-", "_")
+
+
+def crate_name(arguments: list[str]) -> str:
+    for index, value in enumerate(arguments):
+        if value == "--crate-name" and index + 1 < len(arguments):
+            return normalized(arguments[index + 1])
+        if value.startswith("--crate-name="):
+            return normalized(value.split("=", 1)[1])
+    return ""
+
+
+arguments = sys.argv[1:]
+if not arguments:
+    fail("missing Cargo rustc invocation")
+rustc = pathlib.Path(arguments[0])
+rustc_arguments = arguments[1:]
+rlib = pathlib.Path(os.environ.get("UNIALLOC_JEMALLOC_DIRECT_LOAD_RLIB", ""))
+dependency_dir = pathlib.Path(
+    os.environ.get("UNIALLOC_JEMALLOC_DIRECT_LOAD_DEPENDENCY_DIR", "")
+)
+target = normalized(os.environ.get("UNIALLOC_JEMALLOC_DIRECT_LOAD_TARGET_CRATE", ""))
+if not rustc.is_file():
+    fail(f"missing rustc: {rustc}")
+if not rlib.is_file() or rlib.suffix != ".rlib":
+    fail(f"missing jemallocator rlib: {rlib}")
+if not dependency_dir.is_dir():
+    fail(f"missing jemallocator dependency directory: {dependency_dir}")
+if not target:
+    fail("empty direct-load target crate")
+
+rustc_arguments.extend(["-L", f"dependency={dependency_dir}"])
+if crate_name(rustc_arguments) == target:
+    rustc_arguments.extend(
+        [
+            "-Z",
+            "unstable-options",
+            "--extern",
+            f"force:jemallocator={rlib}",
+        ]
+    )
+
+os.execv(str(rustc), [str(rustc), *rustc_arguments])
+'''
 
 TARGET_EXECUTION_CONTRACTS: Mapping[str, Mapping[str, Any]] = {
     "collections": {
@@ -559,6 +644,40 @@ def build_protocol(
     return Protocol(payload=payload, fingerprint=canonical_json_sha256(payload))
 
 
+def load_reusable_protocol_manifest(
+    path: pathlib.Path, *, current: Protocol, raw_dir: pathlib.Path
+) -> Protocol:
+    resolved = path.resolve()
+    raw_campaigns = (raw_dir / "campaigns").resolve()
+    if raw_campaigns not in resolved.parents:
+        raise CampaignError(
+            "reusable protocol manifest must belong to the selected raw directory"
+        )
+    row = load_json(resolved, "reusable protocol manifest")
+    payload = row.get("protocol")
+    fingerprint = row.get("protocol_fingerprint")
+    if not isinstance(payload, dict) or not isinstance(fingerprint, str):
+        raise CampaignError(f"reusable protocol manifest is malformed: {resolved}")
+    if canonical_json_sha256(payload) != fingerprint:
+        raise CampaignError(f"reusable protocol fingerprint mismatch: {resolved}")
+    expected = json.loads(json.dumps(current.payload))
+    runner = payload.get("runner")
+    expected_runner = expected.get("runner")
+    if not isinstance(runner, dict) or not isinstance(expected_runner, dict):
+        raise CampaignError(f"reusable protocol runner is malformed: {resolved}")
+    old_sha = runner.get("sha256")
+    if not isinstance(old_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", old_sha):
+        raise CampaignError(f"reusable protocol runner digest is malformed: {resolved}")
+    expected_runner["sha256"] = old_sha
+    if payload != expected:
+        raise CampaignError(
+            "reusable protocol differs by more than the audited runner adapter digest"
+        )
+    if row.get("protocol_id") != PROTOCOL_ID:
+        raise CampaignError(f"reusable protocol id mismatch: {resolved}")
+    return Protocol(payload=payload, fingerprint=fingerprint)
+
+
 def target_fingerprint(protocol: Protocol, target_id: str) -> str:
     targets = {
         str(row["id"]): row for row in protocol.payload["targets"]  # type: ignore[index]
@@ -997,6 +1116,172 @@ def _command_record(
     }
 
 
+def _validate_swc_jemalloc_direct_load(path: pathlib.Path) -> dict[str, Any]:
+    row = load_json(path, "SWC jemalloc direct-load build")
+    expected = {
+        "success": True,
+        "route": SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+        "wrapper_package": "tikv-jemallocator",
+        "wrapper_version": SWC_JEMALLOC_VERSION,
+        "sys_package": "tikv-jemalloc-sys",
+        "sys_version": SWC_JEMALLOC_SYS_VERSION,
+        "adapter_source_sha256": sha256_file(pathlib.Path(__file__).resolve()),
+    }
+    if any(row.get(key) != value for key, value in expected.items()):
+        raise CampaignError(f"SWC jemalloc direct-load identity mismatch: {path}")
+    artifacts = row.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise CampaignError(f"SWC jemalloc direct-load artifacts are missing: {path}")
+    try:
+        for name in ("manifest", "source", "lockfile", "rlib", "wrapper"):
+            immutable_evidence.validate_artifact_ref(
+                artifacts.get(name), context=f"SWC jemalloc direct-load {name}"
+            )
+        for index, command in enumerate(row.get("commands", ())):
+            if not isinstance(command, dict) or command.get("exit_code") != 0:
+                raise CampaignError(
+                    f"SWC jemalloc direct-load command {index} failed: {path}"
+                )
+            for stream in ("stdout", "stderr"):
+                artifact = pathlib.Path(str(command.get(stream, "")))
+                if (
+                    not artifact.is_file()
+                    or command.get(f"{stream}_sha256") != sha256_file(artifact)
+                ):
+                    raise CampaignError(
+                        "SWC jemalloc direct-load command "
+                        f"{index} {stream} mismatch: {path}"
+                    )
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
+    lock = pathlib.Path(str(artifacts["lockfile"]["path"]))
+    wrapper_package = matrix.locked_package(lock, "tikv-jemallocator")
+    sys_package = matrix.locked_package(lock, "tikv-jemalloc-sys")
+    if (
+        not isinstance(wrapper_package, dict)
+        or wrapper_package.get("version") != SWC_JEMALLOC_VERSION
+        or not isinstance(sys_package, dict)
+        or sys_package.get("version") != SWC_JEMALLOC_SYS_VERSION
+        or row.get("locked_wrapper_package") != wrapper_package
+        or row.get("locked_sys_package") != sys_package
+    ):
+        raise CampaignError(f"SWC jemalloc direct-load lock mismatch: {path}")
+    return {**row, "record_path": str(path.resolve())}
+
+
+def _build_swc_jemalloc_direct_load(
+    build_root: pathlib.Path, *, toolchain: str, jobs: int, timeout: int
+) -> dict[str, Any]:
+    adapter_sha256 = sha256_file(pathlib.Path(__file__).resolve())
+    root = build_root / "direct-load-jemalloc" / adapter_sha256
+    record_path = root / "build.json"
+    if record_path.is_file():
+        return _validate_swc_jemalloc_direct_load(record_path)
+    if root.exists():
+        shutil.rmtree(root)
+    source_dir = root / "source"
+    target_dir = root / "target"
+    (source_dir / "src").mkdir(parents=True)
+    manifest = source_dir / "Cargo.toml"
+    source = source_dir / "src/lib.rs"
+    lock = source_dir / "Cargo.lock"
+    wrapper = root / "swc-jemalloc-direct-load-wrapper"
+    manifest.write_text(SWC_JEMALLOC_DIRECT_LOAD_MANIFEST, encoding="utf-8")
+    source.write_text("pub use jemallocator::Jemalloc;\n", encoding="utf-8")
+    wrapper.write_text(SWC_JEMALLOC_DIRECT_LOAD_WRAPPER, encoding="utf-8")
+    wrapper.chmod(0o755)
+    env = _clean_build_environment(
+        target_dir, root / "tmp", build_variant="jemalloc"
+    )
+    env["CARGO_NET_OFFLINE"] = "true"
+    generate = matrix.execute(
+        [
+            "cargo",
+            f"+{toolchain}",
+            "generate-lockfile",
+            "--offline",
+            "--manifest-path",
+            str(manifest),
+        ],
+        cwd=source_dir,
+        env=env,
+        timeout=timeout,
+    )
+    commands = [_command_record(generate, root, "generate-lockfile")]
+    if generate["exit_code"] != 0 or generate["timed_out"] or not lock.is_file():
+        raise CampaignError(
+            "SWC jemalloc direct-load lock generation failed:\n"
+            + generate["stderr"].decode(errors="replace")[-8000:]
+        )
+    wrapper_package = matrix.locked_package(lock, "tikv-jemallocator")
+    sys_package = matrix.locked_package(lock, "tikv-jemalloc-sys")
+    if (
+        not isinstance(wrapper_package, dict)
+        or wrapper_package.get("version") != SWC_JEMALLOC_VERSION
+        or not isinstance(sys_package, dict)
+        or sys_package.get("version") != SWC_JEMALLOC_SYS_VERSION
+    ):
+        raise CampaignError("SWC jemalloc direct-load resolved unexpected versions")
+    build = matrix.execute(
+        [
+            "cargo",
+            f"+{toolchain}",
+            "build",
+            "--release",
+            "--locked",
+            "--offline",
+            "--manifest-path",
+            str(manifest),
+            "--target-dir",
+            str(target_dir),
+            "--jobs",
+            str(jobs),
+        ],
+        cwd=source_dir,
+        env=env,
+        timeout=timeout,
+    )
+    commands.append(_command_record(build, root, "build"))
+    candidates = sorted(
+        (target_dir / "release/deps").glob(
+            "libunialloc_direct_jemallocator-*.rlib"
+        )
+    )
+    if build["exit_code"] != 0 or build["timed_out"] or len(candidates) != 1:
+        raise CampaignError(
+            "SWC jemalloc direct-load build failed:\n"
+            + build["stderr"].decode(errors="replace")[-8000:]
+        )
+    rlib = candidates[0].resolve()
+    record = {
+        "schema_version": 1,
+        "success": True,
+        "route": SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+        "wrapper_package": "tikv-jemallocator",
+        "wrapper_version": SWC_JEMALLOC_VERSION,
+        "sys_package": "tikv-jemalloc-sys",
+        "sys_version": SWC_JEMALLOC_SYS_VERSION,
+        "locked_wrapper_package": wrapper_package,
+        "locked_sys_package": sys_package,
+        "adapter_source_sha256": adapter_sha256,
+        "toolchain": toolchain,
+        "commands": commands,
+        "dependency_dir": str(rlib.parent),
+        "artifacts": {
+            "manifest": immutable_evidence.artifact_ref(manifest),
+            "source": immutable_evidence.artifact_ref(source),
+            "lockfile": immutable_evidence.artifact_ref(lock),
+            "rlib": immutable_evidence.artifact_ref(rlib),
+            "wrapper": immutable_evidence.artifact_ref(wrapper),
+        },
+    }
+    try:
+        immutable_evidence.persist_immutable_json(record_path, record)
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
+    return _validate_swc_jemalloc_direct_load(record_path)
+
+
 def _clean_build_environment(
     target_dir: pathlib.Path, temporary: pathlib.Path, *, build_variant: str
 ) -> dict[str, str]:
@@ -1261,6 +1546,12 @@ def build_contract_fingerprint(
             **pins,
             "injection_route": "rustc-workspace-wrapper-direct-load-rlib-v1",
         }
+    if target_id == "swc" and build_variant == "jemalloc":
+        pins = {
+            **pins,
+            "injection_route": SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+            "tikv-jemalloc-sys": SWC_JEMALLOC_SYS_VERSION,
+        }
     return canonical_json_sha256(
         {
             "schema_version": 1,
@@ -1437,9 +1728,51 @@ def validate_reusable_build(
             row.get("allocator_provenance"), lock_path=lock_path
         )
     if build_variant == "jemalloc":
-        package = matrix.locked_package(lock_path, "tikv-jemallocator")
-        if not isinstance(package, dict) or package.get("version") != "0.7.0":
-            raise CampaignError(f"reusable jemalloc lock pin mismatch: {path}")
+        if target.id == "swc":
+            route = row.get("jemalloc_direct_load_route")
+            if (
+                not isinstance(route, dict)
+                or route.get("id") != SWC_JEMALLOC_DIRECT_LOAD_ROUTE
+                or route.get("target_crate") != "typescript"
+                or route.get("cargo_lock_before_sha256")
+                != sha256_file(lock_path)
+                or route.get("cargo_lock_after_sha256") != sha256_file(lock_path)
+                or route.get("adapter_source_sha256")
+                != sha256_file(pathlib.Path(__file__).resolve())
+            ):
+                raise CampaignError(
+                    f"reusable SWC jemalloc direct-load route mismatch: {path}"
+                )
+            direct_record = pathlib.Path(str(route.get("record", "")))
+            validated = _validate_swc_jemalloc_direct_load(direct_record)
+            if (
+                route.get("wrapper_version") != SWC_JEMALLOC_VERSION
+                or route.get("sys_version") != SWC_JEMALLOC_SYS_VERSION
+                or route.get("record_sha256") != sha256_file(direct_record)
+                or route.get("rlib") != validated["artifacts"]["rlib"]
+                or route.get("wrapper") != validated["artifacts"]["wrapper"]
+            ):
+                raise CampaignError(
+                    f"reusable SWC jemalloc direct-load evidence mismatch: {path}"
+                )
+            upstream_package = matrix.locked_package(
+                lock_path, "tikv-jemallocator"
+            )
+            if (
+                not isinstance(upstream_package, dict)
+                or upstream_package.get("version") != "0.5.4"
+                or route.get("upstream_inactive_lock_package") != upstream_package
+            ):
+                raise CampaignError(
+                    f"reusable SWC upstream jemalloc lock mismatch: {path}"
+                )
+        else:
+            package = matrix.locked_package(lock_path, "tikv-jemallocator")
+            if (
+                not isinstance(package, dict)
+                or package.get("version") != SWC_JEMALLOC_VERSION
+            ):
+                raise CampaignError(f"reusable jemalloc lock pin mismatch: {path}")
     if build_variant == "system":
         absence = row.get("system_allocator_absence")
         if not isinstance(absence, dict) or absence.get("success") is not True:
@@ -2235,9 +2568,11 @@ def _build_psr_target(
         raise CampaignError(str(error)) from error
     allocator_patch = _replace_psr_allocator(prepared, build_variant=build_variant)
     manifest = pathlib.Path(str(prepared["manifest"]))
-    direct_load_route = (
+    unialloc_direct_load_route = (
         target.id in DIRECT_LOAD_TARGET_CRATES and build_variant == "unialloc"
     )
+    jemalloc_direct_load_route = target.id == "swc" and build_variant == "jemalloc"
+    direct_load_route = unialloc_direct_load_route or jemalloc_direct_load_route
     dependency_audit = (
         _add_dependencies(
             [manifest],
@@ -2268,10 +2603,10 @@ def _build_psr_target(
         )
     direct_load: dict[str, Any] | None = None
     direct_wrapper: pathlib.Path | None = None
-    swc_lock_before = (
+    lock_before = (
         sha256_file(worktree / "Cargo.lock") if direct_load_route else None
     )
-    if direct_load_route:
+    if unialloc_direct_load_route:
         if toolchain != psr.TOOLCHAIN:
             raise CampaignError(
                 f"{target.id} direct-load route requires the primary PSR toolchain"
@@ -2303,6 +2638,29 @@ def _build_psr_target(
                 ).replace("-", "_"),
             }
         )
+    elif jemalloc_direct_load_route:
+        if toolchain != psr.TOOLCHAIN:
+            raise CampaignError(
+                "SWC jemalloc direct-load route requires the primary PSR toolchain"
+            )
+        direct_load = _build_swc_jemalloc_direct_load(
+            build_root, toolchain=toolchain, jobs=jobs, timeout=timeout
+        )
+        direct_wrapper = pathlib.Path(
+            str(direct_load["artifacts"]["wrapper"]["path"])
+        )
+        env.update(
+            {
+                "RUSTC_WORKSPACE_WRAPPER": str(direct_wrapper),
+                "UNIALLOC_JEMALLOC_DIRECT_LOAD_RLIB": str(
+                    direct_load["artifacts"]["rlib"]["path"]
+                ),
+                "UNIALLOC_JEMALLOC_DIRECT_LOAD_DEPENDENCY_DIR": str(
+                    direct_load["dependency_dir"]
+                ),
+                "UNIALLOC_JEMALLOC_DIRECT_LOAD_TARGET_CRATE": "typescript",
+            }
+        )
     command = psr.build_command(spec, locked=direct_load_route)
     command[1] = f"+{toolchain}"
     command.extend(["--jobs", str(jobs)])
@@ -2326,7 +2684,7 @@ def _build_psr_target(
     activation = allocator_activation_proof(binary, build_variant)
     binary_row = _binary_rows({"primary": binary})["primary"]
     lock = worktree / "Cargo.lock"
-    if direct_load_route and sha256_file(lock) != swc_lock_before:
+    if direct_load_route and sha256_file(lock) != lock_before:
         raise CampaignError(
             f"{target.id} Cargo.lock changed during direct-load build"
         )
@@ -2360,11 +2718,41 @@ def _build_psr_target(
                 ),
                 "target_crate": str(spec.bench_name).replace("-", "_"),
                 "target_crates": list(DIRECT_LOAD_TARGET_CRATES[target.id]),
-                "cargo_lock_before_sha256": swc_lock_before,
+                "cargo_lock_before_sha256": lock_before,
                 "cargo_lock_after_sha256": sha256_file(lock),
                 "rlib_build": direct_load,
             }
-            if direct_load is not None and direct_wrapper is not None
+            if unialloc_direct_load_route
+            and direct_load is not None
+            and direct_wrapper is not None
+            else None
+        ),
+        "jemalloc_direct_load_route": (
+            {
+                "id": SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+                "adapter_source_sha256": sha256_file(
+                    pathlib.Path(__file__).resolve()
+                ),
+                "target_crate": "typescript",
+                "wrapper_package": "tikv-jemallocator",
+                "wrapper_version": SWC_JEMALLOC_VERSION,
+                "sys_package": "tikv-jemalloc-sys",
+                "sys_version": SWC_JEMALLOC_SYS_VERSION,
+                "upstream_inactive_lock_package": matrix.locked_package(
+                    lock, "tikv-jemallocator"
+                ),
+                "cargo_lock_before_sha256": lock_before,
+                "cargo_lock_after_sha256": sha256_file(lock),
+                "record": str(direct_load["record_path"]),
+                "record_sha256": sha256_file(
+                    pathlib.Path(str(direct_load["record_path"]))
+                ),
+                "rlib": direct_load["artifacts"]["rlib"],
+                "wrapper": direct_load["artifacts"]["wrapper"],
+            }
+            if jemalloc_direct_load_route
+            and direct_load is not None
+            and direct_wrapper is not None
             else None
         ),
         "manifest_sha256": sha256_file(manifest),
@@ -3792,6 +4180,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--raw-dir", type=pathlib.Path)
     parser.add_argument(
+        "--reuse-protocol-manifest",
+        type=pathlib.Path,
+        help=(
+            "reuse an immutable protocol from this raw directory when a bounded "
+            "build-adapter repair changed only the runner file digest"
+        ),
+    )
+    parser.add_argument(
         "--targets",
         default="collections,oxipng,redb,polars,swc,rustpython,actix_web",
     )
@@ -3833,6 +4229,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         args.raw_dir
         or contract.suite.runner_raw_dir("macro-allocator-baselines")
     ).resolve()
+    if args.reuse_protocol_manifest is not None and not args.reuse:
+        parser.error("--reuse-protocol-manifest requires --reuse")
     args.implementation_revision = (
         args.implementation_revision or contract.suite.implementation_revision
     )
@@ -3876,9 +4274,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     tcmalloc_identity = (
         tcmalloc_protocol_identity(tcmalloc_runtime) if tcmalloc_runtime else None
     )
-    protocol = build_protocol(
+    current_protocol = build_protocol(
         contract,
         toolchain=args.toolchain,
+    )
+    protocol = (
+        load_reusable_protocol_manifest(
+            args.reuse_protocol_manifest,
+            current=current_protocol,
+            raw_dir=args.raw_dir,
+        )
+        if args.reuse_protocol_manifest is not None
+        else current_protocol
     )
     plan = build_plan(
         protocol,

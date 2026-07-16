@@ -77,6 +77,35 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
             )
             prefix.assert_called_once_with("16-31", 0)
 
+    def test_reusable_protocol_manifest_allows_only_runner_digest_rebinding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            raw = pathlib.Path(directory)
+            payload = json.loads(json.dumps(self.protocol.payload))
+            payload["runner"]["sha256"] = "a" * 64
+            fingerprint = campaign.canonical_json_sha256(payload)
+            path = raw / "campaigns" / fingerprint / "campaign.json"
+            path.parent.mkdir(parents=True)
+            row = {
+                "protocol_id": campaign.PROTOCOL_ID,
+                "protocol_fingerprint": fingerprint,
+                "protocol": payload,
+            }
+            path.write_text(json.dumps(row), encoding="utf-8")
+            rebound = campaign.load_reusable_protocol_manifest(
+                path, current=self.protocol, raw_dir=raw
+            )
+            self.assertEqual(rebound.fingerprint, fingerprint)
+            payload["measurement"]["measured_rounds"] = 4
+            row["protocol"] = payload
+            row["protocol_fingerprint"] = campaign.canonical_json_sha256(payload)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            with self.assertRaisesRegex(campaign.CampaignError, "more than"):
+                campaign.load_reusable_protocol_manifest(
+                    path, current=self.protocol, raw_dir=raw
+                )
+
     def test_full_plan_uses_candidate_specific_paired_cohorts(self) -> None:
         plan = campaign.build_plan(
             self.protocol,
@@ -547,6 +576,155 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                         ),
                     )
             record_path.write_text(json.dumps(record), encoding="utf-8")
+
+    def test_swc_jemalloc_uses_exact_standalone_direct_load_without_lock_patch(
+        self,
+    ) -> None:
+        target = self.contract.targets["swc"]
+        self.assertIn(
+            'version = "=0.7.0"', campaign.SWC_JEMALLOC_DIRECT_LOAD_MANIFEST
+        )
+        self.assertIn(
+            "force:jemallocator", campaign.SWC_JEMALLOC_DIRECT_LOAD_WRAPPER
+        )
+        self.assertNotEqual(
+            campaign.build_contract_fingerprint(
+                self.protocol, target_id="swc", build_variant="jemalloc"
+            ),
+            campaign.build_contract_fingerprint(
+                self.protocol, target_id="polars", build_variant="jemalloc"
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            implementation_root = root / "implementation"
+            implementation_root.mkdir()
+            implementation = campaign.redb_actix.ImplementationSnapshot(
+                revision=self.contract.suite.implementation_revision,
+                sha256=self.contract.suite.implementation_sha256,
+                path=implementation_root,
+                manifest_path=implementation_root / "snapshot.json",
+                file_count=1,
+                size_bytes=1,
+                repository=root,
+            )
+            source = campaign.SourceContext("swc", checkout, {})
+            raw = root / "raw"
+            build_root = raw / "builds/swc/jemalloc"
+            worktree = build_root / "source"
+            manifest = worktree / "crates/swc/Cargo.toml"
+            allocator_source = worktree / "crates/swc/benches/typescript.rs"
+            lock = worktree / "Cargo.lock"
+            executable = root / "typescript"
+            executable.write_bytes(b"binary")
+            executable.chmod(0o755)
+            direct_root = build_root / "direct-load-jemalloc"
+            direct_root.mkdir(parents=True)
+            rlib = direct_root / "libunialloc_direct_jemallocator.rlib"
+            wrapper = direct_root / "wrapper"
+            rlib.write_bytes(b"rlib")
+            wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+            wrapper.chmod(0o755)
+            direct_record = direct_root / "build.json"
+            direct_record.write_text("{}\n", encoding="utf-8")
+            executed_environments: list[dict[str, str]] = []
+
+            def prepare(*_args: object) -> dict[str, object]:
+                manifest.parent.mkdir(parents=True)
+                allocator_source.parent.mkdir(parents=True)
+                manifest.write_text("[package]\nname='swc'\nversion='0.0.0'\n")
+                allocator_source.write_text("fn main() {}\n")
+                lock.write_text(
+                    'version = 4\n\n[[package]]\nname = "tikv-jemallocator"\n'
+                    'version = "0.5.4"\n',
+                    encoding="utf-8",
+                )
+                return {
+                    "manifest": manifest,
+                    "allocator_source": allocator_source,
+                }
+
+            direct = {
+                "success": True,
+                "route": campaign.SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+                "wrapper_version": campaign.SWC_JEMALLOC_VERSION,
+                "sys_version": campaign.SWC_JEMALLOC_SYS_VERSION,
+                "adapter_source_sha256": campaign.sha256_file(
+                    pathlib.Path(campaign.__file__).resolve()
+                ),
+                "record_path": str(direct_record),
+                "dependency_dir": str(direct_root),
+                "artifacts": {
+                    "rlib": immutable_evidence.artifact_ref(rlib),
+                    "wrapper": immutable_evidence.artifact_ref(wrapper),
+                },
+            }
+
+            def execute(
+                command: list[str], **kwargs: object
+            ) -> dict[str, object]:
+                executed_environments.append(dict(kwargs["env"]))
+                (build_root / "cargo-target").mkdir(parents=True, exist_ok=True)
+                return {
+                    "command": command,
+                    "stdout": b"{}\n",
+                    "stderr": b"",
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "wall_seconds": 0.1,
+                }
+
+            with mock.patch.object(
+                campaign.psr, "prepare_worktree", side_effect=prepare
+            ), mock.patch.object(
+                campaign, "_replace_psr_allocator", return_value={}
+            ), mock.patch.object(
+                campaign,
+                "_build_swc_jemalloc_direct_load",
+                return_value=direct,
+            ), mock.patch.object(
+                campaign.psr,
+                "build_command",
+                return_value=["cargo", "+nightly-2026-06-11", "bench", "--locked"],
+            ) as build_command, mock.patch.object(
+                campaign.matrix, "execute", side_effect=execute
+            ), mock.patch.object(
+                campaign.psr, "cargo_executable", return_value=executable
+            ), mock.patch.object(
+                campaign, "allocator_activation_proof", return_value={"success": True}
+            ), mock.patch.object(campaign, "_add_dependencies") as add_dependencies:
+                record = campaign._build_psr_target(
+                    protocol=self.protocol,
+                    contract=self.contract,
+                    target=target,
+                    source=source,
+                    build_variant="jemalloc",
+                    implementation=implementation,
+                    raw_dir=raw,
+                    toolchain=campaign.psr.TOOLCHAIN,
+                    jobs=8,
+                    timeout=60,
+                )
+            add_dependencies.assert_not_called()
+            build_command.assert_called_once_with(
+                campaign.psr.TARGET_SPECS["swc"], locked=True
+            )
+            environment = executed_environments[0]
+            self.assertEqual(environment["RUSTC_WORKSPACE_WRAPPER"], str(wrapper))
+            self.assertEqual(
+                environment["UNIALLOC_JEMALLOC_DIRECT_LOAD_RLIB"], str(rlib)
+            )
+            route = record["jemalloc_direct_load_route"]
+            self.assertEqual(route["wrapper_version"], "0.7.0")
+            self.assertEqual(
+                route["upstream_inactive_lock_package"]["version"], "0.5.4"
+            )
+            self.assertEqual(
+                route["cargo_lock_before_sha256"],
+                route["cargo_lock_after_sha256"],
+            )
 
     def test_actix_unialloc_routes_each_locked_bench_through_direct_load(self) -> None:
         target = self.contract.targets["actix_web"]
