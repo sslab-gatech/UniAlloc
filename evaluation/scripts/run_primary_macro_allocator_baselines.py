@@ -1243,6 +1243,11 @@ def build_contract_fingerprint(
         "jemalloc": {"tikv-jemallocator": "0.7.0"},
         "system": {},
     }[build_variant]
+    if target_id == "swc" and build_variant == "unialloc":
+        pins = {
+            **pins,
+            "injection_route": "rustc-workspace-wrapper-direct-load-rlib-v1",
+        }
     return canonical_json_sha256(
         {
             "schema_version": 1,
@@ -1291,6 +1296,7 @@ def validate_reusable_build(
     target: TargetContract,
     variant: str,
     protocol_fingerprint: str,
+    expected_implementation: redb_actix.ImplementationSnapshot,
     build_fingerprint: str | None = None,
     expected_tcmalloc_identity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -1301,6 +1307,8 @@ def validate_reusable_build(
         "target_id": target.id,
         "variant": variant,
         "source_commit": target.source_commit,
+        "implementation_revision": expected_implementation.revision,
+        "implementation_sha256": expected_implementation.sha256,
         "success": True,
     }
     if build_fingerprint is not None:
@@ -1309,6 +1317,10 @@ def validate_reusable_build(
         raise CampaignError(f"reusable build identity mismatch: {path}")
     if row.get("source_ref") != target.source_ref:
         raise CampaignError(f"reusable build source reference mismatch: {path}")
+    if pathlib.Path(str(row.get("implementation_snapshot", ""))).resolve() != (
+        expected_implementation.path.resolve()
+    ):
+        raise CampaignError(f"reusable build implementation snapshot mismatch: {path}")
     worktree = pathlib.Path(str(row.get("worktree", "")))
     lock_path = worktree / "Cargo.lock"
     if (
@@ -1364,6 +1376,47 @@ def validate_reusable_build(
         if digest not in checked:
             allocator_activation_proof(binary, build_variant)
             checked.add(digest)
+    if target.id == "swc" and build_variant == "unialloc":
+        route = row.get("direct_load_route")
+        if (
+            not isinstance(route, dict)
+            or route.get("id")
+            != "rustc-workspace-wrapper-direct-load-rlib-v1"
+            or route.get("implementation_revision")
+            != expected_implementation.revision
+            or route.get("implementation_sha256") != expected_implementation.sha256
+            or route.get("swc_cargo_lock_before_sha256") != sha256_file(lock_path)
+            or route.get("swc_cargo_lock_after_sha256") != sha256_file(lock_path)
+        ):
+            raise CampaignError(f"reusable SWC direct-load route mismatch: {path}")
+        rlib_build = route.get("rlib_build")
+        if (
+            not isinstance(rlib_build, dict)
+            or rlib_build.get("success") is not True
+            or rlib_build.get("allocator_revision")
+            != expected_implementation.revision
+            or rlib_build.get("unialloc_implementation_sha256")
+            != expected_implementation.sha256
+            or rlib_build.get("campaign_snapshot_sha256")
+            != expected_implementation.sha256
+            or rlib_build.get("rlib_sha256") != route.get("rlib", {}).get("sha256")
+        ):
+            raise CampaignError(f"reusable SWC direct-load build mismatch: {path}")
+        try:
+            immutable_evidence.validate_artifact_ref(
+                route.get("rlib"), context="SWC direct-load rlib"
+            )
+            immutable_evidence.validate_artifact_ref(
+                route.get("wrapper"), context="SWC direct-load wrapper"
+            )
+            immutable_evidence.validate_artifact_ref(
+                route.get("build_stdout"), context="SWC direct-load build stdout"
+            )
+            immutable_evidence.validate_artifact_ref(
+                route.get("build_stderr"), context="SWC direct-load build stderr"
+            )
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
     if build_variant == "mimalloc":
         validate_mimalloc_provenance(
             row.get("allocator_provenance"), lock_path=lock_path
@@ -2100,6 +2153,7 @@ def _build_psr_target(
         raise CampaignError(str(error)) from error
     allocator_patch = _replace_psr_allocator(prepared, build_variant=build_variant)
     manifest = pathlib.Path(str(prepared["manifest"]))
+    direct_load_route = target.id == "swc" and build_variant == "unialloc"
     dependency_audit = (
         _add_dependencies(
             [manifest],
@@ -2107,7 +2161,7 @@ def _build_psr_target(
             implementation=implementation,
             workspace_manifest=worktree / "Cargo.toml",
         )
-        if build_variant != "system"
+        if build_variant != "system" and not direct_load_route
         else []
     )
     env = _clean_build_environment(
@@ -2128,7 +2182,44 @@ def _build_psr_target(
             " -Zshare-generics=y -C target-feature=+sse2"
             " -C link-args=-Wl,-z,nodelete"
         )
-    command = psr.build_command(spec, locked=False)
+    direct_load: dict[str, Any] | None = None
+    direct_wrapper: pathlib.Path | None = None
+    swc_lock_before = (
+        sha256_file(worktree / "Cargo.lock") if direct_load_route else None
+    )
+    if direct_load_route:
+        if toolchain != psr.TOOLCHAIN:
+            raise CampaignError(
+                "SWC direct-load route requires the primary PSR toolchain"
+            )
+        snapshot = {
+            "path": str(implementation.path),
+            "unialloc_implementation_sha256": implementation.sha256,
+            "campaign_snapshot_sha256": implementation.sha256,
+            "allocator_revision": implementation.revision,
+        }
+        try:
+            direct_load = psr.build_direct_load_rlib(
+                build_root, snapshot, jobs, timeout
+            )
+            direct_wrapper = psr.ensure_direct_load_wrapper(
+                build_root / "tools/unialloc-direct-load-wrapper"
+            )
+        except psr.CampaignError as error:
+            raise CampaignError(str(error)) from error
+        env.update(
+            {
+                "RUSTC_WORKSPACE_WRAPPER": str(direct_wrapper),
+                "UNIALLOC_DIRECT_LOAD_RLIB": str(direct_load["rlib"]),
+                "UNIALLOC_DIRECT_LOAD_DEPENDENCY_DIR": str(
+                    direct_load["dependency_dir"]
+                ),
+                "UNIALLOC_DIRECT_LOAD_TARGET_CRATE": str(
+                    spec.bench_name
+                ).replace("-", "_"),
+            }
+        )
+    command = psr.build_command(spec, locked=direct_load_route)
     command[1] = f"+{toolchain}"
     command.extend(["--jobs", str(jobs)])
     result = matrix.execute(command, cwd=worktree, env=env, timeout=timeout)
@@ -2151,12 +2242,8 @@ def _build_psr_target(
     activation = allocator_activation_proof(binary, build_variant)
     binary_row = _binary_rows({"primary": binary})["primary"]
     lock = worktree / "Cargo.lock"
-    try:
-        compatibility_resolution = psr.resolve_swc_num_cpus_compatibility(
-            prepared, lock
-        )
-    except psr.CampaignError as error:
-        raise CampaignError(str(error)) from error
+    if direct_load_route and sha256_file(lock) != swc_lock_before:
+        raise CampaignError("SWC Cargo.lock changed during direct-load build")
     record = {
         **_base_build_record(
             protocol=protocol,
@@ -2169,8 +2256,30 @@ def _build_psr_target(
         ),
         "worktree": str(worktree.resolve()),
         "allocator_patch": allocator_patch,
-        "compatibility_patches": prepared.get("compatibility_patches", []),
-        "compatibility_resolution": compatibility_resolution,
+        "direct_load_route": (
+            {
+                "id": "rustc-workspace-wrapper-direct-load-rlib-v1",
+                "implementation_revision": implementation.revision,
+                "implementation_sha256": implementation.sha256,
+                "rlib": immutable_evidence.artifact_ref(
+                    pathlib.Path(str(direct_load["rlib"]))
+                ),
+                "dependency_dir": str(direct_load["dependency_dir"]),
+                "wrapper": immutable_evidence.artifact_ref(direct_wrapper),
+                "build_stdout": immutable_evidence.artifact_ref(
+                    build_root / "direct-load/build.stdout"
+                ),
+                "build_stderr": immutable_evidence.artifact_ref(
+                    build_root / "direct-load/build.stderr"
+                ),
+                "target_crate": str(spec.bench_name).replace("-", "_"),
+                "swc_cargo_lock_before_sha256": swc_lock_before,
+                "swc_cargo_lock_after_sha256": sha256_file(lock),
+                "rlib_build": direct_load,
+            }
+            if direct_load is not None and direct_wrapper is not None
+            else None
+        ),
         "manifest_sha256": sha256_file(manifest),
         "derived_cargo_lock_sha256": sha256_file(lock),
         "dependency_audit": dependency_audit,
@@ -2230,6 +2339,7 @@ def build_base_variant(
             target=target,
             variant=build_variant,
             protocol_fingerprint=protocol.fingerprint,
+            expected_implementation=implementation,
             build_fingerprint=fingerprint,
         )
     if target.id in collections_oxipng.TARGETS:
@@ -2383,6 +2493,7 @@ def ensure_variant_builds(
                     target=target,
                     variant=variant,
                     protocol_fingerprint=protocol.fingerprint,
+                    expected_implementation=implementation,
                     build_fingerprint=alias_fingerprint,
                     expected_tcmalloc_identity=google_identity,
                 )

@@ -356,6 +356,198 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
         ).replace(" ", "")
         self.assertIn('version="=0.7.0"', jemalloc)
 
+    def test_swc_unialloc_uses_locked_direct_load_without_path_dependency(self) -> None:
+        target = self.contract.targets["swc"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            implementation_root = root / "implementation"
+            implementation_root.mkdir()
+            implementation = campaign.redb_actix.ImplementationSnapshot(
+                revision=self.contract.suite.implementation_revision,
+                sha256=self.contract.suite.implementation_sha256,
+                path=implementation_root,
+                manifest_path=implementation_root / "snapshot.json",
+                file_count=1,
+                size_bytes=1,
+                repository=root,
+            )
+            source = campaign.SourceContext("swc", checkout, {})
+            raw = root / "raw"
+            build_root = raw / "builds/swc/unialloc"
+            worktree = build_root / "source"
+            manifest = worktree / "crates/swc/Cargo.toml"
+            allocator_source = worktree / "crates/swc/benches/typescript.rs"
+            lock = worktree / "Cargo.lock"
+            executable = root / "typescript"
+            executable.write_bytes(b"binary")
+            executable.chmod(0o755)
+            executed_environments: list[dict[str, str]] = []
+
+            def prepare(*_args: object) -> dict[str, object]:
+                manifest.parent.mkdir(parents=True)
+                allocator_source.parent.mkdir(parents=True)
+                manifest.write_text("[package]\nname='swc'\nversion='0.0.0'\n")
+                allocator_source.write_text("fn main() {}\n")
+                lock.write_text("version = 4\n")
+                return {
+                    "manifest": manifest,
+                    "allocator_source": allocator_source,
+                }
+
+            def direct_load(*_args: object) -> dict[str, object]:
+                directory = build_root / "direct-load"
+                directory.mkdir(parents=True)
+                rlib = directory / "libunialloc.rlib"
+                rlib.write_bytes(b"rlib")
+                (directory / "build.stdout").write_bytes(b"ok")
+                (directory / "build.stderr").write_bytes(b"")
+                return {
+                    "success": True,
+                    "allocator_revision": implementation.revision,
+                    "unialloc_implementation_sha256": implementation.sha256,
+                    "campaign_snapshot_sha256": implementation.sha256,
+                    "rlib": str(rlib),
+                    "rlib_sha256": campaign.sha256_file(rlib),
+                    "dependency_dir": str(directory),
+                }
+
+            def wrapper(path: pathlib.Path) -> pathlib.Path:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("#!/bin/sh\n")
+                path.chmod(0o755)
+                return path
+
+            def execute(
+                command: list[str], **_kwargs: object
+            ) -> dict[str, object]:
+                executed_environments.append(dict(_kwargs["env"]))
+                (build_root / "cargo-target").mkdir(parents=True, exist_ok=True)
+                return {
+                    "command": command,
+                    "stdout": b"{}\n",
+                    "stderr": b"",
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "wall_seconds": 0.1,
+                }
+
+            with mock.patch.object(
+                campaign.psr, "prepare_worktree", side_effect=prepare
+            ), mock.patch.object(
+                campaign, "_replace_psr_allocator", return_value={}
+            ), mock.patch.object(
+                campaign.psr, "build_direct_load_rlib", side_effect=direct_load
+            ), mock.patch.object(
+                campaign.psr, "ensure_direct_load_wrapper", side_effect=wrapper
+            ), mock.patch.object(
+                campaign.psr,
+                "build_command",
+                return_value=["cargo", "+nightly-2026-06-11", "bench", "--locked"],
+            ) as build_command, mock.patch.object(
+                campaign.matrix, "execute", side_effect=execute
+            ), mock.patch.object(
+                campaign.psr, "cargo_executable", return_value=executable
+            ), mock.patch.object(
+                campaign, "allocator_activation_proof", return_value={"success": True}
+            ), mock.patch.object(campaign, "_add_dependencies") as add_dependencies:
+                record = campaign._build_psr_target(
+                    protocol=self.protocol,
+                    contract=self.contract,
+                    target=target,
+                    source=source,
+                    build_variant="unialloc",
+                    implementation=implementation,
+                    raw_dir=raw,
+                    toolchain=campaign.psr.TOOLCHAIN,
+                    jobs=8,
+                    timeout=60,
+                )
+                campaign.validate_reusable_build(
+                    pathlib.Path(record["build_path"]),
+                    target=target,
+                    variant="unialloc",
+                    protocol_fingerprint=self.protocol.fingerprint,
+                    expected_implementation=implementation,
+                    build_fingerprint=campaign.build_contract_fingerprint(
+                        self.protocol, target_id="swc", build_variant="unialloc"
+                    ),
+                )
+            add_dependencies.assert_not_called()
+            build_command.assert_called_once_with(
+                campaign.psr.TARGET_SPECS["swc"], locked=True
+            )
+            self.assertEqual(len(executed_environments), 1)
+            build_environment = executed_environments[0]
+            self.assertEqual(
+                build_environment["RUSTC_WORKSPACE_WRAPPER"],
+                record["direct_load_route"]["wrapper"]["path"],
+            )
+            self.assertEqual(
+                build_environment["UNIALLOC_DIRECT_LOAD_RLIB"],
+                record["direct_load_route"]["rlib"]["path"],
+            )
+            self.assertEqual(
+                build_environment["UNIALLOC_DIRECT_LOAD_DEPENDENCY_DIR"],
+                record["direct_load_route"]["dependency_dir"],
+            )
+            self.assertEqual(
+                build_environment["UNIALLOC_DIRECT_LOAD_TARGET_CRATE"], "typescript"
+            )
+            self.assertEqual(
+                record["direct_load_route"]["id"],
+                "rustc-workspace-wrapper-direct-load-rlib-v1",
+            )
+            self.assertEqual(
+                record["direct_load_route"]["swc_cargo_lock_before_sha256"],
+                record["direct_load_route"]["swc_cargo_lock_after_sha256"],
+            )
+            record_path = pathlib.Path(record["build_path"])
+            record_path.chmod(0o600)
+            for keys in (
+                ("implementation_revision",),
+                ("implementation_sha256",),
+                ("implementation_snapshot",),
+                ("direct_load_route", "implementation_revision"),
+                ("direct_load_route", "implementation_sha256"),
+                ("direct_load_route", "rlib_build", "allocator_revision"),
+                (
+                    "direct_load_route",
+                    "rlib_build",
+                    "unialloc_implementation_sha256",
+                ),
+                (
+                    "direct_load_route",
+                    "rlib_build",
+                    "campaign_snapshot_sha256",
+                ),
+            ):
+                mutated = json.loads(json.dumps(record))
+                cursor = mutated
+                for key in keys[:-1]:
+                    cursor = cursor[key]
+                cursor[keys[-1]] = "wrong"
+                record_path.write_text(json.dumps(mutated), encoding="utf-8")
+                with mock.patch.object(
+                    campaign,
+                    "allocator_activation_proof",
+                    return_value={"success": True},
+                ), self.assertRaises(campaign.CampaignError):
+                    campaign.validate_reusable_build(
+                        record_path,
+                        target=target,
+                        variant="unialloc",
+                        protocol_fingerprint=self.protocol.fingerprint,
+                        expected_implementation=implementation,
+                        build_fingerprint=campaign.build_contract_fingerprint(
+                            self.protocol,
+                            target_id="swc",
+                            build_variant="unialloc",
+                        ),
+                    )
+            record_path.write_text(json.dumps(record), encoding="utf-8")
+
     def test_timed_environment_is_target_scoped_and_libc_default(self) -> None:
         contamination = {
             "LD_PRELOAD": "/tmp/wrong.so",
@@ -454,6 +646,17 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
+            implementation_root = root / "implementation"
+            implementation_root.mkdir()
+            implementation = campaign.redb_actix.ImplementationSnapshot(
+                revision=self.contract.suite.implementation_revision,
+                sha256=self.contract.suite.implementation_sha256,
+                path=implementation_root,
+                manifest_path=implementation_root / "snapshot.json",
+                file_count=1,
+                size_bytes=1,
+                repository=root,
+            )
             worktree = root / "source"
             worktree.mkdir()
             lock = worktree / "Cargo.lock"
@@ -486,6 +689,9 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                 "variant": "system",
                 "source_ref": target.source_ref,
                 "source_commit": target.source_commit,
+                "implementation_revision": implementation.revision,
+                "implementation_sha256": implementation.sha256,
+                "implementation_snapshot": str(implementation.path),
                 "success": True,
                 "build_fingerprint": fingerprint,
                 "worktree": str(worktree),
@@ -528,6 +734,7 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                     target=target,
                     variant="system",
                     protocol_fingerprint=self.protocol.fingerprint,
+                    expected_implementation=implementation,
                     build_fingerprint=fingerprint,
                 )
                 source.write_text("#[global_allocator]\nstatic A: u8 = 0;\n")
@@ -537,6 +744,7 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                         target=target,
                         variant="system",
                         protocol_fingerprint=self.protocol.fingerprint,
+                        expected_implementation=implementation,
                         build_fingerprint=fingerprint,
                     )
 
