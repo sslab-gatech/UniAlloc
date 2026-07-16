@@ -93,8 +93,10 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             "selector < 8",
             "const ROUTABLE_BUFFER_BYTES: usize = ROWS_PER_BATCH * 8",
             "assert_eq!(ROUTABLE_BUFFER_BYTES, 24 * 1024)",
+            "fn reserved_u64_column() -> Vec<u64>",
             "fn zeroed_u64_column() -> Vec<u64>",
-            "let mut values = Vec::with_capacity(ROWS_PER_BATCH)",
+            "Vec::with_capacity(ROWS_PER_BATCH)",
+            "let mut values = reserved_u64_column()",
             "values.resize(ROWS_PER_BATCH, 0_u64)",
             "let expected = expected_aggregates(rows_per_table)",
             "let resident_build_seconds",
@@ -349,7 +351,7 @@ checksum = "{'a' * 64}"
     def test_resident_compiler_site_requires_preoptimization_return_long(self) -> None:
         runner = self.runner
         row = {
-            "mir_function": "zeroed_u64_column",
+            "mir_function": "reserved_u64_column",
             "callee": "alloc::vec::Vec::with_capacity",
             "semantic_object_type": "std::vec::Vec<u64, std::alloc::Global>",
             "callsite": 11,

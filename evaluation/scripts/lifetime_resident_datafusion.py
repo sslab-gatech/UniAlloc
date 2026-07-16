@@ -254,10 +254,19 @@ fn dimension_schema() -> SchemaRef {
 }
 
 #[inline(never)]
+fn reserved_u64_column() -> Vec<u64> {
+    // Return the exact owner immediately. This gives the compiler a real
+    // escape/return fact even with panic=unwind; initialization happens in the
+    // caller-owned wrapper after the allocation site has been classified.
+    Vec::with_capacity(ROWS_PER_BATCH)
+}
+
+#[inline(never)]
 fn zeroed_u64_column() -> Vec<u64> {
-    // Keep the allocation at one compiler-supported Vec::with_capacity site.
-    // The returned owner then escapes into an Arrow array and remains resident.
-    let mut values = Vec::with_capacity(ROWS_PER_BATCH);
+    // `vec![0; N]` lowers through SpecFromElem and currently has no exact
+    // owner/layout proof. The reserved Vec already has enough capacity, so
+    // resize initializes the payload without another allocation.
+    let mut values = reserved_u64_column();
     values.resize(ROWS_PER_BATCH, 0_u64);
     values
 }
@@ -810,7 +819,7 @@ def validate_resident_compiler_site(audit_dir: Path) -> dict[str, Any]:
             if not isinstance(row, dict):
                 continue
             if (
-                str(row.get("mir_function") or "").endswith("zeroed_u64_column")
+                str(row.get("mir_function") or "").endswith("reserved_u64_column")
                 and "with_capacity" in str(row.get("callee") or "")
                 and row.get("semantic_object_type")
                 == "std::vec::Vec<u64, std::alloc::Global>"

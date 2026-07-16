@@ -473,8 +473,13 @@ fn main() {
 const ROWS_PER_BATCH: usize = 3072;
 
 #[inline(never)]
+fn reserved_u64_column() -> Vec<u64> {
+    Vec::with_capacity(ROWS_PER_BATCH)
+}
+
+#[inline(never)]
 fn zeroed_u64_column() -> Vec<u64> {
-    let mut values = Vec::with_capacity(ROWS_PER_BATCH);
+    let mut values = reserved_u64_column();
     values.resize(ROWS_PER_BATCH, 0_u64);
     values
 }
@@ -1132,11 +1137,10 @@ fn main() {
             "rust-prior-constant-vec-layout",
             rust_prior=True,
             fixture=self.constant_vec_layout_fixture,
-            panic_abort=True,
         )
         row = self.assert_hint(
             audit,
-            "zeroed_u64_column",
+            "reserved_u64_column",
             2,
             70,
             RUST_PRIOR_RETURN_LONG_BASIS,
