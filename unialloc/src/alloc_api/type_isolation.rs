@@ -432,6 +432,18 @@ pub const LIFETIME_HINT_LOCAL_DROP_FACT: u16 = 0xA101;
 /// experiments; real-program Long classification comes from runtime outcomes.
 pub const LIFETIME_HINT_BOUNDED_PROCESS_LONG: u16 = 0xA102;
 
+/// Compiler-authenticated request to observe an exact dynamic Global Vec or
+/// String buffer site. Covered scopes are borrowed `Vec::reserve*` and owned
+/// `Vec/String::with_capacity` with an existing Return/Escape ownership proof.
+/// This tag carries no placement class: adaptive runtime policy may sample an
+/// admitted 4--32 KiB allocation on ordinary pages, and only a runtime-
+/// confirmed Long prediction may later select Long placement.
+pub const LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE: u16 = 0xA103;
+
+/// Compatibility alias for the first compiler rule that emitted the generic
+/// dynamic-buffer observation tag.
+pub const LIFETIME_HINT_BORROWED_VEC_RESERVE_OBSERVE: u16 = LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE;
+
 /// Compatibility name for the reserved local-Drop fact. The value classifies
 /// as `Unknown` and must not authorize ephemeral placement.
 pub const LIFETIME_HINT_PROVEN_EPHEMERAL: u16 = LIFETIME_HINT_LOCAL_DROP_FACT;

@@ -111,6 +111,10 @@ const LIFETIME_HINT_LONG_LIVED: u16 = 2;
 /// Bounded process-long oracle used only for exact `mem::forget`/`Box::leak`
 /// smoke patterns. This tag is deliberately outside real-program Long claims.
 const LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE: u16 = 0xA102;
+/// Observation-only tag for authenticated dynamic Global Vec/String buffer
+/// scopes. It carries no Long placement claim; the adaptive runtime decides
+/// from exact-layout outcomes inside its bounded byte band.
+const LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE: u16 = 0xA103;
 const RUST_LIFETIME_PRIOR_SHORT_CONFIDENCE: u8 = 85;
 const RUST_LIFETIME_PRIOR_LONG_CONFIDENCE: u8 = 70;
 const AUTOMATIC_LIFETIME_CLASSIFIER_PRECEDENCE: &str =
@@ -261,6 +265,8 @@ enum AutomaticHeapLifetimeDecision {
 enum AutomaticRustLifetimePriorDecision {
     AllPathLocalReleaseShort,
     ReceiverOwnedShort,
+    BorrowedVecReserveObservation,
+    DynamicBufferObservation,
     ReturnLong,
     EscapeLong,
     CleanupOrUnwindUnknown,
@@ -325,6 +331,8 @@ struct SemanticLifetimeFeatureExport {
     function_has_yield_or_await: bool,
     reachable_yield_or_await: bool,
     receiver_owned_allocation: bool,
+    borrowed_vec_reserve_prior_eligible: bool,
+    dynamic_buffer_with_capacity_observation_eligible: bool,
     exact_drop_path: bool,
     conditional_drop_path: bool,
     cleanup_drop_path: bool,
@@ -1137,6 +1145,16 @@ fn automatic_rust_lifetime_prior_decision(
         return Some(AutomaticRustLifetimePriorDecision::CleanupOrUnwindUnknown);
     }
 
+    // An exact alloc Vec reserve call with a direct `&mut Vec<T, Global>`
+    // receiver identifies a useful dynamic-layout observation boundary. It
+    // says nothing about how long the caller keeps the Vec: transport only an
+    // observation request, leaving ordinary placement in force until exact
+    // runtime size/align outcomes confirm Long. Cleanup/unwind remains the
+    // higher-priority abstention above.
+    if features.borrowed_vec_reserve_prior_eligible {
+        return Some(AutomaticRustLifetimePriorDecision::BorrowedVecReserveObservation);
+    }
+
     // A moved owner that reaches the return place or an opaque consuming call
     // escapes the current function's local release region. Carrier propagation
     // includes aggregate/projected stores, so this is a Rust ownership-flow
@@ -1145,10 +1163,18 @@ fn automatic_rust_lifetime_prior_decision(
         && !features.reachable_backedge_after_allocation
         && !features.reachable_yield_or_await;
     if features.return_sink && stable_escape_region {
-        return Some(AutomaticRustLifetimePriorDecision::ReturnLong);
+        return Some(if features.dynamic_buffer_with_capacity_observation_eligible {
+            AutomaticRustLifetimePriorDecision::DynamicBufferObservation
+        } else {
+            AutomaticRustLifetimePriorDecision::ReturnLong
+        });
     }
     if features.escape_sink && stable_escape_region {
-        return Some(AutomaticRustLifetimePriorDecision::EscapeLong);
+        return Some(if features.dynamic_buffer_with_capacity_observation_eligible {
+            AutomaticRustLifetimePriorDecision::DynamicBufferObservation
+        } else {
+            AutomaticRustLifetimePriorDecision::EscapeLong
+        });
     }
 
     if features.owner_live_opaque_call
@@ -1213,6 +1239,16 @@ fn automatic_rust_lifetime_prior_selection(
             confidence: RUST_LIFETIME_PRIOR_SHORT_CONFIDENCE,
             basis: "automatic_rust_lifetime_prior_receiver_owned_short",
         },
+        AutomaticRustLifetimePriorDecision::BorrowedVecReserveObservation => LifetimeHintSelection {
+            hint: LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
+            confidence: RUST_LIFETIME_PRIOR_LONG_CONFIDENCE,
+            basis: "automatic_rust_lifetime_prior_borrowed_vec_reserve_observe",
+        },
+        AutomaticRustLifetimePriorDecision::DynamicBufferObservation => LifetimeHintSelection {
+            hint: LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
+            confidence: RUST_LIFETIME_PRIOR_LONG_CONFIDENCE,
+            basis: "automatic_rust_lifetime_prior_dynamic_buffer_observe",
+        },
         AutomaticRustLifetimePriorDecision::ReturnLong => LifetimeHintSelection {
             hint: LIFETIME_HINT_LONG_LIVED,
             confidence: RUST_LIFETIME_PRIOR_LONG_CONFIDENCE,
@@ -1236,17 +1272,25 @@ fn automatic_rust_lifetime_prior_selection(
     }
 }
 
-fn automatic_rust_lifetime_prior_joinable_layout(features: &SemanticLifetimeFeatureExport) -> bool {
+fn automatic_rust_lifetime_prior_joinable_layout(
+    features: &SemanticLifetimeFeatureExport,
+    selection: LifetimeHintSelection,
+) -> bool {
     // Ownership flow can predict a useful class while the scoped call still
     // performs dynamic or nested allocations. Route an advisory prior only
     // when the compiler audit can name the same exact-layout cohort that the
-    // runtime observer will validate. The ownership facts remain exported for
-    // ground-truth analysis when this deployment gate abstains.
-    matches!(features.requested_size_bytes, Some(size) if size > 0)
-        && matches!(
-            features.requested_align_bytes,
-            Some(align) if align.is_power_of_two()
-        )
+    // runtime observer will validate. The observation-only borrowed Vec reserve
+    // tag is the one dynamic-layout exception: its authenticated semantic scope
+    // encloses only the direct Vec backing allocation, so the allocator supplies
+    // actual size and alignment and applies the bounded admission gate.
+    (selection.hint == LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE
+        && (features.borrowed_vec_reserve_prior_eligible
+            || features.dynamic_buffer_with_capacity_observation_eligible))
+        || (matches!(features.requested_size_bytes, Some(size) if size > 0)
+            && matches!(
+                features.requested_align_bytes,
+                Some(align) if align.is_power_of_two()
+            ))
 }
 
 fn automatic_rust_lifetime_prior_unjoinable_layout_selection(
@@ -1324,6 +1368,7 @@ fn select_lifetime_hint_with_heap_inference(
             let selection = if selection.hint != 0
                 && !automatic_rust_lifetime_prior_joinable_layout(
                     lifetime_features.expect("Rust lifetime prior requires feature export"),
+                    selection,
                 ) {
                 automatic_rust_lifetime_prior_unjoinable_layout_selection(selection)
             } else {
@@ -1389,7 +1434,16 @@ fn automatic_rust_lifetime_prior_short_basis(basis: &str) -> bool {
 fn automatic_rust_lifetime_prior_long_basis(basis: &str) -> bool {
     matches!(
         basis,
-        "automatic_rust_lifetime_prior_return_long" | "automatic_rust_lifetime_prior_escape_long"
+        "automatic_rust_lifetime_prior_return_long"
+            | "automatic_rust_lifetime_prior_escape_long"
+    )
+}
+
+fn automatic_rust_lifetime_prior_observation_basis(basis: &str) -> bool {
+    matches!(
+        basis,
+        "automatic_rust_lifetime_prior_borrowed_vec_reserve_observe"
+            | "automatic_rust_lifetime_prior_dynamic_buffer_observe"
     )
 }
 
@@ -2228,14 +2282,22 @@ fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecor
         "        \"analysis_phase\": \"{}\",",
         features.analysis_phase
     );
+    let rust_lifetime_prior_observation_rule_applied =
+        automatic_rust_lifetime_prior_observation_basis(record.lifetime_hint_basis);
     let rust_lifetime_prior_rule_applied = record.lifetime_hint != 0
         && record
             .lifetime_hint_basis
-            .starts_with("automatic_rust_lifetime_prior_");
+            .starts_with("automatic_rust_lifetime_prior_")
+        && !rust_lifetime_prior_observation_rule_applied;
     let _ = writeln!(
         json,
         "        \"classification_rule_applied\": {},",
         rust_lifetime_prior_rule_applied
+    );
+    let _ = writeln!(
+        json,
+        "        \"observation_candidate_rule_applied\": {},",
+        rust_lifetime_prior_observation_rule_applied
     );
     json.push_str("        \"runtime_join_key_contract\": \"exact(callsite,type_id,module_id,requested_size_bytes,requested_align_bytes)\",\n");
     let runtime_join_key_complete =
@@ -2267,6 +2329,17 @@ fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecor
         "        \"requested_layout_basis\": \"{}\",",
         features.requested_layout_basis
     );
+    if features.borrowed_vec_reserve_prior_eligible
+        || features.dynamic_buffer_with_capacity_observation_eligible
+    {
+        json.push_str("        \"runtime_layout_subcohort_contract\": \"authenticated-key3-to-runtime-key5-4k-through-32k\",\n");
+        json.push_str("        \"runtime_observation_min_requested_bytes\": 4096,\n");
+        json.push_str("        \"runtime_observation_max_requested_bytes\": 32768,\n");
+    } else {
+        json.push_str("        \"runtime_layout_subcohort_contract\": null,\n");
+        json.push_str("        \"runtime_observation_min_requested_bytes\": null,\n");
+        json.push_str("        \"runtime_observation_max_requested_bytes\": null,\n");
+    }
     match &features.owner_place {
         Some(owner) => {
             let _ = writeln!(json, "        \"owner_place\": \"{}\",", json_escape(owner));
@@ -2307,6 +2380,20 @@ fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecor
         (
             "receiver_owned_allocation",
             features.receiver_owned_allocation,
+        ),
+        (
+            "borrowed_vec_reserve_prior_eligible",
+            features.borrowed_vec_reserve_prior_eligible,
+        ),
+        (
+            "dynamic_buffer_with_capacity_observation_eligible",
+            features.dynamic_buffer_with_capacity_observation_eligible,
+        ),
+        (
+            "runtime_layout_captured_by_semantic_scope",
+            (features.borrowed_vec_reserve_prior_eligible
+                || features.dynamic_buffer_with_capacity_observation_eligible)
+                && record.rewrite_status.ends_with("_applied"),
         ),
         ("exact_drop_path", features.exact_drop_path),
         ("conditional_drop_path", features.conditional_drop_path),
@@ -4272,6 +4359,21 @@ fn exact_alloc_vec_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool 
                 .iter()
                 .any(|receiver| callee_contains_named_receiver_method(&def_path, receiver, method))
     })
+}
+
+fn exact_alloc_vec_borrowed_reserve_def_path(path: &str) -> bool {
+    VEC_BORROWED_RESERVE_METHODS.iter().any(|method| {
+        callee_contains_current_impl_method(path, "alloc::vec", method)
+            || ["alloc::vec::Vec", "std::vec::Vec"]
+                .iter()
+                .any(|receiver| callee_contains_named_receiver_method(path, receiver, method))
+    })
+}
+
+fn exact_alloc_vec_borrowed_reserve_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_alloc_crate_def_id(tcx, def_id)
+        && tcx.trait_item_of(def_id).is_none()
+        && exact_alloc_vec_borrowed_reserve_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_alloc_arc_def_path(path: &str) -> bool {
@@ -8349,6 +8451,21 @@ mod tests {
             assert!(semantic_scope_capacity_only_vec_receiver_call(&current));
             assert!(semantic_scope_capacity_only_vec_receiver_call(&named));
         }
+        for method in VEC_BORROWED_RESERVE_METHODS {
+            let current = format!(
+                "Val(ZeroSized, FnDef(DefId(3:8610 ~ alloc[d734]::vec::{{impl#2}}::{}), [std::string::String, std::alloc::Global]))",
+                method
+            );
+            let named = format!("alloc::vec::Vec::<T, A>::{}", method);
+            assert!(exact_alloc_vec_borrowed_reserve_def_path(&current));
+            assert!(exact_alloc_vec_borrowed_reserve_def_path(&named));
+        }
+        assert!(!exact_alloc_vec_borrowed_reserve_def_path(
+            "alloc::vec::Vec::<T, A>::shrink_to_fit"
+        ));
+        assert!(!exact_alloc_vec_borrowed_reserve_def_path(
+            "my_crate::Vec::<T>::reserve"
+        ));
         assert!(!semantic_scope_capacity_only_vec_receiver_call(
             vec_bare_push
         ));
@@ -9582,6 +9699,13 @@ const VEC_CAPACITY_ONLY_METHODS: &[&str] = &[
     "try_reserve_exact",
     "shrink_to",
     "shrink_to_fit",
+];
+
+const VEC_BORROWED_RESERVE_METHODS: &[&str] = &[
+    "reserve",
+    "reserve_exact",
+    "try_reserve",
+    "try_reserve_exact",
 ];
 
 #[cfg(test)]
@@ -10963,6 +11087,97 @@ fn terminator_exact_bounded_process_long_decision<'tcx>(
     }
 }
 
+fn exact_borrowed_vec_reserve_semantic_scope<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    let (func, args) = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return false,
+    };
+    let def_id = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, _) => *def_id,
+        _ => return false,
+    };
+    if !exact_alloc_vec_borrowed_reserve_def_id(tcx, def_id)
+        || args.len() != 2
+        || !matches!(
+            args[1].ty(&body.local_decls, tcx).kind(),
+            ty::Uint(ty::UintTy::Usize)
+        )
+    {
+        return false;
+    }
+
+    let receiver_place = match operand_exact_place(&args[0]) {
+        Some(place) if place.projection.is_empty() => place,
+        _ => return false,
+    };
+    let receiver_ty = receiver_place.ty(&body.local_decls, tcx).ty;
+    let owner_ty = match receiver_ty.kind() {
+        ty::Ref(_, owner_ty, rustc_ast::Mutability::Mut) => *owner_ty,
+        _ => return false,
+    };
+    candidate.feature_owner == Some(receiver_place)
+        && candidate.feature_owner_basis == "exact_receiver_operand"
+        && direct_outer_vec_receiver_owner(tcx, receiver_ty).as_deref()
+            == Some(candidate.semantic_object_type.as_str())
+        && compiler_semantic_type_id(tcx, owner_ty) == candidate.compiler_type_id
+}
+
+fn exact_global_buffer_with_capacity_semantic_scope<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    let (func, args) = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return false,
+    };
+    let (def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, args) => (*def_id, args.types().collect::<Vec<Ty<'tcx>>>()),
+        _ => return false,
+    };
+    if args.len() != 1
+        || !matches!(
+            args[0].ty(&body.local_decls, tcx).kind(),
+            ty::Uint(ty::UintTy::Usize)
+        )
+    {
+        return false;
+    }
+    let argument_tys = args
+        .iter()
+        .map(|argument| argument.ty(&body.local_decls, tcx))
+        .collect::<Vec<_>>();
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    let authenticated_owner = if exact_alloc_vec_with_capacity_def_id(tcx, def_id) {
+        vec_with_capacity_runtime_identity_owner_ty(
+            tcx,
+            def_id,
+            &callee_generic_types,
+            destination_ty,
+            &argument_tys,
+        )
+    } else if direct_outer_string_with_capacity_destination_owner(
+        tcx,
+        def_id,
+        destination_ty,
+        &argument_tys,
+    )
+    .as_deref()
+        == Some(candidate.semantic_object_type.as_str())
+    {
+        Some(destination_ty)
+    } else {
+        None
+    };
+    matches!(authenticated_owner, Some(owner_ty) if
+        format!("{:?}", owner_ty) == candidate.semantic_object_type
+            && compiler_semantic_type_id(tcx, owner_ty) == candidate.compiler_type_id)
+}
+
 #[cfg(unialloc_rustc_current)]
 fn exact_box_new_requested_layout<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -11519,6 +11734,10 @@ fn semantic_lifetime_feature_export<'tcx>(
         && escape_sink_blocks.is_empty()
         && store_sink_blocks.is_empty();
     let conditional_drop_path = !exact_drop_path && !normal_drop_blocks.is_empty();
+    let borrowed_vec_reserve_prior_eligible =
+        exact_borrowed_vec_reserve_semantic_scope(tcx, body, candidate);
+    let exact_global_buffer_with_capacity =
+        exact_global_buffer_with_capacity_semantic_scope(tcx, body, candidate);
     let (requested_size_bytes, requested_align_bytes, requested_layout_basis) =
         match exact_box_new_requested_layout(tcx, body, candidate) {
             Some((size, align)) => (Some(size), Some(align), "exact_box_new_payload_layout"),
@@ -11528,9 +11747,20 @@ fn semantic_lifetime_feature_export<'tcx>(
                     Some(align),
                     "exact_vec_with_capacity_requested_layout",
                 ),
+                None if exact_global_buffer_with_capacity => (
+                    None,
+                    None,
+                    "exact_dynamic_global_buffer_with_capacity_runtime_layout",
+                ),
+                None if borrowed_vec_reserve_prior_eligible => {
+                    (None, None, "exact_borrowed_vec_reserve_runtime_layout")
+                }
                 None => (None, None, "dynamic_or_unproven_requested_layout"),
             },
         };
+    let dynamic_buffer_with_capacity_observation_eligible = exact_global_buffer_with_capacity
+        && requested_size_bytes.is_none()
+        && requested_align_bytes.is_none();
     let (normal_successor_count, cleanup_successor_count) = candidate
         .original_terminator
         .successors()
@@ -11569,6 +11799,8 @@ fn semantic_lifetime_feature_export<'tcx>(
         function_has_yield_or_await,
         reachable_yield_or_await,
         receiver_owned_allocation: candidate.receiver_owned_allocation,
+        borrowed_vec_reserve_prior_eligible,
+        dynamic_buffer_with_capacity_observation_eligible,
         exact_drop_path,
         conditional_drop_path,
         cleanup_drop_path: !cleanup_drop_blocks.is_empty(),
@@ -15190,6 +15422,13 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
                 && automatic_rust_lifetime_prior_long_basis(record.lifetime_hint_basis)
         })
         .count();
+    let automatic_rust_lifetime_prior_observation_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_rust_lifetime_prior_observation_basis(record.lifetime_hint_basis)
+        })
+        .count();
     let automatic_rust_lifetime_prior_unknown_allocation_site_count = records
         .iter()
         .filter(|record| {
@@ -15743,7 +15982,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         RUST_LIFETIME_PRIOR_LONG_CONFIDENCE
     );
     json.push_str(
-        "    \"automatic_rust_lifetime_prior_contract\": \"Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Owner-live cleanup/unwind, opaque calls before Drop, raw loop/yield reachability, and unsupported ownership abstain. Exact per-site runtime observation remains authoritative\",\n",
+        "    \"automatic_rust_lifetime_prior_contract\": \"Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Exact alloc Vec reserve with a direct &mut Vec<T, Global>, plus exact Global Vec/String with_capacity scopes whose existing ownership proof reaches Return/Escape but whose layout is dynamic, emit only observation tag 0xA103. Actual 4--32 KiB runtime Layout subcohorts stay ordinary until online outcomes confirm Long. Owner-live cleanup/unwind, projected receivers, custom allocators, and unsupported ownership abstain\",\n",
     );
     let _ = writeln!(
         json,
@@ -15754,6 +15993,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"automatic_rust_lifetime_prior_long_allocation_site_count\": {},",
         automatic_rust_lifetime_prior_long_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_rust_lifetime_prior_observation_allocation_site_count\": {},",
+        automatic_rust_lifetime_prior_observation_allocation_site_count
     );
     let _ = writeln!(
         json,

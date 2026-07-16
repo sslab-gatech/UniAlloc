@@ -28,12 +28,15 @@ CLEANUP_UNKNOWN_BASIS = "automatic_heap_cleanup_or_unwind_unknown"
 RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS = (
     "automatic_rust_lifetime_prior_all_path_local_release_short"
 )
-RUST_PRIOR_RECEIVER_SHORT_BASIS = (
-    "automatic_rust_lifetime_prior_receiver_owned_short"
+RUST_PRIOR_BORROWED_VEC_RESERVE_OBSERVE_BASIS = (
+    "automatic_rust_lifetime_prior_borrowed_vec_reserve_observe"
 )
 RUST_PRIOR_RETURN_LONG_BASIS = "automatic_rust_lifetime_prior_return_long"
 RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS = (
     "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown"
+)
+RUST_PRIOR_LOCAL_RELEASE_LAYOUT_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_all_path_local_release_short_unjoinable_layout_unknown"
 )
 RUST_PRIOR_RECEIVER_LAYOUT_UNKNOWN_BASIS = (
     "automatic_rust_lifetime_prior_receiver_owned_short_unjoinable_layout_unknown"
@@ -87,7 +90,7 @@ class MirMarkerFreeHeapLifetimeInferenceTest(unittest.TestCase):
 use std::sync::atomic::{AtomicU64, Ordering};
 static OBSERVED_HINTS: AtomicU64 = AtomicU64::new(0);
 fn record(hint: u16) {
-    let mask = match hint { 0xA101 => 1, 0xA102 => 2, 1 => 4, 2 => 8, _ => 0 };
+    let mask = match hint { 0xA101 => 1, 0xA102 => 2, 1 => 4, 2 => 8, 0xA103 => 16, _ => 0 };
     OBSERVED_HINTS.fetch_or(mask, Ordering::SeqCst);
 }
 pub fn observed_hints() -> u64 { OBSERVED_HINTS.load(Ordering::SeqCst) }
@@ -486,6 +489,99 @@ fn zeroed_u64_column() -> Vec<u64> {
 
 fn main() {
     drop(zeroed_u64_column());
+}
+""",
+            encoding="utf-8",
+        )
+
+        cls.borrowed_vec_reserve_fixture = (
+            cls.tmp / "rust_lifetime_prior_borrowed_vec_reserve.rs"
+        )
+        cls.borrowed_vec_reserve_fixture.write_text(
+            """#![feature(allocator_api)]
+extern crate unialloc;
+
+use std::alloc::System;
+
+const SHORT_BYTES: usize = 16 * 1024;
+
+#[inline(never)]
+fn borrowed_reserve_loop_candidate(owner: &mut Vec<u8>, rounds: usize) {
+    for additional in 1..=rounds {
+        owner.reserve(additional * 4096);
+        std::hint::black_box(owner.len());
+    }
+}
+
+#[inline(never)]
+fn borrowed_try_reserve_exact_candidate(owner: &mut Vec<u8>) {
+    std::hint::black_box(owner.len());
+    owner.try_reserve_exact(8192).unwrap();
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn borrowed_reserve_short_lived(owner: &mut Vec<u8>) {
+    owner.reserve_exact(8192);
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn borrowed_reserve_tiny(owner: &mut Vec<u8>) {
+    owner.reserve_exact(64);
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn custom_allocator_reserve(owner: &mut Vec<u8, System>) {
+    owner.reserve_exact(8192);
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn return_dynamic_vec(capacity: usize) -> Vec<u8> {
+    Vec::with_capacity(capacity)
+}
+
+#[inline(never)]
+fn return_dynamic_string(content: &str) -> String {
+    let mut output = String::with_capacity(content.len());
+    output.push_str(content);
+    output
+}
+
+#[inline(never)]
+fn short_dynamic_vec(capacity: usize) {
+    let owner: Vec<u8> = Vec::with_capacity(capacity);
+    drop(owner);
+}
+
+#[inline(never)]
+fn short_box_16k() {
+    let owner = Box::new([7_u8; SHORT_BYTES]);
+    drop(owner);
+}
+
+fn main() {
+    let mut owner = Vec::new();
+    borrowed_reserve_loop_candidate(&mut owner, 2);
+    borrowed_try_reserve_exact_candidate(&mut owner);
+    let mut short = Vec::new();
+    borrowed_reserve_short_lived(&mut short);
+    drop(short);
+    let mut tiny = Vec::new();
+    borrowed_reserve_tiny(&mut tiny);
+    drop(tiny);
+    let mut custom = Vec::new_in(System);
+    custom_allocator_reserve(&mut custom);
+    drop(custom);
+    drop(return_dynamic_vec(8192));
+    drop(return_dynamic_string("dynamic"));
+    short_dynamic_vec(8192);
+    short_box_16k();
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed & 0b11100, 0b10100);
 }
 """,
             encoding="utf-8",
@@ -988,6 +1084,12 @@ fn main() {
             receiver["lifetime_analysis_features"]["runtime_join_key_complete"],
             receiver,
         )
+        self.assertFalse(
+            receiver["lifetime_analysis_features"][
+                "runtime_layout_captured_by_semantic_scope"
+            ],
+            receiver,
+        )
 
         generic_return = self.assert_hint(
             audit,
@@ -1167,6 +1269,169 @@ fn main() {
         self.assertEqual(
             features["runtime_join_key"]["requested_align_bytes"], 8, row
         )
+
+    def test_borrowed_vec_reserve_prior_is_observation_only_and_preserves_negatives(
+        self,
+    ) -> None:
+        audit = self.run_pass(
+            "rust-prior-borrowed-vec-reserve",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.borrowed_vec_reserve_fixture,
+            panic_abort=True,
+        )
+
+        reserve_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and str(row.get("mir_function") or "").endswith(
+                (
+                    "borrowed_reserve_loop_candidate",
+                    "borrowed_try_reserve_exact_candidate",
+                    "borrowed_reserve_short_lived",
+                    "borrowed_reserve_tiny",
+                )
+            )
+            and "reserve" in str(row.get("callee") or "")
+        ]
+        self.assertEqual(len(reserve_rows), 4, reserve_rows)
+        for row in reserve_rows:
+            self.assertEqual(row["lifetime_hint"], 0xA103, row)
+            self.assertEqual(row["lifetime_hint_confidence"], 70, row)
+            self.assertEqual(
+                row["lifetime_hint_basis"],
+                RUST_PRIOR_BORROWED_VEC_RESERVE_OBSERVE_BASIS,
+                row,
+            )
+            self.assertNotEqual(row["type_id"], 0, row)
+            self.assertTrue(str(row["rewrite_status"]).endswith("_applied"), row)
+            features = row["lifetime_analysis_features"]
+            self.assertTrue(features["borrowed_vec_reserve_prior_eligible"], row)
+            self.assertFalse(features["classification_rule_applied"], row)
+            self.assertTrue(features["observation_candidate_rule_applied"], row)
+            self.assertTrue(
+                features["runtime_layout_captured_by_semantic_scope"], row
+            )
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "exact_borrowed_vec_reserve_runtime_layout",
+                row,
+            )
+            self.assertEqual(
+                features["runtime_layout_subcohort_contract"],
+                "authenticated-key3-to-runtime-key5-4k-through-32k",
+                row,
+            )
+            self.assertEqual(features["runtime_observation_min_requested_bytes"], 4096)
+            self.assertEqual(features["runtime_observation_max_requested_bytes"], 32768)
+            self.assertFalse(features["runtime_join_key_complete"], row)
+            self.assertIsNone(
+                features["runtime_join_key"]["requested_size_bytes"], row
+            )
+            self.assertIsNone(
+                features["runtime_join_key"]["requested_align_bytes"], row
+            )
+
+        loop_row = next(
+            row
+            for row in reserve_rows
+            if str(row["mir_function"]).endswith("borrowed_reserve_loop_candidate")
+        )
+        self.assertTrue(
+            loop_row["lifetime_analysis_features"]["owner_live_opaque_call"],
+            loop_row,
+        )
+        self.assertTrue(
+            loop_row["lifetime_analysis_features"][
+                "reachable_backedge_after_allocation"
+            ],
+            loop_row,
+        )
+
+        short_box = self.assert_hint(
+            audit,
+            "short_box_16k",
+            1,
+            85,
+            RUST_PRIOR_LOCAL_RELEASE_SHORT_BASIS,
+        )
+        short_features = short_box["lifetime_analysis_features"]
+        self.assertFalse(short_features["borrowed_vec_reserve_prior_eligible"])
+        self.assertFalse(
+            short_features["runtime_layout_captured_by_semantic_scope"]
+        )
+        self.assertEqual(
+            short_features["runtime_join_key"]["requested_size_bytes"],
+            16 * 1024,
+        )
+
+        custom_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if str(row.get("mir_function") or "").endswith("custom_allocator_reserve")
+            and "reserve" in str(row.get("callee") or "")
+        ]
+        for row in custom_rows:
+            self.assertNotEqual(row["lifetime_hint"], 0xA103, row)
+            features = row.get("lifetime_analysis_features") or {}
+            self.assertFalse(
+                features.get("borrowed_vec_reserve_prior_eligible", False), row
+            )
+
+        dynamic_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and str(row.get("mir_function") or "").endswith(
+                ("return_dynamic_vec", "return_dynamic_string")
+            )
+            and "with_capacity" in str(row.get("callee") or "")
+        ]
+        self.assertEqual(len(dynamic_rows), 2, dynamic_rows)
+        for row in dynamic_rows:
+            self.assertEqual(row["lifetime_hint"], 0xA103, row)
+            self.assertEqual(
+                row["lifetime_hint_basis"],
+                "automatic_rust_lifetime_prior_dynamic_buffer_observe",
+                row,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertTrue(
+                features["dynamic_buffer_with_capacity_observation_eligible"], row
+            )
+            self.assertFalse(features["classification_rule_applied"], row)
+            self.assertTrue(features["observation_candidate_rule_applied"], row)
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "exact_dynamic_global_buffer_with_capacity_runtime_layout",
+                row,
+            )
+
+        short_dynamic = self.allocation_row(audit, "short_dynamic_vec")
+        self.assertEqual(short_dynamic["lifetime_hint"], 0, short_dynamic)
+        self.assertEqual(
+            short_dynamic["lifetime_hint_basis"],
+            RUST_PRIOR_LOCAL_RELEASE_LAYOUT_UNKNOWN_BASIS,
+            short_dynamic,
+        )
+        self.assertTrue(
+            short_dynamic["lifetime_analysis_features"][
+                "dynamic_buffer_with_capacity_observation_eligible"
+            ],
+            short_dynamic,
+        )
+
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-borrowed-vec-reserve")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=", completed.stdout)
 
 
 if __name__ == "__main__":

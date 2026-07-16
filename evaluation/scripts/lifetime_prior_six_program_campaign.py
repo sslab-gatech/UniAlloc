@@ -98,9 +98,26 @@ CHECKOUT_NAMES = {
 PRIOR_CLASSIFIED_BASIS_CONTRACT = {
     "automatic_rust_lifetime_prior_all_path_local_release_short": (1, 85),
     "automatic_rust_lifetime_prior_receiver_owned_short": (1, 85),
+    "automatic_rust_lifetime_prior_borrowed_vec_reserve_observe": (0xA103, 70),
+    "automatic_rust_lifetime_prior_dynamic_buffer_observe": (0xA103, 70),
     "automatic_rust_lifetime_prior_return_long": (2, 70),
     "automatic_rust_lifetime_prior_escape_long": (2, 70),
 }
+BORROWED_VEC_RESERVE_OBSERVE_HINT = 0xA103
+BORROWED_VEC_RESERVE_OBSERVE_BASIS = (
+    "automatic_rust_lifetime_prior_borrowed_vec_reserve_observe"
+)
+DYNAMIC_BUFFER_OBSERVE_BASES = frozenset(
+    {
+        BORROWED_VEC_RESERVE_OBSERVE_BASIS,
+        "automatic_rust_lifetime_prior_dynamic_buffer_observe",
+    }
+)
+BORROWED_VEC_RESERVE_SUBCOHORT_CONTRACT = (
+    "authenticated-key3-to-runtime-key5-4k-through-32k"
+)
+BORROWED_VEC_RESERVE_MIN_REQUESTED_BYTES = 4 * 1024
+BORROWED_VEC_RESERVE_MAX_REQUESTED_BYTES = 32 * 1024
 APPLIED_ALLOCATION_SCOPE_STATUSES = frozenset(
     {
         "actual_allocator_call_replacement_applied",
@@ -134,7 +151,7 @@ GENERIC_RESOLUTION_KEY_FIELDS = (
     "requested_size",
     "align",
 )
-COMPILER_SITE_EXPORT_SOURCE = "unialloc-compiler-runtime-exact-site-export-v2"
+COMPILER_SITE_EXPORT_SOURCE = "unialloc-compiler-runtime-exact-site-export-v3"
 COMPILER_SITE_EXPORT_SUMMARY_FIELDS = (
     "source",
     "runtime_join_key",
@@ -146,9 +163,13 @@ COMPILER_SITE_EXPORT_SUMMARY_FIELDS = (
     "complete_join_key_count",
     "audit_complete_join_key_count",
     "numeric_exact_key_complete_count",
+    "dynamic_layout_site_count",
+    "dynamic_layout_key_complete_count",
     "generic_resolution_key_complete_count",
     "applied_prior_hinted_count",
+    "applied_observation_candidate_count",
 )
+DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS = ("callsite", "type_id", "module_id")
 RUNTIME_OUTCOME_AGGREGATE_FIELDS = (
     "allocation_count",
     "allocation_requested_bytes",
@@ -827,6 +848,7 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
     provenance_failures: list[dict[str, Any]] = []
     applied_allocation_candidates = 0
     applied_prior_hinted_candidates = 0
+    applied_observation_candidates = 0
     crate_provenance: dict[str, dict[str, Any]] = {}
     for path in sorted(root.rglob("*.json")):
         try:
@@ -956,6 +978,11 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
                     2,
                 }:
                     applied_prior_hinted_candidates += 1
+                if (
+                    basis in DYNAMIC_BUFFER_OBSERVE_BASES
+                    and hint == BORROWED_VEC_RESERVE_OBSERVE_HINT
+                ):
+                    applied_observation_candidates += 1
     if not files:
         raise CampaignContractError("compiler audit root has no rewrite audits")
     if len(enabled_values) != 1:
@@ -976,6 +1003,7 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
         "classified_candidate_count": classified_candidates,
         "applied_allocation_candidate_count": applied_allocation_candidates,
         "applied_prior_hinted_candidate_count": applied_prior_hinted_candidates,
+        "applied_observation_candidate_count": applied_observation_candidates,
         "audited_crates": sorted(audited_crates),
         "actual_rewrite_provenance_valid": not provenance_failures,
         "provenance_failures": provenance_failures,
@@ -2603,15 +2631,18 @@ def _generic_resolution_key_dict(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
-    """Export numeric KEY5 and authenticated generic KEY4 compiler identities.
+    """Export exact KEY5, dynamic-layout KEY3, and generic KEY4 identities.
 
     The runtime observation KEY5 and allocator ``AdaptiveSiteKey`` remain
-    untouched.  A generic compiler row retains the audit's zero TypeId
-    sentinel and is resolved later only when runtime evidence gives KEY4 a
-    unique positive TypeId.
+    untouched. A borrowed Vec observation row authenticates KEY3 in the
+    compiler and expands only to actual 4--32 KiB runtime KEY5 subcohorts. A
+    generic compiler row retains the audit's zero TypeId sentinel and is
+    resolved later only when runtime evidence gives KEY4 a unique positive
+    TypeId.
     """
     rows: list[dict[str, Any]] = []
     numeric_keys: set[tuple[int, ...]] = set()
+    dynamic_layout_keys: set[tuple[int, ...]] = set()
     generic_keys: set[tuple[int, ...]] = set()
     for path in sorted(audit_root.rglob("*.json")):
         try:
@@ -2671,12 +2702,30 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 and key["requested_size"] > 0
                 and _positive_power_of_two(key["align"])
             )
+            observation_candidate = (
+                candidate.get("lifetime_hint")
+                == BORROWED_VEC_RESERVE_OBSERVE_HINT
+                and candidate.get("lifetime_hint_basis")
+                in DYNAMIC_BUFFER_OBSERVE_BASES
+                and (
+                    features.get("borrowed_vec_reserve_prior_eligible") is True
+                    or features.get(
+                        "dynamic_buffer_with_capacity_observation_eligible"
+                    )
+                    is True
+                )
+                and features.get("observation_candidate_rule_applied") is True
+            )
             # A monomorphized semantic-scope helper can still carry a concrete,
             # compiler-derived TypeId in the audit.  Prefer that authenticated
             # KEY5 whenever it is present; reserve KEY4 runtime resolution for
             # the genuine definition-level type_id=0 sentinel.
             if _plain_integer(key["type_id"]) and key["type_id"] > 0:
-                identity_mode = "numeric_exact"
+                identity_mode = (
+                    "numeric_dynamic_layout"
+                    if observation_candidate and not positive_layout
+                    else "numeric_exact"
+                )
             elif rewrite_status == GENERIC_REWRITE_STATUS:
                 identity_mode = "generic_runtime_type"
             else:
@@ -2686,6 +2735,22 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 and positive_identity
                 and positive_layout
                 and audit_numeric_complete
+            )
+            dynamic_layout_complete = (
+                identity_mode == "numeric_dynamic_layout"
+                and positive_identity
+                and _plain_integer(key["type_id"])
+                and key["type_id"] > 0
+                and key["requested_size"] is None
+                and key["align"] is None
+                and features.get("runtime_join_key_complete") is False
+                and features.get("runtime_layout_captured_by_semantic_scope") is True
+                and features.get("runtime_layout_subcohort_contract")
+                == BORROWED_VEC_RESERVE_SUBCOHORT_CONTRACT
+                and features.get("runtime_observation_min_requested_bytes")
+                == BORROWED_VEC_RESERVE_MIN_REQUESTED_BYTES
+                and features.get("runtime_observation_max_requested_bytes")
+                == BORROWED_VEC_RESERVE_MAX_REQUESTED_BYTES
             )
             generic_complete = (
                 identity_mode == "generic_runtime_type"
@@ -2714,6 +2779,15 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                         "compiler audit contains a duplicate exact runtime tuple"
                     )
                 numeric_keys.add(exact_key)
+            dynamic_layout_key = tuple(
+                key[field] for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+            )
+            if dynamic_layout_complete:
+                if dynamic_layout_key in dynamic_layout_keys:
+                    raise CampaignContractError(
+                        "compiler audit contains a duplicate dynamic-layout KEY3"
+                    )
+                dynamic_layout_keys.add(dynamic_layout_key)
             if generic_key_materialized:
                 resolution_key = tuple(
                     int(key[field]) for field in GENERIC_RESOLUTION_KEY_FIELDS
@@ -2741,6 +2815,11 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                     # Compatibility name now means a claim-complete numeric KEY5.
                     "runtime_join_key_complete": numeric_complete,
                     "numeric_exact_key_complete": numeric_complete,
+                    "dynamic_layout_key_complete": dynamic_layout_complete,
+                    "dynamic_layout_identity_key": {
+                        field: key[field]
+                        for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+                    },
                     "generic_resolution_key_complete": generic_complete,
                     "generic_resolution_key": generic_resolution_key,
                     "audit_file": path.relative_to(audit_root).as_posix(),
@@ -2772,6 +2851,9 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 }
             )
     numeric_rows = [row for row in rows if row["identity_mode"] == "numeric_exact"]
+    dynamic_layout_rows = [
+        row for row in rows if row["identity_mode"] == "numeric_dynamic_layout"
+    ]
     generic_rows = [
         row for row in rows if row["identity_mode"] == "generic_runtime_type"
     ]
@@ -2786,12 +2868,16 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
             ),
             "adaptive_site_key_unchanged": True,
             "numeric_resolution": "exact-key5-only",
+            "dynamic_layout_resolution": (
+                "authenticated-key3-to-one-or-more-runtime-key5-in-4k-through-32k"
+            ),
             "generic_resolution": (
                 "authenticated-typeid-zero-key4-to-one-runtime-positive-typeid-key5"
             ),
         },
         "site_count": len(rows),
         "numeric_site_count": len(numeric_rows),
+        "dynamic_layout_site_count": len(dynamic_layout_rows),
         "generic_site_count": len(generic_rows),
         "complete_join_key_count": sum(
             int(row["runtime_join_key_complete"]) for row in rows
@@ -2802,6 +2888,10 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
         "numeric_exact_key_complete_count": sum(
             int(row["numeric_exact_key_complete"]) for row in numeric_rows
         ),
+        "dynamic_layout_key_complete_count": sum(
+            int(row["dynamic_layout_key_complete"])
+            for row in dynamic_layout_rows
+        ),
         "generic_resolution_key_complete_count": sum(
             int(row["generic_resolution_key_complete"]) for row in generic_rows
         ),
@@ -2811,6 +2901,13 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 and str(row["lifetime_hint_basis"]).startswith(
                     "automatic_rust_lifetime_prior_"
                 )
+            )
+            for row in rows
+        ),
+        "applied_observation_candidate_count": sum(
+            int(
+                row["lifetime_hint"] == BORROWED_VEC_RESERVE_OBSERVE_HINT
+                and row["lifetime_hint_basis"] in DYNAMIC_BUFFER_OBSERVE_BASES
             )
             for row in rows
         ),
@@ -2846,6 +2943,12 @@ def refresh_cached_compiler_site_export(
     ):
         raise CampaignContractError(
             "cached compiler audit and regenerated applied-prior rows disagree"
+        )
+    if export["applied_observation_candidate_count"] != compiler_audit.get(
+        "applied_observation_candidate_count"
+    ):
+        raise CampaignContractError(
+            "cached compiler audit and regenerated observation candidates disagree"
         )
     write_json(compiler_sites_path, export)
     cached["compiler_sites"] = compiler_site_export_summary(export)
@@ -3150,6 +3253,14 @@ def build_stage_a_binary(
     ):
         raise CampaignContractError(
             "compiler applied-prior audit rows do not equal exported applied rows"
+        )
+    if (
+        build_group == "compiler-prior"
+        and compiler_sites["applied_observation_candidate_count"]
+        != audit["applied_observation_candidate_count"]
+    ):
+        raise CampaignContractError(
+            "compiler observation-candidate audit rows do not equal exported rows"
         )
     write_json(build_dir / "compiler-sites.json", compiler_sites)
     semantic_rewrite_applied = (
@@ -3579,6 +3690,7 @@ def join_compiler_runtime_sites(
 ) -> dict[str, Any]:
     key_fields = runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
     runtime_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    runtime_by_dynamic_key: dict[tuple[Any, ...], list[tuple[Any, ...]]] = {}
     runtime_by_generic_key: dict[tuple[Any, ...], list[tuple[Any, ...]]] = {}
     for row in runtime_rows:
         try:
@@ -3592,6 +3704,8 @@ def join_compiler_runtime_sites(
                 "runtime observation contains a duplicate exact site tuple"
             )
         runtime_by_key[key] = dict(row)
+        dynamic_key = tuple(row[field] for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS)
+        runtime_by_dynamic_key.setdefault(dynamic_key, []).append(key)
         generic_key = tuple(row[field] for field in GENERIC_RESOLUTION_KEY_FIELDS)
         runtime_by_generic_key.setdefault(generic_key, []).append(key)
 
@@ -3600,11 +3714,16 @@ def join_compiler_runtime_sites(
     applied_prior_total = 0
     applied_prior_incomplete = 0
     numeric_keys: set[tuple[Any, ...]] = set()
+    dynamic_keys: set[tuple[Any, ...]] = set()
     generic_keys: set[tuple[Any, ...]] = set()
     claimed_runtime_keys: set[tuple[Any, ...]] = set()
     numeric_total = 0
     numeric_complete = 0
     numeric_matched = 0
+    dynamic_total = 0
+    dynamic_complete = 0
+    dynamic_resolved = 0
+    dynamic_resolved_subcohorts = 0
     generic_total = 0
     generic_complete = 0
     generic_resolved = 0
@@ -3625,18 +3744,28 @@ def join_compiler_runtime_sites(
         if not isinstance(compiler_audit_key, dict):
             compiler_audit_key = _runtime_key_dict(compiler)
         identity_mode = compiler.get("identity_mode")
-        if identity_mode not in {"numeric_exact", "generic_runtime_type"}:
+        if identity_mode not in {
+            "numeric_exact",
+            "numeric_dynamic_layout",
+            "generic_runtime_type",
+        }:
             if _plain_integer(compiler_audit_key.get("type_id")) and (
                 compiler_audit_key["type_id"] > 0
             ):
-                identity_mode = "numeric_exact"
+                identity_mode = (
+                    "numeric_dynamic_layout"
+                    if compiler.get("dynamic_layout_key_complete") is True
+                    else "numeric_exact"
+                )
             elif compiler.get("rewrite_status") == GENERIC_REWRITE_STATUS:
                 identity_mode = "generic_runtime_type"
             else:
                 identity_mode = "invalid"
 
         runtime: dict[str, Any] | None = None
+        runtime_subcohorts: list[dict[str, Any]] = []
         resolved_runtime_key: tuple[Any, ...] | None = None
+        resolved_runtime_keys: list[tuple[Any, ...]] = []
         resolution_status = "rejected_compiler_identity_contract"
         rejection_reason: str | None = None
         key_complete = False
@@ -3684,12 +3813,123 @@ def join_compiler_runtime_sites(
                     rejection_reason = "runtime_latest_static_prior_mismatch"
                 else:
                     runtime = candidate_runtime
+                    runtime_subcohorts = [candidate_runtime]
                     resolved_runtime_key = key
+                    resolved_runtime_keys = [key]
                     resolution_status = "exact_numeric_match"
                     numeric_matched += 1
             else:
                 resolution_status = "ineligible_dynamic_layout"
                 rejection_reason = "numeric_exact_key_incomplete"
+
+        elif identity_mode == "numeric_dynamic_layout":
+            dynamic_total += 1
+            dynamic_key_dict = compiler.get("dynamic_layout_identity_key")
+            if not isinstance(dynamic_key_dict, dict):
+                dynamic_key_dict = {
+                    field: compiler_audit_key.get(field)
+                    for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+                }
+            dynamic_key = tuple(
+                dynamic_key_dict.get(field)
+                for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+            )
+            features = compiler.get("lifetime_analysis_features")
+            if not isinstance(features, dict):
+                features = {}
+            computed_complete = (
+                all(
+                    _plain_integer(dynamic_key_dict.get(field))
+                    and dynamic_key_dict[field] > 0
+                    for field in DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+                )
+                and compiler_audit_key.get("requested_size") is None
+                and compiler_audit_key.get("align") is None
+                and compiler.get("lifetime_hint")
+                == BORROWED_VEC_RESERVE_OBSERVE_HINT
+                and compiler.get("lifetime_hint_basis")
+                in DYNAMIC_BUFFER_OBSERVE_BASES
+                and compiler.get("rewrite_status") in APPLIED_ALLOCATION_SCOPE_STATUSES
+                and (
+                    features.get("borrowed_vec_reserve_prior_eligible") is True
+                    or features.get(
+                        "dynamic_buffer_with_capacity_observation_eligible"
+                    )
+                    is True
+                )
+                and features.get("observation_candidate_rule_applied") is True
+                and features.get("runtime_layout_captured_by_semantic_scope") is True
+                and features.get("runtime_layout_subcohort_contract")
+                == BORROWED_VEC_RESERVE_SUBCOHORT_CONTRACT
+                and features.get("runtime_observation_min_requested_bytes")
+                == BORROWED_VEC_RESERVE_MIN_REQUESTED_BYTES
+                and features.get("runtime_observation_max_requested_bytes")
+                == BORROWED_VEC_RESERVE_MAX_REQUESTED_BYTES
+            )
+            key_complete = (
+                compiler.get("dynamic_layout_key_complete") is True
+                and computed_complete
+            )
+            if key_complete:
+                dynamic_complete += 1
+                if dynamic_key in dynamic_keys:
+                    raise CampaignContractError(
+                        "compiler export contains a duplicate dynamic-layout KEY3"
+                    )
+                dynamic_keys.add(dynamic_key)
+                candidate_keys = runtime_by_dynamic_key.get(dynamic_key, [])
+                out_of_band = [
+                    key
+                    for key in candidate_keys
+                    if not (
+                        _plain_integer(key[3])
+                        and BORROWED_VEC_RESERVE_MIN_REQUESTED_BYTES
+                        <= key[3]
+                        <= BORROWED_VEC_RESERVE_MAX_REQUESTED_BYTES
+                        and _positive_power_of_two(key[4])
+                    )
+                ]
+                if out_of_band:
+                    resolution_status = "rejected_runtime_layout_outside_candidate_band"
+                    rejection_reason = "runtime_key5_outside_authenticated_4k_32k_band"
+                elif not candidate_keys:
+                    resolution_status = "unobserved"
+                else:
+                    candidate_rows = [runtime_by_key[key] for key in candidate_keys]
+                    if any(
+                        not _plain_integer(row.get("allocation_count"))
+                        or row["allocation_count"] <= 0
+                        for row in candidate_rows
+                    ):
+                        resolution_status = "rejected_zero_runtime_allocations"
+                        rejection_reason = "runtime_allocation_count_not_positive"
+                    elif any(
+                        row.get("predictor_key_ambiguous") is not False
+                        for row in candidate_rows
+                    ):
+                        resolution_status = "rejected_predictor_key_ambiguous"
+                        rejection_reason = "runtime_predictor_key_ambiguous"
+                    elif any(
+                        row.get("latest_static_prior") != 0
+                        for row in candidate_rows
+                    ):
+                        resolution_status = "rejected_observation_transport_mismatch"
+                        rejection_reason = (
+                            "observation_candidate_must_transport_no_static_prior"
+                        )
+                    else:
+                        runtime_subcohorts = candidate_rows
+                        runtime = candidate_rows[0] if len(candidate_rows) == 1 else None
+                        resolved_runtime_keys = list(candidate_keys)
+                        resolved_runtime_key = (
+                            candidate_keys[0] if len(candidate_keys) == 1 else None
+                        )
+                        resolution_status = "dynamic_key3_runtime_layout_match"
+                        dynamic_resolved += 1
+                        dynamic_resolved_subcohorts += len(candidate_keys)
+            else:
+                resolution_status = "rejected_dynamic_layout_contract"
+                rejection_reason = "dynamic_layout_key3_contract_incomplete"
 
         elif identity_mode == "generic_runtime_type":
             generic_total += 1
@@ -3808,7 +4048,9 @@ def join_compiler_runtime_sites(
                         rejection_reason = "runtime_latest_static_prior_mismatch"
                     else:
                         runtime = candidate_runtime
+                        runtime_subcohorts = [candidate_runtime]
                         resolved_runtime_key = candidate_key
+                        resolved_runtime_keys = [candidate_key]
                         resolution_status = "generic_unique_runtime_type_match"
                         generic_resolved += 1
 
@@ -3818,12 +4060,12 @@ def join_compiler_runtime_sites(
 
         if key_complete is False and identity_mode != "invalid":
             applied_prior_incomplete += int(applied_prior)
-        if resolved_runtime_key is not None:
-            if resolved_runtime_key in claimed_runtime_keys:
+        for claimed_key in resolved_runtime_keys:
+            if claimed_key in claimed_runtime_keys:
                 raise CampaignContractError(
                     "one runtime exact site tuple was claimed by multiple compiler rows"
                 )
-            claimed_runtime_keys.add(resolved_runtime_key)
+            claimed_runtime_keys.add(claimed_key)
         resolution_counts[resolution_status] += 1
         joined.append(
             {
@@ -3841,17 +4083,22 @@ def join_compiler_runtime_sites(
                     if resolved_runtime_key is not None
                     else None
                 ),
-                "matched": runtime is not None,
+                "resolved_runtime_exact_keys": [
+                    dict(zip(key_fields, key, strict=True))
+                    for key in resolved_runtime_keys
+                ],
+                "matched": bool(runtime_subcohorts),
                 "applied_prior_hint": applied_prior,
                 "resolution_status": resolution_status,
                 "rejection_reason": rejection_reason,
                 "compiler": compiler,
                 "runtime": runtime,
+                "runtime_subcohorts": runtime_subcohorts,
             }
         )
 
     matched = sum(int(row["matched"]) for row in joined)
-    complete = numeric_complete + generic_complete
+    complete = numeric_complete + dynamic_complete + generic_complete
     generic_status = (
         "no-generic-rewrite-coverage"
         if generic_resolved == 0
@@ -3879,6 +4126,13 @@ def join_compiler_runtime_sites(
         for row in joined
         if row["matched"] and row["applied_prior_hint"]
     ]
+    matched_observation_candidate_runtime = [
+        runtime
+        for row in joined
+        if row["matched"]
+        and row["identity_mode"] == "numeric_dynamic_layout"
+        for runtime in row["runtime_subcohorts"]
+    ]
     executed_static_prior_runtime = [
         row
         for row in runtime_by_key.values()
@@ -3886,14 +4140,26 @@ def join_compiler_runtime_sites(
         and row["latest_static_prior"] in {1, 2}
     ]
     return {
-        "source": "unialloc-compiler-runtime-exact-site-join-v2",
+        "source": "unialloc-compiler-runtime-exact-site-join-v3",
         "status": static_status,
         "generic_rewrite_status": generic_status,
+        "dynamic_layout_status": (
+            "no-dynamic-layout-coverage"
+            if dynamic_resolved == 0
+            else (
+                "complete-dynamic-layout-coverage"
+                if dynamic_resolved == dynamic_total
+                else "partial-dynamic-layout-coverage"
+            )
+        ),
         "claim_scope": {
             "runtime_exact_observation_key_unchanged": True,
             "runtime_exact_observation_key": list(key_fields),
             "adaptive_site_key_unchanged": True,
             "numeric_resolution": "exact-key5-only",
+            "dynamic_layout_resolution": (
+                "authenticated-key3-to-one-or-more-runtime-key5-in-4k-through-32k"
+            ),
             "generic_resolution": (
                 "authenticated-typeid-zero-key4-to-one-runtime-positive-typeid-key5"
             ),
@@ -3908,6 +4174,13 @@ def join_compiler_runtime_sites(
         "numeric_complete_key_count": numeric_complete,
         "numeric_matched_site_count": numeric_matched,
         "numeric_unmatched_site_count": numeric_complete - numeric_matched,
+        "dynamic_layout_compiler_site_count": dynamic_total,
+        "dynamic_layout_key_complete_count": dynamic_complete,
+        "dynamic_layout_resolved_site_count": dynamic_resolved,
+        "dynamic_layout_resolved_subcohort_count": dynamic_resolved_subcohorts,
+        "dynamic_layout_rejected_or_unobserved_site_count": (
+            dynamic_total - dynamic_resolved
+        ),
         "generic_compiler_site_count": generic_total,
         "generic_resolution_key_complete_count": generic_complete,
         "generic_resolved_site_count": generic_resolved,
@@ -3916,6 +4189,10 @@ def join_compiler_runtime_sites(
         "matched_applied_prior_outcomes": _aggregate_runtime_outcomes(
             matched_applied_prior_runtime,
             scope="resolved-compiler-applied-prior-key5",
+        ),
+        "matched_observation_candidate_outcomes": _aggregate_runtime_outcomes(
+            matched_observation_candidate_runtime,
+            scope="resolved-borrowed-vec-observation-key3-runtime-key5-subcohorts",
         ),
         "executed_static_prior_outcomes": _aggregate_runtime_outcomes(
             executed_static_prior_runtime,
@@ -3934,6 +4211,7 @@ def join_compiler_runtime_sites(
             else 0.0
         ),
         "static_prior_join_success": applied_prior_matched > 0,
+        "observation_candidate_join_success": dynamic_resolved > 0,
         "static_coverage_claim_eligible": applied_prior_matched > 0,
         "generic_runtime_join_rewrite_success": generic_resolved > 0,
         "runtime_join_rewrite_success": matched > 0,

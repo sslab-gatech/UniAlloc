@@ -212,6 +212,49 @@ def generic_runtime_row(
     }
 
 
+def dynamic_compiler_row(
+    *, callsite: int = 41, type_id: int = 43, module_id: int = 47
+) -> dict[str, object]:
+    audit_key = {
+        "callsite": callsite,
+        "type_id": type_id,
+        "module_id": module_id,
+        "requested_size": None,
+        "align": None,
+    }
+    features = {
+        "runtime_join_key_complete": False,
+        "borrowed_vec_reserve_prior_eligible": True,
+        "observation_candidate_rule_applied": True,
+        "runtime_layout_captured_by_semantic_scope": True,
+        "runtime_layout_subcohort_contract": (
+            campaign.BORROWED_VEC_RESERVE_SUBCOHORT_CONTRACT
+        ),
+        "runtime_observation_min_requested_bytes": (
+            campaign.BORROWED_VEC_RESERVE_MIN_REQUESTED_BYTES
+        ),
+        "runtime_observation_max_requested_bytes": (
+            campaign.BORROWED_VEC_RESERVE_MAX_REQUESTED_BYTES
+        ),
+    }
+    return {
+        **audit_key,
+        "identity_mode": "numeric_dynamic_layout",
+        "compiler_audit_key": audit_key,
+        "dynamic_layout_identity_key": {
+            field: audit_key[field]
+            for field in campaign.DYNAMIC_LAYOUT_IDENTITY_KEY_FIELDS
+        },
+        "runtime_join_key_complete": False,
+        "numeric_exact_key_complete": False,
+        "dynamic_layout_key_complete": True,
+        "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+        "lifetime_hint": campaign.BORROWED_VEC_RESERVE_OBSERVE_HINT,
+        "lifetime_hint_basis": campaign.BORROWED_VEC_RESERVE_OBSERVE_BASIS,
+        "lifetime_analysis_features": features,
+    }
+
+
 def smaps_text(*, rss: int, anon_hugepages: int) -> str:
     values = {
         "Rss": rss,
@@ -592,6 +635,48 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 "exact_numeric_match", joined["rows"][0]["resolution_status"]
             )
 
+    def test_borrowed_vec_candidate_exports_authenticated_dynamic_key3(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime_key = {
+                "callsite": 41,
+                "type_id": 43,
+                "module_id": 47,
+                "requested_size_bytes": None,
+                "requested_align_bytes": None,
+            }
+            write_audit(
+                root,
+                enabled=True,
+                basis=campaign.BORROWED_VEC_RESERVE_OBSERVE_BASIS,
+                hint=campaign.BORROWED_VEC_RESERVE_OBSERVE_HINT,
+                confidence=70,
+                runtime_key=runtime_key,
+            )
+            path = root / "audit.json"
+            document = json.loads(path.read_text(encoding="utf-8"))
+            features = document["rewrite_candidates"][0][
+                "lifetime_analysis_features"
+            ]
+            features.update(
+                dynamic_compiler_row()["lifetime_analysis_features"]
+            )
+            path.write_text(json.dumps(document), encoding="utf-8")
+
+            summary = campaign.summarize_compiler_prior_audits(root)
+            exported = campaign.export_compiler_site_features(root)
+            self.assertEqual(0, summary["classified_candidate_count"])
+            self.assertEqual(0, summary["applied_prior_hinted_candidate_count"])
+            self.assertEqual(1, summary["applied_observation_candidate_count"])
+            self.assertEqual(0, exported["numeric_site_count"])
+            self.assertEqual(1, exported["dynamic_layout_site_count"])
+            self.assertEqual(1, exported["dynamic_layout_key_complete_count"])
+            self.assertEqual(1, exported["applied_observation_candidate_count"])
+            candidate = exported["rows"][0]
+            self.assertEqual("numeric_dynamic_layout", candidate["identity_mode"])
+            self.assertTrue(candidate["dynamic_layout_key_complete"])
+            self.assertFalse(candidate["runtime_join_key_complete"])
+
     def test_reuse_refreshes_evaluator_derived_compiler_site_export(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -857,6 +942,80 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual(1, outcomes["site_count"])
         self.assertEqual(3, outcomes["allocation_count"])
         self.assertEqual(3, outcomes["long_outcomes"])
+
+    def test_dynamic_key3_joins_multiple_runtime_layout_subcohorts(self) -> None:
+        compiler = dynamic_compiler_row()
+        runtime_8k = generic_runtime_row(
+            callsite=41,
+            type_id=43,
+            module_id=47,
+            requested_size=8192,
+            align=8,
+            allocation_count=3,
+            latest_static_prior=0,
+        )
+        runtime_15k = generic_runtime_row(
+            callsite=41,
+            type_id=43,
+            module_id=47,
+            requested_size=15_360,
+            align=16,
+            allocation_count=5,
+            latest_static_prior=0,
+        )
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [runtime_8k, runtime_15k]
+        )
+        joined = result["rows"][0]
+        self.assertEqual(
+            "dynamic_key3_runtime_layout_match", joined["resolution_status"]
+        )
+        self.assertTrue(joined["matched"])
+        self.assertIsNone(joined["resolved_runtime_exact_key"])
+        self.assertEqual(2, len(joined["resolved_runtime_exact_keys"]))
+        self.assertEqual(2, len(joined["runtime_subcohorts"]))
+        self.assertEqual(1, result["dynamic_layout_resolved_site_count"])
+        self.assertEqual(2, result["dynamic_layout_resolved_subcohort_count"])
+        self.assertTrue(result["observation_candidate_join_success"])
+        outcomes = result["matched_observation_candidate_outcomes"]
+        self.assertEqual(2, outcomes["site_count"])
+        self.assertEqual(8, outcomes["allocation_count"])
+        self.assertEqual(
+            3 * 8192 + 5 * 15_360, outcomes["allocation_requested_bytes"]
+        )
+        self.assertEqual("no-static-coverage", result["status"])
+
+    def test_dynamic_key3_rejects_out_of_band_and_static_prior_transport(self) -> None:
+        compiler = dynamic_compiler_row()
+        out_of_band = generic_runtime_row(
+            callsite=41,
+            type_id=43,
+            module_id=47,
+            requested_size=1024,
+            latest_static_prior=0,
+        )
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [out_of_band]
+        )
+        self.assertEqual(
+            "rejected_runtime_layout_outside_candidate_band",
+            result["rows"][0]["resolution_status"],
+        )
+
+        wrong_transport = generic_runtime_row(
+            callsite=41,
+            type_id=43,
+            module_id=47,
+            requested_size=8192,
+            latest_static_prior=2,
+        )
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [wrong_transport]
+        )
+        self.assertEqual(
+            "rejected_observation_transport_mismatch",
+            result["rows"][0]["resolution_status"],
+        )
 
     def test_join_separates_matched_from_all_executed_prior_outcomes(self) -> None:
         compiler = generic_compiler_row()
