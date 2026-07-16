@@ -500,8 +500,8 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                 "rustc-workspace-wrapper-direct-load-rlib-v1",
             )
             self.assertEqual(
-                record["direct_load_route"]["swc_cargo_lock_before_sha256"],
-                record["direct_load_route"]["swc_cargo_lock_after_sha256"],
+                record["direct_load_route"]["cargo_lock_before_sha256"],
+                record["direct_load_route"]["cargo_lock_after_sha256"],
             )
             record_path = pathlib.Path(record["build_path"])
             record_path.chmod(0o600)
@@ -547,6 +547,155 @@ class PrimaryMacroAllocatorBaselineTests(unittest.TestCase):
                         ),
                     )
             record_path.write_text(json.dumps(record), encoding="utf-8")
+
+    def test_actix_unialloc_routes_each_locked_bench_through_direct_load(self) -> None:
+        target = self.contract.targets["actix_web"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            implementation_root = root / "implementation"
+            implementation_root.mkdir()
+            implementation = campaign.redb_actix.ImplementationSnapshot(
+                revision=self.contract.suite.implementation_revision,
+                sha256=self.contract.suite.implementation_sha256,
+                path=implementation_root,
+                manifest_path=implementation_root / "snapshot.json",
+                file_count=1,
+                size_bytes=1,
+                repository=root,
+            )
+            raw = root / "raw"
+            build_root = raw / "builds/actix_web/unialloc"
+            executed: list[tuple[list[str], dict[str, str]]] = []
+
+            def copy_checkout(_source: pathlib.Path, worktree: pathlib.Path) -> None:
+                for package, _bench, _selector, relative in (
+                    campaign.redb_actix.ACTIX_BENCHES.values()
+                ):
+                    source_path = worktree / relative
+                    source_path.parent.mkdir(parents=True, exist_ok=True)
+                    source_path.write_text("fn benchmark() {}\n")
+                    manifest = worktree / package / "Cargo.toml"
+                    manifest.parent.mkdir(parents=True, exist_ok=True)
+                    manifest.write_text(
+                        f"[package]\nname='{package}'\nversion='0.0.0'\n"
+                    )
+                (worktree / "Cargo.toml").write_text("[workspace]\n")
+                (worktree / "Cargo.lock").write_text("version = 4\n")
+
+            def direct_load(*_args: object) -> dict[str, object]:
+                output = build_root / "direct-load"
+                output.mkdir(parents=True)
+                rlib = output / "libunialloc.rlib"
+                rlib.write_bytes(b"rlib")
+                (output / "build.stdout").write_bytes(b"ok")
+                (output / "build.stderr").write_bytes(b"")
+                return {
+                    "success": True,
+                    "allocator_revision": implementation.revision,
+                    "unialloc_implementation_sha256": implementation.sha256,
+                    "campaign_snapshot_sha256": implementation.sha256,
+                    "rlib": str(rlib),
+                    "rlib_sha256": campaign.sha256_file(rlib),
+                    "dependency_dir": str(output),
+                }
+
+            def wrapper(path: pathlib.Path) -> pathlib.Path:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("#!/bin/sh\n")
+                path.chmod(0o755)
+                return path
+
+            def execute(
+                command: list[str], **kwargs: object
+            ) -> dict[str, object]:
+                environment = dict(kwargs["env"])
+                executed.append((list(command), environment))
+                bench = command[command.index("--bench") + 1]
+                executable = root / f"executable-{bench}"
+                executable.write_bytes(bench.encode())
+                executable.chmod(0o755)
+                (build_root / "cargo-target").mkdir(parents=True, exist_ok=True)
+                return {
+                    "command": command,
+                    "stdout": bench.encode(),
+                    "stderr": b"",
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "wall_seconds": 0.1,
+                }
+
+            with mock.patch.object(
+                campaign.matrix, "copy_checkout", side_effect=copy_checkout
+            ), mock.patch.object(
+                campaign.redb_actix,
+                "patch_actix_get_body_benchmark",
+                return_value={"success": True},
+            ), mock.patch.object(
+                campaign.psr, "build_direct_load_rlib", side_effect=direct_load
+            ), mock.patch.object(
+                campaign.psr, "ensure_direct_load_wrapper", side_effect=wrapper
+            ), mock.patch.object(
+                campaign.matrix, "execute", side_effect=execute
+            ), mock.patch.object(
+                campaign.redb_actix,
+                "executables_from_cargo_json",
+                side_effect=lambda text, _bench: [root / f"executable-{text}"],
+            ), mock.patch.object(
+                campaign, "allocator_activation_proof", return_value={"success": True}
+            ), mock.patch.object(campaign, "_add_dependencies") as add_dependencies:
+                record = campaign._build_actix(
+                    protocol=self.protocol,
+                    contract=self.contract,
+                    target=target,
+                    source=campaign.SourceContext("actix_web", checkout, {}),
+                    build_variant="unialloc",
+                    implementation=implementation,
+                    raw_dir=raw,
+                    toolchain=campaign.psr.TOOLCHAIN,
+                    jobs=8,
+                    timeout=60,
+                )
+                campaign.validate_reusable_build(
+                    pathlib.Path(record["build_path"]),
+                    target=target,
+                    variant="unialloc",
+                    protocol_fingerprint=self.protocol.fingerprint,
+                    expected_implementation=implementation,
+                    build_fingerprint=campaign.build_contract_fingerprint(
+                        self.protocol,
+                        target_id="actix_web",
+                        build_variant="unialloc",
+                    ),
+                )
+            add_dependencies.assert_not_called()
+            self.assertEqual(len(executed), 4)
+            self.assertEqual(
+                {env["UNIALLOC_DIRECT_LOAD_TARGET_CRATE"] for _cmd, env in executed},
+                set(campaign.DIRECT_LOAD_TARGET_CRATES["actix_web"]),
+            )
+            self.assertTrue(all("--locked" in command for command, _env in executed))
+            self.assertTrue(
+                all("RUSTC_WORKSPACE_WRAPPER" in env for _command, env in executed)
+            )
+            self.assertEqual(record["dependency_audit"], [])
+            self.assertEqual(
+                record["direct_load_route"]["cargo_lock_before_sha256"],
+                record["direct_load_route"]["cargo_lock_after_sha256"],
+            )
+
+    def test_rustpython_unialloc_uses_the_execution_direct_load_target(self) -> None:
+        self.assertEqual(campaign.DIRECT_LOAD_TARGET_CRATES["rustpython"], ("execution",))
+        fingerprint = campaign.build_contract_fingerprint(
+            self.protocol, target_id="rustpython", build_variant="unialloc"
+        )
+        self.assertNotEqual(
+            fingerprint,
+            campaign.build_contract_fingerprint(
+                self.protocol, target_id="polars", build_variant="unialloc"
+            ),
+        )
 
     def test_timed_environment_is_target_scoped_and_libc_default(self) -> None:
         contamination = {

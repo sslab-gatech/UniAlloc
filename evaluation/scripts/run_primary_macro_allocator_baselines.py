@@ -94,6 +94,19 @@ VARIANT_DEFINITIONS: Mapping[str, Mapping[str, Any]] = {
     },
 }
 
+DIRECT_LOAD_TARGET_CRATES: Mapping[str, tuple[str, ...]] = {
+    "swc": ("typescript",),
+    "rustpython": ("execution",),
+    "actix_web": tuple(
+        sorted(
+            {
+                bench.replace("-", "_")
+                for _package, bench, _selector, _source in redb_actix.ACTIX_BENCHES.values()
+            }
+        )
+    ),
+}
+
 TARGET_EXECUTION_CONTRACTS: Mapping[str, Mapping[str, Any]] = {
     "collections": {
         "cpu_list": "0-15",
@@ -1243,7 +1256,7 @@ def build_contract_fingerprint(
         "jemalloc": {"tikv-jemallocator": "0.7.0"},
         "system": {},
     }[build_variant]
-    if target_id == "swc" and build_variant == "unialloc":
+    if target_id in DIRECT_LOAD_TARGET_CRATES and build_variant == "unialloc":
         pins = {
             **pins,
             "injection_route": "rustc-workspace-wrapper-direct-load-rlib-v1",
@@ -1376,7 +1389,7 @@ def validate_reusable_build(
         if digest not in checked:
             allocator_activation_proof(binary, build_variant)
             checked.add(digest)
-    if target.id == "swc" and build_variant == "unialloc":
+    if target.id in DIRECT_LOAD_TARGET_CRATES and build_variant == "unialloc":
         route = row.get("direct_load_route")
         if (
             not isinstance(route, dict)
@@ -1385,10 +1398,12 @@ def validate_reusable_build(
             or route.get("implementation_revision")
             != expected_implementation.revision
             or route.get("implementation_sha256") != expected_implementation.sha256
-            or route.get("swc_cargo_lock_before_sha256") != sha256_file(lock_path)
-            or route.get("swc_cargo_lock_after_sha256") != sha256_file(lock_path)
+            or tuple(route.get("target_crates", ()))
+            != DIRECT_LOAD_TARGET_CRATES[target.id]
+            or route.get("cargo_lock_before_sha256") != sha256_file(lock_path)
+            or route.get("cargo_lock_after_sha256") != sha256_file(lock_path)
         ):
-            raise CampaignError(f"reusable SWC direct-load route mismatch: {path}")
+            raise CampaignError(f"reusable direct-load route mismatch: {path}")
         rlib_build = route.get("rlib_build")
         if (
             not isinstance(rlib_build, dict)
@@ -1401,19 +1416,19 @@ def validate_reusable_build(
             != expected_implementation.sha256
             or rlib_build.get("rlib_sha256") != route.get("rlib", {}).get("sha256")
         ):
-            raise CampaignError(f"reusable SWC direct-load build mismatch: {path}")
+            raise CampaignError(f"reusable direct-load build mismatch: {path}")
         try:
             immutable_evidence.validate_artifact_ref(
-                route.get("rlib"), context="SWC direct-load rlib"
+                route.get("rlib"), context="direct-load rlib"
             )
             immutable_evidence.validate_artifact_ref(
-                route.get("wrapper"), context="SWC direct-load wrapper"
+                route.get("wrapper"), context="direct-load wrapper"
             )
             immutable_evidence.validate_artifact_ref(
-                route.get("build_stdout"), context="SWC direct-load build stdout"
+                route.get("build_stdout"), context="direct-load build stdout"
             )
             immutable_evidence.validate_artifact_ref(
-                route.get("build_stderr"), context="SWC direct-load build stderr"
+                route.get("build_stderr"), context="direct-load build stderr"
             )
         except immutable_evidence.ImmutableEvidenceError as error:
             raise CampaignError(str(error)) from error
@@ -2009,6 +2024,7 @@ def _build_actix(
             for package, _bench, _selector, _source in redb_actix.ACTIX_BENCHES.values()
         }
     )
+    direct_load_route = build_variant == "unialloc"
     dependency_audit = (
         _add_dependencies(
             package_manifests,
@@ -2016,7 +2032,7 @@ def _build_actix(
             implementation=implementation,
             workspace_manifest=worktree / "Cargo.toml",
         )
-        if build_variant != "system"
+        if build_variant != "system" and not direct_load_route
         else []
     )
     env = _clean_build_environment(
@@ -2024,6 +2040,39 @@ def _build_actix(
         raw_dir / "tmp" / "builds" / target.id / build_variant,
         build_variant=build_variant,
     )
+    direct_load: dict[str, Any] | None = None
+    direct_wrapper: pathlib.Path | None = None
+    lock = worktree / "Cargo.lock"
+    lock_before = sha256_file(lock)
+    if direct_load_route:
+        if toolchain != psr.TOOLCHAIN:
+            raise CampaignError(
+                "Actix direct-load route requires the primary PSR toolchain"
+            )
+        snapshot = {
+            "path": str(implementation.path),
+            "unialloc_implementation_sha256": implementation.sha256,
+            "campaign_snapshot_sha256": implementation.sha256,
+            "allocator_revision": implementation.revision,
+        }
+        try:
+            direct_load = psr.build_direct_load_rlib(
+                build_root, snapshot, jobs, timeout
+            )
+            direct_wrapper = psr.ensure_direct_load_wrapper(
+                build_root / "tools/unialloc-direct-load-wrapper"
+            )
+        except psr.CampaignError as error:
+            raise CampaignError(str(error)) from error
+        env.update(
+            {
+                "RUSTC_WORKSPACE_WRAPPER": str(direct_wrapper),
+                "UNIALLOC_DIRECT_LOAD_RLIB": str(direct_load["rlib"]),
+                "UNIALLOC_DIRECT_LOAD_DEPENDENCY_DIR": str(
+                    direct_load["dependency_dir"]
+                ),
+            }
+        )
     selections = sorted(
         {value[:2] for value in redb_actix.ACTIX_BENCHES.values()}
     )
@@ -2043,7 +2092,15 @@ def _build_actix(
             "--jobs",
             str(jobs),
         ]
-        result = matrix.execute(command, cwd=worktree, env=env, timeout=timeout)
+        command_env = dict(env)
+        if direct_load_route:
+            command.insert(3, "--locked")
+            command_env["UNIALLOC_DIRECT_LOAD_TARGET_CRATE"] = bench.replace(
+                "-", "_"
+            )
+        result = matrix.execute(
+            command, cwd=worktree, env=command_env, timeout=timeout
+        )
         commands.append(_command_record(result, build_root, f"build-{package}-{bench}"))
         candidates = redb_actix.executables_from_cargo_json(
             result["stdout"].decode(errors="replace"), bench
@@ -2067,7 +2124,8 @@ def _build_actix(
         )
         for harness in target.harnesses
     }
-    lock = worktree / "Cargo.lock"
+    if direct_load_route and sha256_file(lock) != lock_before:
+        raise CampaignError("Actix Cargo.lock changed during direct-load builds")
     record = {
         **_base_build_record(
             protocol=protocol,
@@ -2081,6 +2139,30 @@ def _build_actix(
         "worktree": str(worktree.resolve()),
         "source_audit": source_audit,
         "bounded_get_body_patch": bounded_patch,
+        "direct_load_route": (
+            {
+                "id": "rustc-workspace-wrapper-direct-load-rlib-v1",
+                "implementation_revision": implementation.revision,
+                "implementation_sha256": implementation.sha256,
+                "rlib": immutable_evidence.artifact_ref(
+                    pathlib.Path(str(direct_load["rlib"]))
+                ),
+                "dependency_dir": str(direct_load["dependency_dir"]),
+                "wrapper": immutable_evidence.artifact_ref(direct_wrapper),
+                "build_stdout": immutable_evidence.artifact_ref(
+                    build_root / "direct-load/build.stdout"
+                ),
+                "build_stderr": immutable_evidence.artifact_ref(
+                    build_root / "direct-load/build.stderr"
+                ),
+                "target_crates": list(DIRECT_LOAD_TARGET_CRATES[target.id]),
+                "cargo_lock_before_sha256": lock_before,
+                "cargo_lock_after_sha256": sha256_file(lock),
+                "rlib_build": direct_load,
+            }
+            if direct_load is not None and direct_wrapper is not None
+            else None
+        ),
         "derived_cargo_lock_sha256": sha256_file(lock),
         "dependency_audit": dependency_audit,
         "commands": commands,
@@ -2153,7 +2235,9 @@ def _build_psr_target(
         raise CampaignError(str(error)) from error
     allocator_patch = _replace_psr_allocator(prepared, build_variant=build_variant)
     manifest = pathlib.Path(str(prepared["manifest"]))
-    direct_load_route = target.id == "swc" and build_variant == "unialloc"
+    direct_load_route = (
+        target.id in DIRECT_LOAD_TARGET_CRATES and build_variant == "unialloc"
+    )
     dependency_audit = (
         _add_dependencies(
             [manifest],
@@ -2190,7 +2274,7 @@ def _build_psr_target(
     if direct_load_route:
         if toolchain != psr.TOOLCHAIN:
             raise CampaignError(
-                "SWC direct-load route requires the primary PSR toolchain"
+                f"{target.id} direct-load route requires the primary PSR toolchain"
             )
         snapshot = {
             "path": str(implementation.path),
@@ -2243,7 +2327,9 @@ def _build_psr_target(
     binary_row = _binary_rows({"primary": binary})["primary"]
     lock = worktree / "Cargo.lock"
     if direct_load_route and sha256_file(lock) != swc_lock_before:
-        raise CampaignError("SWC Cargo.lock changed during direct-load build")
+        raise CampaignError(
+            f"{target.id} Cargo.lock changed during direct-load build"
+        )
     record = {
         **_base_build_record(
             protocol=protocol,
@@ -2273,8 +2359,9 @@ def _build_psr_target(
                     build_root / "direct-load/build.stderr"
                 ),
                 "target_crate": str(spec.bench_name).replace("-", "_"),
-                "swc_cargo_lock_before_sha256": swc_lock_before,
-                "swc_cargo_lock_after_sha256": sha256_file(lock),
+                "target_crates": list(DIRECT_LOAD_TARGET_CRATES[target.id]),
+                "cargo_lock_before_sha256": swc_lock_before,
+                "cargo_lock_after_sha256": sha256_file(lock),
                 "rlib_build": direct_load,
             }
             if direct_load is not None and direct_wrapper is not None
