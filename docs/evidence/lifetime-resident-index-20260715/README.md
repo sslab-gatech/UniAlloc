@@ -51,7 +51,8 @@ unwind forces compiler abstention.
 | Tantivy resident index | runtime byte precision 99.826%, recall 98.350% | diagnostic ground truth; broad static admission failed |
 | DataFusion resident tables | generated-driver prior site matched 1/1; 2,048/2,048 target outcomes Long | exact classification mechanism inside a real query process; three timing pairs are preliminary |
 | SWC N=20 matched backing | THP pipeline time improved 4.076%, 95% CI [3.567%, 4.375%] | claim-grade physical-backing contrast; RSS increased 65.477% |
-| SWC mixed filler N=8 | extents 11 -> 3; THP peak RSS improved 34.453% | quick dirty-tree mechanism screen; scan caused an 8.732% time penalty |
+| SWC mixed prototype N=8 | extents 11 -> 3; THP peak RSS improved 34.453% | quick dirty-tree screen exposed an 8.732% scan penalty |
+| SWC mixed cache-first N=8 | extents 11 -> 3; THP peak RSS improved 34.185%; operation delta -0.058% | quick dirty-tree rescue screen; timing CI crosses zero |
 
 ## Bounded empty-extent retention
 
@@ -188,15 +189,30 @@ extent at 64 KiB region boundaries while preserving lane, backing, cohort,
 identity, and trailer provenance. Its four-arm SWC N=8 diagnostic used 32 fresh
 processes with identical 996,240 routed allocations and equal output digests.
 
-Mixed filling reduced legacy extent count from 11 to 3. In the THP arm it
+The initial prototype reduced legacy extent count from 11 to 3. In the THP arm it
 reduced paired peak RSS by 34.453%, 95% CI [32.191%, 36.034%], with physical
-backing in every sample. The current descriptor-table scan ran on 940,170
+backing in every sample. The prototype descriptor-table scan ran on 940,170
 allocations, or 94.372% of routed traffic, and caused an 8.732% operation-time
 penalty, 95% CI [8.096%, 9.411%].
 
-The mixed filler remains a memory mechanism. An O(1) validated
-`(lane, backing, cohort, bucket)` hint must replace the scan before integration
-or combined performance claims.
+A follow-on cache-first prototype adds an exact hot-region cache and an O(1)
+free-side ownership prefilter. It preserved three extents and 6,144 KiB of
+physical THP backing in every mixed-policy-2 process while changing the hot path:
+
+- exact mixed cache hits: 939,574 allocations;
+- cache lookup hit rate: 94.312%;
+- descriptor-scan selections: 940,170 -> 1,376, a 99.854% reduction;
+- scan attempts: 0.138% of routed allocations;
+- THP mixed-versus-legacy paired median saving: -0.058%, 95% CI
+  [-0.463%, 0.704%], four of eight pairs faster;
+- THP peak-RSS saving: 34.185%, 95% CI [32.561%, 37.152%], eight of eight
+  pairs lower.
+
+The quick screen therefore recovers THP operation-time parity while preserving
+the memory mechanism. Its N=8 dirty-working-tree provenance keeps performance
+claim eligibility false. A clean committed rerun is the next gate. Routed
+deallocation still records one arena slow-path lock per object, so the larger
+TLS/per-CPU refill-lane work remains valuable.
 
 ## Modern TCMalloc relationship
 
@@ -240,9 +256,10 @@ lane selector; exact runtime survival continues to correct its admission.
 - **Precision boundary:** broad static Long admission reached 0.0207% byte
   precision on Tantivy, while the exact DataFusion site matched 1/1 and produced
   only Long target outcomes.
-- **Packing opportunity:** heterogeneous filling reduced SWC extents 11 -> 3
-  and THP peak RSS by 34.453%; its current scan cost sets the O(1) refill-lane
-  implementation requirement.
+- **Packing opportunity:** heterogeneous filling reduced SWC extents 11 -> 3.
+  The cache-first rescue preserved a 34.185% THP peak-RSS saving and reduced
+  scan selections by 99.854%, with a quick N=8 THP paired median saving of
+  -0.058% and a confidence interval crossing zero.
 
 ## Evidence inventory
 
@@ -256,7 +273,9 @@ Tracked compact evidence:
   live-survivor mechanism, per-pair backing, preliminary timing, and provenance;
 - `swc-thp-matched-summary.json` -- claim-grade paired physical-backing result;
 - `mixed-filler-swc-quick-summary.json` -- quick mixed-filler memory and scan
-  diagnosis.
+  diagnosis;
+- `mixed-filler-fastpath-swc-quick-summary.json` -- cache-first scan rescue,
+  retained memory result, and remaining lock boundary.
 
 Large raw artifacts remain gitignored under `evaluation/raw/`. Compact
 summaries record source identities and SHA-256 digests; summaries add source
@@ -264,7 +283,8 @@ paths and byte counts where those fields are available.
 
 ## Remaining risks and next proof
 
-1. Replace the mixed descriptor scan with an O(1) validated lane/bucket hint.
+1. Commit the cache-first mixed implementation and rerun the four-arm campaign
+   from a clean allocator revision.
 2. Serve common lifetime allocations from a TLS/per-CPU batch cache and enter
    the global filler only on refill/overflow.
 3. Keep adaptive observations sampled and apply learned state only to future

@@ -181,19 +181,35 @@ The default-off mixed filler allows different slot geometries to share one 2
 MiB extent at 64 KiB region boundaries while preserving lifetime class,
 backing, cohort, exact identity, and trailer provenance.
 
-The SWC N=8 diagnostic established the memory opportunity:
+The initial SWC N=8 diagnostic established the memory opportunity and its first
+hot-path defect:
 
 - legacy layout: 11 extents;
 - mixed layout: 3 extents;
 - THP peak RSS paired saving: 34.45%;
 - physical THP backing passed in every policy-2 sample.
 
-The current implementation scans the descriptor table after a legacy bucket
-miss. It selected that path for 940,170 of 996,240 routed allocations and made
-the THP mixed arm 8.73% slower. Mixed filling therefore remains a memory
-mechanism until an O(1) validated lane/bucket hint removes the per-allocation
-scan. The compact evidence is in
+That prototype scanned the descriptor table after a legacy bucket miss. It
+selected that path for 940,170 of 996,240 routed allocations and made the THP
+mixed arm 8.73% slower. The compact evidence is in
 `docs/evidence/lifetime-resident-index-20260715/mixed-filler-swc-quick-summary.json`.
+
+A cache-first follow-on uses an exact hot-region key and an O(1) free-side
+ownership prefilter. In a second four-arm N=8 screen it:
+
+- served 939,574 allocations from the mixed hot-region cache;
+- reduced scan selections from 940,170 to 1,376, or 99.854%;
+- kept the three-extent layout and 6,144 KiB physical THP backing;
+- retained a 34.185% paired peak-RSS saving, 95% CI [32.561%, 37.152%];
+- produced a -0.058% THP paired median operation saving, 95% CI
+  [-0.463%, 0.704%].
+
+This recovers operation-time parity in the quick screen. The result comes from
+a dirty working-tree snapshot with eight pairs, so it remains mechanism evidence
+until the implementation is committed and the campaign reruns from a clean
+revision. Routed deallocation still takes one arena slow-path lock per object.
+The compact evidence is in
+`docs/evidence/lifetime-resident-index-20260715/mixed-filler-fastpath-swc-quick-summary.json`.
 
 ## TCMalloc relationship and hot-path plan
 
