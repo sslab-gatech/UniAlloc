@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img">
+  <title>Four-way lifetime and THP comparison</title>
+  <desc>Operation speedup and peak RSS saving relative to allocator default across real Rust targets.</desc>
+  <metadata>source-sha256=28a1a1fab121002851fc0381ce8746df3c4b3f2b6d3222a098b2fd7d74d35eb6; variants=default,thp_first_fit,runtime_profile,compiler_hint; targets=5</metadata>
+  <style>text{font-family:Inter,Segoe UI,Arial,sans-serif}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}</style>
+  <rect width="1600" height="900" fill="#FFFFFF"/>
+  <text x="50.0" y="54.0" font-size="31.0" font-weight="700" text-anchor="start" fill="#17202A">Lifetime/THP policy comparison across real Rust targets</text>
+  <text x="50.0" y="88.0" font-size="16.0" font-weight="400" text-anchor="start" fill="#566573">Fresh processes | fixed work | zero warm-up | default = 0 | positive values are better</text>
+  <polygon points="635.0,112.5 641.5,119.0 635.0,125.5 628.5,119.0" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Default</title></polygon>
+  <text x="649.0" y="124.0" font-size="13.5" font-weight="500" text-anchor="start" fill="#17202A">Default</text>
+  <rect x="849.2" y="113.2" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>THP first-fit</title></rect>
+  <text x="869.0" y="124.0" font-size="13.5" font-weight="500" text-anchor="start" fill="#17202A">THP first-fit</text>
+  <polygon points="1075.0,112.2 1081.5,124.3 1068.5,124.3" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Runtime profile</title></polygon>
+  <text x="1089.0" y="124.0" font-size="13.5" font-weight="500" text-anchor="start" fill="#17202A">Runtime profile</text>
+  <circle cx="1295.0" cy="119.0" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Compiler hint (ours)</title></circle>
+  <text x="1309.0" y="124.0" font-size="13.5" font-weight="650" text-anchor="start" fill="#17202A">Compiler hint (ours)</text>
+  <rect x="40.0" y="145.0" width="750.0" height="650.0" rx="12" fill="#FAFBFC" stroke="#E5E8E8"/>
+  <text x="64.0" y="185.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">A | Operation performance</text>
+  <text x="766.0" y="185.0" font-size="13.0" font-weight="400" text-anchor="end" fill="#566573">speedup vs default</text>
+  <line x1="195.0" y1="238.0" x2="195.0" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="195.0" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">-20%</text>
+  <line x1="336.2" y1="238.0" x2="336.2" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="336.2" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">-10%</text>
+  <line x1="477.5" y1="238.0" x2="477.5" y2="741.0" stroke="#34495E" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <text x="477.5" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+0%</text>
+  <line x1="618.8" y1="238.0" x2="618.8" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="618.8" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+10%</text>
+  <line x1="760.0" y1="238.0" x2="760.0" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="760.0" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+20%</text>
+  <text x="177.0" y="304.1" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">DataFusion</text>
+  <line x1="477.5" y1="284.1" x2="477.5" y2="284.1" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="477.5,277.6 484.0,284.1 477.5,290.6 471.0,284.1" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>DataFusion | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="486.5" y="287.9" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="477.5" y1="294.1" x2="482.6" y2="294.1" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="476.8" y="288.3" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>DataFusion | THP first-fit | +0.36% | AHP=5.0 MiB</title></rect>
+  <text x="491.6" y="297.9" font-size="10.5" font-weight="500" text-anchor="start" fill="#56B4E9" class="mono">+0.36</text>
+  <line x1="477.5" y1="304.1" x2="430.3" y2="304.1" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="430.3,297.3 436.8,309.4 423.8,309.4" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>DataFusion | Runtime profile | -3.34% | AHP=0.0 MiB</title></polygon>
+  <text x="421.3" y="307.9" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-3.34</text>
+  <line x1="477.5" y1="314.1" x2="515.3" y2="314.1" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="515.3" cy="314.1" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>DataFusion | Compiler hint (ours) | +2.68% | AHP=16.0 MiB</title></circle>
+  <text x="524.3" y="317.9" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+2.68</text>
+  <line x1="55.0" y1="348.2" x2="775.0" y2="348.2" stroke="#ECEFF1"/>
+  <text x="177.0" y="402.3" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Lume</text>
+  <line x1="477.5" y1="382.3" x2="477.5" y2="382.3" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="477.5,375.8 484.0,382.3 477.5,388.8 471.0,382.3" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Lume | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="486.5" y="386.1" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="477.5" y1="392.3" x2="416.4" y2="392.3" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="410.6" y="386.5" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Lume | THP first-fit | -4.33% | AHP=4.0 MiB</title></rect>
+  <text x="407.4" y="396.1" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-4.33</text>
+  <line x1="477.5" y1="402.3" x2="441.9" y2="402.3" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="441.9,395.5 448.4,407.6 435.4,407.6" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Lume | Runtime profile | -2.52% | AHP=8.0 MiB</title></polygon>
+  <text x="432.9" y="406.1" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-2.52</text>
+  <line x1="477.5" y1="412.3" x2="614.6" y2="412.3" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="614.6" cy="412.3" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Lume | Compiler hint (ours) | +9.71% | AHP=16.0 MiB</title></circle>
+  <text x="623.6" y="416.1" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+9.71</text>
+  <line x1="55.0" y1="446.4" x2="775.0" y2="446.4" stroke="#ECEFF1"/>
+  <text x="177.0" y="500.5" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Roaring</text>
+  <line x1="477.5" y1="480.5" x2="477.5" y2="480.5" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="477.5,474.0 484.0,480.5 477.5,487.0 471.0,480.5" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Roaring | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="486.5" y="484.3" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="477.5" y1="490.5" x2="438.7" y2="490.5" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="432.9" y="484.7" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Roaring | THP first-fit | -2.74% | AHP=4.0 MiB</title></rect>
+  <text x="429.7" y="494.3" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-2.74</text>
+  <line x1="477.5" y1="500.5" x2="463.7" y2="500.5" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="463.7,493.7 470.2,505.8 457.2,505.8" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Roaring | Runtime profile | -0.98% | AHP=10.0 MiB</title></polygon>
+  <text x="454.7" y="504.3" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-0.98</text>
+  <line x1="477.5" y1="510.5" x2="500.0" y2="510.5" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="500.0" cy="510.5" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Roaring | Compiler hint (ours) | +1.59% | AHP=16.0 MiB</title></circle>
+  <text x="509.0" y="514.3" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+1.59</text>
+  <line x1="55.0" y1="544.6" x2="775.0" y2="544.6" stroke="#ECEFF1"/>
+  <text x="177.0" y="598.7" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Convex</text>
+  <line x1="477.5" y1="578.7" x2="477.5" y2="578.7" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="477.5,572.2 484.0,578.7 477.5,585.2 471.0,578.7" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Convex | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="486.5" y="582.5" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="477.5" y1="588.7" x2="440.2" y2="588.7" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="434.4" y="582.9" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Convex | THP first-fit | -2.64% | AHP=4.0 MiB</title></rect>
+  <text x="431.2" y="592.5" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-2.64</text>
+  <line x1="477.5" y1="598.7" x2="515.5" y2="598.7" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="515.5,591.9 522.0,604.0 509.0,604.0" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Convex | Runtime profile | +2.69% | AHP=10.0 MiB</title></polygon>
+  <text x="524.5" y="602.5" font-size="10.5" font-weight="500" text-anchor="start" fill="#E69F00" class="mono">+2.69</text>
+  <line x1="477.5" y1="608.7" x2="577.3" y2="608.7" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="577.3" cy="608.7" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Convex | Compiler hint (ours) | +7.07% | AHP=16.0 MiB</title></circle>
+  <text x="586.3" y="612.5" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+7.07</text>
+  <line x1="55.0" y1="642.8" x2="775.0" y2="642.8" stroke="#ECEFF1"/>
+  <text x="177.0" y="696.9" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Bedrock</text>
+  <line x1="477.5" y1="676.9" x2="477.5" y2="676.9" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="477.5,670.4 484.0,676.9 477.5,683.4 471.0,676.9" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Bedrock | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="486.5" y="680.7" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="477.5" y1="686.9" x2="453.8" y2="686.9" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="448.0" y="681.1" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Bedrock | THP first-fit | -1.68% | AHP=5.0 MiB</title></rect>
+  <text x="444.8" y="690.7" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-1.68</text>
+  <line x1="477.5" y1="696.9" x2="422.6" y2="696.9" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="422.6,690.1 429.1,702.2 416.1,702.2" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Bedrock | Runtime profile | -3.88% | AHP=0.0 MiB</title></polygon>
+  <text x="413.6" y="700.7" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-3.88</text>
+  <line x1="477.5" y1="706.9" x2="698.5" y2="706.9" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="698.5" cy="706.9" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Bedrock | Compiler hint (ours) | +15.65% | AHP=8.0 MiB</title></circle>
+  <text x="707.5" y="710.7" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+15.65</text>
+  <rect x="810.0" y="145.0" width="750.0" height="650.0" rx="12" fill="#FAFBFC" stroke="#E5E8E8"/>
+  <text x="834.0" y="185.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">B | Peak resident memory</text>
+  <text x="1536.0" y="185.0" font-size="13.0" font-weight="400" text-anchor="end" fill="#566573">RSS saving vs default</text>
+  <line x1="965.0" y1="238.0" x2="965.0" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="965.0" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">-50%</text>
+  <line x1="1106.2" y1="238.0" x2="1106.2" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="1106.2" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">-25%</text>
+  <line x1="1247.5" y1="238.0" x2="1247.5" y2="741.0" stroke="#34495E" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <text x="1247.5" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+0%</text>
+  <line x1="1388.8" y1="238.0" x2="1388.8" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="1388.8" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+25%</text>
+  <line x1="1530.0" y1="238.0" x2="1530.0" y2="741.0" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="1530.0" y="767.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">+50%</text>
+  <text x="947.0" y="304.1" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">DataFusion</text>
+  <line x1="1247.5" y1="284.1" x2="1247.5" y2="284.1" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1247.5,277.6 1254.0,284.1 1247.5,290.6 1241.0,284.1" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>DataFusion | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="1256.5" y="287.9" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="1247.5" y1="294.1" x2="1223.9" y2="294.1" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="1218.1" y="288.3" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>DataFusion | THP first-fit | -4.17% | AHP=5.0 MiB</title></rect>
+  <text x="1214.9" y="297.9" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-4.17</text>
+  <line x1="1247.5" y1="304.1" x2="1245.2" y2="304.1" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1245.2,297.3 1251.7,309.4 1238.7,309.4" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>DataFusion | Runtime profile | -0.41% | AHP=0.0 MiB</title></polygon>
+  <text x="1236.2" y="307.9" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-0.41</text>
+  <line x1="1247.5" y1="314.1" x2="1221.8" y2="314.1" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="1221.8" cy="314.1" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>DataFusion | Compiler hint (ours) | -4.54% | AHP=16.0 MiB</title></circle>
+  <text x="1212.8" y="317.9" font-size="10.5" font-weight="700" text-anchor="end" fill="#0072B2" class="mono">-4.54</text>
+  <line x1="825.0" y1="348.2" x2="1545.0" y2="348.2" stroke="#ECEFF1"/>
+  <text x="947.0" y="402.3" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Lume</text>
+  <line x1="1247.5" y1="382.3" x2="1247.5" y2="382.3" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1247.5,375.8 1254.0,382.3 1247.5,388.8 1241.0,382.3" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Lume | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="1256.5" y="386.1" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="1247.5" y1="392.3" x2="1141.4" y2="392.3" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="1135.6" y="386.5" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Lume | THP first-fit | -18.78% | AHP=4.0 MiB</title></rect>
+  <text x="1132.4" y="396.1" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-18.78</text>
+  <line x1="1247.5" y1="402.3" x2="1215.6" y2="402.3" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1215.6,395.5 1222.1,407.6 1209.1,407.6" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Lume | Runtime profile | -5.64% | AHP=8.0 MiB</title></polygon>
+  <text x="1206.6" y="406.1" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-5.64</text>
+  <line x1="1247.5" y1="412.3" x2="1245.0" y2="412.3" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="1245.0" cy="412.3" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Lume | Compiler hint (ours) | -0.45% | AHP=16.0 MiB</title></circle>
+  <text x="1236.0" y="416.1" font-size="10.5" font-weight="700" text-anchor="end" fill="#0072B2" class="mono">-0.45</text>
+  <line x1="825.0" y1="446.4" x2="1545.0" y2="446.4" stroke="#ECEFF1"/>
+  <text x="947.0" y="500.5" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Roaring</text>
+  <line x1="1247.5" y1="480.5" x2="1247.5" y2="480.5" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1247.5,474.0 1254.0,480.5 1247.5,487.0 1241.0,480.5" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Roaring | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="1256.5" y="484.3" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="1247.5" y1="490.5" x2="1154.0" y2="490.5" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="1148.2" y="484.7" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Roaring | THP first-fit | -16.55% | AHP=4.0 MiB</title></rect>
+  <text x="1145.0" y="494.3" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-16.55</text>
+  <line x1="1247.5" y1="500.5" x2="1199.2" y2="500.5" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1199.2,493.7 1205.7,505.8 1192.7,505.8" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Roaring | Runtime profile | -8.55% | AHP=10.0 MiB</title></polygon>
+  <text x="1190.2" y="504.3" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-8.55</text>
+  <line x1="1247.5" y1="510.5" x2="1248.1" y2="510.5" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="1248.1" cy="510.5" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Roaring | Compiler hint (ours) | +0.11% | AHP=16.0 MiB</title></circle>
+  <text x="1257.1" y="514.3" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+0.11</text>
+  <line x1="825.0" y1="544.6" x2="1545.0" y2="544.6" stroke="#ECEFF1"/>
+  <text x="947.0" y="598.7" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Convex</text>
+  <line x1="1247.5" y1="578.7" x2="1247.5" y2="578.7" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1247.5,572.2 1254.0,578.7 1247.5,585.2 1241.0,578.7" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Convex | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="1256.5" y="582.5" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="1247.5" y1="588.7" x2="1162.8" y2="588.7" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="1157.0" y="582.9" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Convex | THP first-fit | -15.00% | AHP=4.0 MiB</title></rect>
+  <text x="1153.8" y="592.5" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-15.00</text>
+  <line x1="1247.5" y1="598.7" x2="1274.3" y2="598.7" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1274.3,591.9 1280.8,604.0 1267.8,604.0" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Convex | Runtime profile | +4.74% | AHP=10.0 MiB</title></polygon>
+  <text x="1283.3" y="602.5" font-size="10.5" font-weight="500" text-anchor="start" fill="#E69F00" class="mono">+4.74</text>
+  <line x1="1247.5" y1="608.7" x2="1337.8" y2="608.7" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="1337.8" cy="608.7" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Convex | Compiler hint (ours) | +15.98% | AHP=16.0 MiB</title></circle>
+  <text x="1346.8" y="612.5" font-size="10.5" font-weight="700" text-anchor="start" fill="#0072B2" class="mono">+15.98</text>
+  <line x1="825.0" y1="642.8" x2="1545.0" y2="642.8" stroke="#ECEFF1"/>
+  <text x="947.0" y="696.9" font-size="13.5" font-weight="650" text-anchor="end" fill="#17202A">Bedrock</text>
+  <line x1="1247.5" y1="676.9" x2="1247.5" y2="676.9" stroke="#7F8C8D" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1247.5,670.4 1254.0,676.9 1247.5,683.4 1241.0,676.9" fill="#FFFFFF" stroke="#7F8C8D" stroke-width="2.0" stroke-linejoin="round"><title>Bedrock | Default | 0.00% | AHP=0.0 MiB</title></polygon>
+  <text x="1256.5" y="680.7" font-size="10.5" font-weight="500" text-anchor="start" fill="#7F8C8D" class="mono">0.00</text>
+  <line x1="1247.5" y1="686.9" x2="1024.9" y2="686.9" stroke="#56B4E9" stroke-width="1.8" opacity="0.82"/>
+  <rect x="1019.1" y="681.1" width="11.6" height="11.6" rx="1.2" fill="#56B4E9" stroke="#56B4E9" stroke-width="2.0"><title>Bedrock | THP first-fit | -39.39% | AHP=5.0 MiB</title></rect>
+  <text x="1015.9" y="690.7" font-size="10.5" font-weight="500" text-anchor="end" fill="#56B4E9" class="mono">-39.39</text>
+  <line x1="1247.5" y1="696.9" x2="1245.3" y2="696.9" stroke="#E69F00" stroke-width="1.8" opacity="0.82"/>
+  <polygon points="1245.3,690.1 1251.8,702.2 1238.8,702.2" fill="#E69F00" stroke="#E69F00" stroke-width="2.0" stroke-linejoin="round"><title>Bedrock | Runtime profile | -0.39% | AHP=0.0 MiB</title></polygon>
+  <text x="1236.3" y="700.7" font-size="10.5" font-weight="500" text-anchor="end" fill="#E69F00" class="mono">-0.39</text>
+  <line x1="1247.5" y1="706.9" x2="1246.8" y2="706.9" stroke="#0072B2" stroke-width="2.8" opacity="0.82"/>
+  <circle cx="1246.8" cy="706.9" r="6.2" fill="#0072B2" stroke="#0072B2" stroke-width="2.6"><title>Bedrock | Compiler hint (ours) | -0.12% | AHP=8.0 MiB</title></circle>
+  <text x="1237.8" y="710.7" font-size="10.5" font-weight="700" text-anchor="end" fill="#0072B2" class="mono">-0.12</text>
+  <text x="50.0" y="831.0" font-size="13.0" font-weight="400" text-anchor="start" fill="#566573">THP first-fit: mmap-wide THP eligibility with no lifetime signal. Runtime profile: policy 11 cold online learning. Ours: policy 9 compiler semantic-scope Long hint.</text>
+  <text x="50.0" y="856.0" font-size="12.5" font-weight="400" text-anchor="start" fill="#566573">Median of one forward + one reverse sequence per target; directional evidence, no confidence intervals.</text>
+  <text x="1550.0" y="879.0" font-size="10.5" font-weight="400" text-anchor="end" fill="#95A5A6" class="mono">source sha256 28a1a1fab1210028</text>
+</svg>

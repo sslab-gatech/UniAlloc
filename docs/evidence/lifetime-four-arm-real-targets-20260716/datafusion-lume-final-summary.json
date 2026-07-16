@@ -1,0 +1,697 @@
+{
+  "arm_contract": [
+    {
+      "arm": "allocator-default",
+      "mechanism": "UniAlloc policy 0; no lifetime routing; no explicit hugepage advice.",
+      "order": 1
+    },
+    {
+      "arm": "global-thp-first-fit-no-hint",
+      "mechanism": "UniAlloc policy 0 plus the existing LD_PRELOAD shim that applies MADV_HUGEPAGE to private anonymous mmap regions at least 2 MiB; zero lifetime routes. The user-facing first-fit label means allocator-default placement here; the experiment does not assert a separate internal fit algorithm.",
+      "order": 2
+    },
+    {
+      "arm": "adaptive-runtime-profile-thp",
+      "mechanism": "UniAlloc policy 11; compiler lifetime hints are masked to Unknown; online pressure/survival classification, observation trailers, arena locking, and adaptive THP promotion remain active.",
+      "order": 3
+    },
+    {
+      "arm": "compiler-directed-hugepage-compiler-prior",
+      "mechanism": "UniAlloc policy 9; exact compiler Long hints route directly into dense 2 MiB cohorts, with no runtime lifetime learning or observation trailers.",
+      "order": 4
+    }
+  ],
+  "claim_boundary": "Balanced two-order directional macro evidence. Each order contributes one fresh process per arm; publication-grade confidence intervals require more independent repetitions.",
+  "classification": "four-arm-datafusion-lume-final-summary",
+  "headline": {
+    "datafusion": {
+      "adaptive-runtime-profile-thp": {
+        "median_latency_reduction_percent_vs_default": -3.338425363564462,
+        "median_peak_rss_change_percent_vs_default": 0.4065254777811698
+      },
+      "allocator-default": {
+        "median_latency_reduction_percent_vs_default": 0.0,
+        "median_peak_rss_change_percent_vs_default": 0.0
+      },
+      "compiler-directed-hugepage-compiler-prior": {
+        "median_latency_reduction_percent_vs_default": 2.6750506696469185,
+        "median_peak_rss_change_percent_vs_default": 4.541724944738885
+      },
+      "global-thp-first-fit-no-hint": {
+        "median_latency_reduction_percent_vs_default": 0.36019209292012166,
+        "median_peak_rss_change_percent_vs_default": 4.170249967108264
+      }
+    },
+    "lume": {
+      "adaptive-runtime-profile-thp": {
+        "median_latency_reduction_percent_vs_default": -2.5171599497993826,
+        "median_peak_rss_change_percent_vs_default": 5.644837581875187
+      },
+      "allocator-default": {
+        "median_latency_reduction_percent_vs_default": 0.0,
+        "median_peak_rss_change_percent_vs_default": 0.0
+      },
+      "compiler-directed-hugepage-compiler-prior": {
+        "median_latency_reduction_percent_vs_default": 9.706304237808101,
+        "median_peak_rss_change_percent_vs_default": 0.44568953134711076
+      },
+      "global-thp-first-fit-no-hint": {
+        "median_latency_reduction_percent_vs_default": -4.32504128955385,
+        "median_peak_rss_change_percent_vs_default": 18.781819759051963
+      }
+    }
+  },
+  "measurement_contract": {
+    "bar_definition": "median of each sequence arm change relative to that same sequence default",
+    "confidence_interval_available": false,
+    "fixed_work_digest_match": true,
+    "fresh_process_per_arm": true,
+    "orders": [
+      "forward",
+      "reverse"
+    ],
+    "sequence_count": 2,
+    "warmup_iterations": 0
+  },
+  "schema_version": 1,
+  "targets": [
+    {
+      "aggregate": [
+        {
+          "arm": "allocator-default",
+          "latency_reduction_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "median_latency_reduction_percent_vs_default": 0.0,
+          "median_peak_rss_change_percent_vs_default": 0.0,
+          "peak_anon_hugepages_kib_by_order": [
+            0,
+            0
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_kib_by_order": [
+            121436,
+            121548
+          ],
+          "query_seconds_by_order": [
+            18.790107491,
+            18.885314635
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ]
+        },
+        {
+          "arm": "global-thp-first-fit-no-hint",
+          "latency_reduction_percent_vs_default_by_order": [
+            0.2250367647989904,
+            0.49534742104125296
+          ],
+          "median_latency_reduction_percent_vs_default": 0.36019209292012166,
+          "median_peak_rss_change_percent_vs_default": 4.170249967108264,
+          "peak_anon_hugepages_kib_by_order": [
+            6144,
+            4096
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            5.098982179913699,
+            3.2415177543028273
+          ],
+          "peak_rss_kib_by_order": [
+            127628,
+            125488
+          ],
+          "query_seconds_by_order": [
+            18.747822841,
+            18.791766716
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ]
+        },
+        {
+          "arm": "adaptive-runtime-profile-thp",
+          "latency_reduction_percent_vs_default_by_order": [
+            -3.5040138664207237,
+            -3.172836860708201
+          ],
+          "median_latency_reduction_percent_vs_default": -3.338425363564462,
+          "median_peak_rss_change_percent_vs_default": 0.4065254777811698,
+          "peak_anon_hugepages_kib_by_order": [
+            0,
+            0
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            0.22069238117197534,
+            0.5923585743903643
+          ],
+          "peak_rss_kib_by_order": [
+            121704,
+            122268
+          ],
+          "query_seconds_by_order": [
+            19.448515463,
+            19.484514859
+          ],
+          "routed_allocations_by_order": [
+            31807,
+            31807
+          ]
+        },
+        {
+          "arm": "compiler-directed-hugepage-compiler-prior",
+          "latency_reduction_percent_vs_default_by_order": [
+            0.7176774644029661,
+            4.632423874890871
+          ],
+          "median_latency_reduction_percent_vs_default": 2.6750506696469185,
+          "median_peak_rss_change_percent_vs_default": 4.541724944738885,
+          "peak_anon_hugepages_kib_by_order": [
+            16384,
+            16384
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            4.2425639843209595,
+            4.84088590515681
+          ],
+          "peak_rss_kib_by_order": [
+            126588,
+            127432
+          ],
+          "query_seconds_by_order": [
+            18.655255124,
+            18.010466811
+          ],
+          "routed_allocations_by_order": [
+            917504,
+            917504
+          ]
+        }
+      ],
+      "binary_sha256": "8e405c386cc228b6ffd44afe31158e360d171b3ace520e5e8912f78ee49da615",
+      "fixed_digest": {
+        "approx_distinct_digest": "1adb208ef1d74d50",
+        "materialized_digest": "e95377e3d282affb",
+        "query_digest": "2934adc49496a3dd",
+        "result_digest": "4755030829b353a5"
+      },
+      "mechanism_interpretation": "Global THP created only 4-6 MiB AHP; runtime policy 11 learned 192 sites and collapsed five extents but retained 0 KiB AHP during both query windows; policy 9 retained 16 MiB AHP in both orders with 917,504 direct routes.",
+      "result_path": "evaluation/raw/four-arm-datafusion-lume-20260716/datafusion-four-arm-two-order.json",
+      "result_sha256": "c99948ac4c6ee8b2a8e257e53e09fb6ea7020bcb5fc2883d417edbeda339c39a",
+      "sequences": [
+        {
+          "order": [
+            "allocator-default",
+            "global-thp-first-fit-no-hint",
+            "adaptive-runtime-profile-thp",
+            "compiler-directed-hugepage-compiler-prior"
+          ],
+          "runs": [
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "allocator-default",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 121436,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/01-default/run.json",
+              "raw_sha256": "c146b30a7b8ca2a04c5ee578287a792d85dfddd7a65939ca90e2028a3cf59123",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 18.790107491
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "global-thp-first-fit-no-hint",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 6144,
+              "peak_rss_kib": 127628,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/02-global-thp-first-fit/run.json",
+              "raw_sha256": "478668b18478a658e4d3771d828d9a348f7b6594ceb762a689bfe7dfaf3d667f",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 18.747822841
+            },
+            {
+              "adaptive_long_routed_allocations": 16551,
+              "adaptive_site_count": 192,
+              "arm": "adaptive-runtime-profile-thp",
+              "collapse_errors": 0,
+              "collapse_successes": 5,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 121704,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/03-runtime-profile/run.json",
+              "raw_sha256": "ed29bd8ed5d405a9b7931d307a466b8d9a1f107230e4deae7e5194bdb6cf006b",
+              "routed_allocations": 31807,
+              "runtime_policy": 11,
+              "time_seconds": 19.448515463
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "compiler-directed-hugepage-compiler-prior",
+              "collapse_errors": 0,
+              "collapse_successes": 8,
+              "peak_anon_hugepages_kib": 16384,
+              "peak_rss_kib": 126588,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/04-compiler-hint/run.json",
+              "raw_sha256": "51887b04e4015bf6d400a4b5288ebfd0462ede3dc90c1f9f7d5f01b0915239bd",
+              "routed_allocations": 917504,
+              "runtime_policy": 9,
+              "time_seconds": 18.655255124
+            }
+          ],
+          "sequence": "forward"
+        },
+        {
+          "order": [
+            "compiler-directed-hugepage-compiler-prior",
+            "adaptive-runtime-profile-thp",
+            "global-thp-first-fit-no-hint",
+            "allocator-default"
+          ],
+          "runs": [
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "compiler-directed-hugepage-compiler-prior",
+              "collapse_errors": 0,
+              "collapse_successes": 8,
+              "peak_anon_hugepages_kib": 16384,
+              "peak_rss_kib": 127432,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/reverse/01-compiler-hint/run.json",
+              "raw_sha256": "c077d5097cfbba8cd3d3bc3109ecfa13d5912b80be703c067a8c8343fe2a452d",
+              "routed_allocations": 917504,
+              "runtime_policy": 9,
+              "time_seconds": 18.010466811
+            },
+            {
+              "adaptive_long_routed_allocations": 16551,
+              "adaptive_site_count": 192,
+              "arm": "adaptive-runtime-profile-thp",
+              "collapse_errors": 0,
+              "collapse_successes": 5,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 122268,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/reverse/02-runtime-profile/run.json",
+              "raw_sha256": "5881e652889d7b5142d18b2d955af0ca8cae89b1a62c0903e707c8ee36302e87",
+              "routed_allocations": 31807,
+              "runtime_policy": 11,
+              "time_seconds": 19.484514859
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "global-thp-first-fit-no-hint",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 4096,
+              "peak_rss_kib": 125488,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/reverse/03-global-thp-first-fit/run.json",
+              "raw_sha256": "2246eb3fa0ac86dd0eb01b4d8e3b1cb9473e5250d6020b29a9fc8c96fd2adb69",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 18.791766716
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "allocator-default",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 121548,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/reverse/04-default/run.json",
+              "raw_sha256": "0ed765bbb5133de957ad2a69dfffd0b8b53fceb6a30bba2c7cf36413867d25f7",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 18.885314635
+            }
+          ],
+          "sequence": "reverse"
+        }
+      ],
+      "source_result_paths": [
+        {
+          "path": "evaluation/raw/four-arm-datafusion-lume-20260716/datafusion-four-arm.json",
+          "sha256": "2985bda8f42f3c68e90dee724f5d1555b0651f921184b08dedd19c99fd7ced7d"
+        },
+        {
+          "path": "evaluation/raw/four-arm-datafusion-lume-20260716/datafusion-four-arm-reverse.json",
+          "sha256": "8d47e8961de870369b0cf7ee90f807e6f791d79c2b00214303211df5c45bed55"
+        }
+      ],
+      "target": "DataFusion 54.0.0 ApproxDistinct grouped aggregation",
+      "time_metric": "query_seconds"
+    },
+    {
+      "aggregate": [
+        {
+          "adaptive_long_routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "arm": "allocator-default",
+          "collapse_errors_by_order": [
+            0,
+            0
+          ],
+          "collapse_successes_by_order": [
+            0,
+            0
+          ],
+          "latency_reduction_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "median_latency_reduction_percent_vs_default": 0.0,
+          "median_peak_rss_change_percent_vs_default": 0.0,
+          "median_total_time_reduction_percent_vs_default": 0.0,
+          "operation_seconds_by_order": [
+            5.307190225,
+            5.172712545
+          ],
+          "peak_anon_hugepages_kib_by_order": [
+            0,
+            0
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_kib_by_order": [
+            21556,
+            21528
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "total_time_reduction_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "adaptive_long_routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "arm": "global-thp-first-fit-no-hint",
+          "collapse_errors_by_order": [
+            0,
+            0
+          ],
+          "collapse_successes_by_order": [
+            0,
+            0
+          ],
+          "latency_reduction_percent_vs_default_by_order": [
+            -2.7071037198407524,
+            -5.942978859266948
+          ],
+          "median_latency_reduction_percent_vs_default": -4.32504128955385,
+          "median_peak_rss_change_percent_vs_default": 18.781819759051963,
+          "median_total_time_reduction_percent_vs_default": -4.356841250474832,
+          "operation_seconds_by_order": [
+            5.450861369,
+            5.480125758
+          ],
+          "peak_anon_hugepages_kib_by_order": [
+            4096,
+            4096
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            18.92744479495268,
+            18.636194723151245
+          ],
+          "peak_rss_kib_by_order": [
+            25636,
+            25540
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "total_time_reduction_percent_vs_default_by_order": [
+            -2.8231685176919505,
+            -5.890513983257714
+          ]
+        },
+        {
+          "adaptive_long_routed_allocations_by_order": [
+            1016,
+            1016
+          ],
+          "arm": "adaptive-runtime-profile-thp",
+          "collapse_errors_by_order": [
+            0,
+            0
+          ],
+          "collapse_successes_by_order": [
+            4,
+            4
+          ],
+          "latency_reduction_percent_vs_default_by_order": [
+            -1.8354733648161283,
+            -3.1988465347826374
+          ],
+          "median_latency_reduction_percent_vs_default": -2.5171599497993826,
+          "median_peak_rss_change_percent_vs_default": 5.644837581875187,
+          "median_total_time_reduction_percent_vs_default": -2.5941575885791996,
+          "operation_seconds_by_order": [
+            5.404602288,
+            5.338179681
+          ],
+          "peak_anon_hugepages_kib_by_order": [
+            8192,
+            8192
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            5.566895527927259,
+            5.722779635823114
+          ],
+          "peak_rss_kib_by_order": [
+            22756,
+            22760
+          ],
+          "routed_allocations_by_order": [
+            1025,
+            1025
+          ],
+          "total_time_reduction_percent_vs_default_by_order": [
+            -1.9208573746743771,
+            -3.2674578024840217
+          ]
+        },
+        {
+          "adaptive_long_routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "arm": "compiler-directed-hugepage-compiler-prior",
+          "collapse_errors_by_order": [
+            0,
+            0
+          ],
+          "collapse_successes_by_order": [
+            8,
+            8
+          ],
+          "latency_reduction_percent_vs_default_by_order": [
+            10.727229284493953,
+            8.685379191122252
+          ],
+          "median_latency_reduction_percent_vs_default": 9.706304237808101,
+          "median_peak_rss_change_percent_vs_default": 0.44568953134711076,
+          "median_total_time_reduction_percent_vs_default": 9.413064250151283,
+          "operation_seconds_by_order": [
+            4.737875761,
+            4.723442846
+          ],
+          "peak_anon_hugepages_kib_by_order": [
+            16384,
+            16384
+          ],
+          "peak_rss_change_percent_vs_default_by_order": [
+            0.37112636852848396,
+            0.5202526941657376
+          ],
+          "peak_rss_kib_by_order": [
+            21636,
+            21640
+          ],
+          "routed_allocations_by_order": [
+            2048,
+            2048
+          ],
+          "total_time_reduction_percent_vs_default_by_order": [
+            10.47570251437971,
+            8.350425985922854
+          ]
+        }
+      ],
+      "allocator_rlib_sha256": "9781ac29d644a74146aee38b0df0e6ccaae4f18f6b0982981e3b8e6b9422e68a",
+      "binary_sha256": "30d709c636e497af207b161afd04d6c3db25642cbc296f7755dec6caa515d7b4",
+      "build_path": "evaluation/raw/four-arm-datafusion-lume-20260716/lume-current-build/build.json",
+      "build_sha256": "a11a12ae942162ec679ee3efe9a3ebf4060cb8fd7eb1c269e06ddbeb8b95c0e1",
+      "clean_rebuild_count": 1,
+      "compiler_applied_hint_count": 1,
+      "fixed_digest": {
+        "digest": "ec7814d581469625"
+      },
+      "mechanism_interpretation": "Global THP backed 4 MiB while increasing RSS sharply; runtime policy 11 learned two sites, routed 1,016 allocations Long, and backed 8 MiB; policy 9 routed all 2,048 exact Long allocations and backed 16 MiB with eight successful collapses.",
+      "pass_binary_sha256": "5304f861790d4de6db8adc45443619a7d7b33d57170e37bd4c2ed3aaaae2da14",
+      "pass_source_sha256": "6356349e1c0bbf8f6afa359cd09484935fdf978d82175888a9363a42315c7f89",
+      "result_path": "evaluation/raw/four-arm-datafusion-lume-20260716/lume-four-arm-two-order.json",
+      "result_sha256": "54af9e6bc2d5e6f52b68e9cd97b6f533c867d50621abc336c282e7b9a37e7c5c",
+      "sequences": [
+        {
+          "order": [
+            "allocator-default",
+            "global-thp-first-fit-no-hint",
+            "adaptive-runtime-profile-thp",
+            "compiler-directed-hugepage-compiler-prior"
+          ],
+          "runs": [
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "allocator-default",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 21556,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/forward/01-allocator-default/run.json",
+              "raw_sha256": "067a1af40772f5050814395fb625b9f37ed2b15e43b70d50a9198185271e977b",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 5.307190225
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "global-thp-first-fit-no-hint",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 4096,
+              "peak_rss_kib": 25636,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/forward/02-global-thp-first-fit-no-hint/run.json",
+              "raw_sha256": "6a6a939c838077e396959d23e06f604a2d24284285ba5f4fbc8e9f46b480d412",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 5.450861369
+            },
+            {
+              "adaptive_long_routed_allocations": 1016,
+              "adaptive_site_count": 2,
+              "arm": "adaptive-runtime-profile-thp",
+              "collapse_errors": 0,
+              "collapse_successes": 4,
+              "peak_anon_hugepages_kib": 8192,
+              "peak_rss_kib": 22756,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/forward/03-adaptive-runtime-profile-thp/run.json",
+              "raw_sha256": "9a29cff089016e1b1dfbaec2c0d59ad3cf61e5e745558cc2461e24cfe6f815a1",
+              "routed_allocations": 1025,
+              "runtime_policy": 11,
+              "time_seconds": 5.404602288
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "compiler-directed-hugepage-compiler-prior",
+              "collapse_errors": 0,
+              "collapse_successes": 8,
+              "peak_anon_hugepages_kib": 16384,
+              "peak_rss_kib": 21636,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/forward/04-compiler-directed-hugepage-compiler-prior/run.json",
+              "raw_sha256": "e57c54e6748c8216b3a65e24e1b753af9efc877b4c8fca96d2feb764ef68c8d6",
+              "routed_allocations": 2048,
+              "runtime_policy": 9,
+              "time_seconds": 4.737875761
+            }
+          ],
+          "sequence": "forward"
+        },
+        {
+          "order": [
+            "compiler-directed-hugepage-compiler-prior",
+            "adaptive-runtime-profile-thp",
+            "global-thp-first-fit-no-hint",
+            "allocator-default"
+          ],
+          "runs": [
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "compiler-directed-hugepage-compiler-prior",
+              "collapse_errors": 0,
+              "collapse_successes": 8,
+              "peak_anon_hugepages_kib": 16384,
+              "peak_rss_kib": 21640,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/reverse/01-compiler-directed-hugepage-compiler-prior/run.json",
+              "raw_sha256": "70eb1cb1e5cc3de9ce7009736e735e32a0460c948f77afd1df7534061168d358",
+              "routed_allocations": 2048,
+              "runtime_policy": 9,
+              "time_seconds": 4.723442846
+            },
+            {
+              "adaptive_long_routed_allocations": 1016,
+              "adaptive_site_count": 2,
+              "arm": "adaptive-runtime-profile-thp",
+              "collapse_errors": 0,
+              "collapse_successes": 4,
+              "peak_anon_hugepages_kib": 8192,
+              "peak_rss_kib": 22760,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/reverse/02-adaptive-runtime-profile-thp/run.json",
+              "raw_sha256": "ab85e1f613e073702bc86051c8e7d30ace1d8f130b432db3ccb47be1ac6243a9",
+              "routed_allocations": 1025,
+              "runtime_policy": 11,
+              "time_seconds": 5.338179681
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "global-thp-first-fit-no-hint",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 4096,
+              "peak_rss_kib": 25540,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/reverse/03-global-thp-first-fit-no-hint/run.json",
+              "raw_sha256": "342817e46b083f630dfb5db5f8b850217be2a7272ed45efb67a3fb94df1c7775",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 5.480125758
+            },
+            {
+              "adaptive_long_routed_allocations": 0,
+              "adaptive_site_count": 0,
+              "arm": "allocator-default",
+              "collapse_errors": 0,
+              "collapse_successes": 0,
+              "peak_anon_hugepages_kib": 0,
+              "peak_rss_kib": 21528,
+              "raw_path": "evaluation/raw/four-arm-datafusion-lume-20260716/runs/lume/reverse/04-allocator-default/run.json",
+              "raw_sha256": "e564ed3578b20bcc18a7b3ff79ae0e51d02dfa7853968d93a9f066c338443043",
+              "routed_allocations": 0,
+              "runtime_policy": 0,
+              "time_seconds": 5.172712545
+            }
+          ],
+          "sequence": "reverse"
+        }
+      ],
+      "target": "Lume production MiniRoaring serde load and resident posting probes",
+      "time_metric": "operation_seconds"
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "classification": "compiler-semantic-scope-rewrite-boundary",
+  "interpretation": "The measured compiler-hint path uses compiler-injected semantic-scope push/pop rewrites. Direct allocator-call replacement and claim-grade completeness remain outside this evidence.",
+  "schema_version": 1,
+  "targets": [
+    {
+      "all_actual_allocator_call_replacement": false,
+      "all_actual_semantic_scope_rewrite": true,
+      "all_claim_grade": false,
+      "all_complete_for_claim": false,
+      "audit_file_count": 9,
+      "audit_root": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits",
+      "files": [
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/arrow_array-4de03dc6c4c186db.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 237,
+          "sha256": "91916a570080135974a9997f1ffd3df83da0fa43651bdd66a42b67dff834610b"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/arrow_buffer-f52e92e385d039c0.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 6,
+          "sha256": "dd1a218c7b4f5dbe1545475b515e3bc9b4240569a6254af75e3ac376ee32d0e3"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/arrow_data-76b07a911e790268.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 18,
+          "sha256": "3e539eec49a1829f5bd16164bcc8a2d9456ac2ef78b9770e41a47e914f55735d"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/arrow_row-9938cc3d5721d94f.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 74,
+          "sha256": "431a4fb0aa677e00f8f95fe3c831a108240f46a83288085524f023e2a73c0680"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/arrow_select-fabc6ce56e3529f4.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 235,
+          "sha256": "046a86db9967f17f00511042ca991a1d0e42cb84a1e9b2cfc911b46ec4f1fd47"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/datafusion-fad3b3b41c8eeabb.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 208,
+          "sha256": "ab5ce640dfa07b036394c2f94a505e916cbb05a949c47e93046acaeb1c25cb1b"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/datafusion_functions_aggregate-f1363f9ad7fba99d.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 449,
+          "sha256": "54ccf2db1a559b6993189830ae1bafd1a9e6370456ebb5087ee634f05b8e2d30"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/datafusion_physical_expr-b0693a34e47db37d.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 333,
+          "sha256": "4c1ffa83ababdf996def388f387ba8a4f7966513542c482c3edb7026bc002de4"
+        },
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/datafusion-runtime-profile-vs-hint-20260716/build/compiler-audits/datafusion_physical_plan-f013a21b20e039a5.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 730,
+          "sha256": "71530f43218fea98ce42a75512809ebbb18a83c3c3209bdafbf8f02e24495231"
+        }
+      ],
+      "measurement_binary_sha256": "8e405c386cc228b6ffd44afe31158e360d171b3ace520e5e8912f78ee49da615",
+      "target": "datafusion"
+    },
+    {
+      "all_actual_allocator_call_replacement": false,
+      "all_actual_semantic_scope_rewrite": true,
+      "all_claim_grade": false,
+      "all_complete_for_claim": false,
+      "audit_file_count": 1,
+      "audit_root": "evaluation/raw/four-arm-datafusion-lume-20260716/lume-current-build/compiler-audits",
+      "files": [
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/four-arm-datafusion-lume-20260716/lume-current-build/compiler-audits/lume-a8d14db0c2e64ccc.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 212,
+          "sha256": "ed683150c7b87c9f9cf1f50aac93cd495b7090f123db97adff5aa277c15ebccd"
+        }
+      ],
+      "measurement_binary_sha256": "30d709c636e497af207b161afd04d6c3db25642cbc296f7755dec6caa515d7b4",
+      "target": "lume"
+    },
+    {
+      "all_actual_allocator_call_replacement": false,
+      "all_actual_semantic_scope_rewrite": true,
+      "all_claim_grade": false,
+      "all_complete_for_claim": false,
+      "audit_file_count": 1,
+      "audit_root": "evaluation/raw/four-arm-other-targets-20260716/builds/roaring/audit",
+      "files": [
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/four-arm-other-targets-20260716/builds/roaring/audit/roaring-2f11ebd5d5341177.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 22,
+          "sha256": "e544c88e906e392d4c89ade0012499e4f73068d9b4426b298102ad71b10e72b3"
+        }
+      ],
+      "measurement_binary_sha256": "ae0d30884028e076836bb4830b0df765b07a44a457511dbf5aca98924d37f719",
+      "target": "roaring"
+    },
+    {
+      "all_actual_allocator_call_replacement": false,
+      "all_actual_semantic_scope_rewrite": true,
+      "all_claim_grade": false,
+      "all_complete_for_claim": false,
+      "audit_file_count": 1,
+      "audit_root": "evaluation/raw/four-arm-other-targets-20260716/builds/convex/audit",
+      "files": [
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/four-arm-other-targets-20260716/builds/convex/audit/convex_core-ac0c8ed0956fc74b.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 35,
+          "sha256": "ddbde969f80e23c970291349211152d89c45aae6e64c67469da28fe8ef55e7db"
+        }
+      ],
+      "measurement_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+      "target": "convex"
+    },
+    {
+      "all_actual_allocator_call_replacement": false,
+      "all_actual_semantic_scope_rewrite": true,
+      "all_claim_grade": false,
+      "all_complete_for_claim": false,
+      "audit_file_count": 1,
+      "audit_root": "evaluation/raw/four-arm-other-targets-20260716/builds/bedrock/audit",
+      "files": [
+        {
+          "actual_allocator_call_replacement": false,
+          "actual_semantic_scope_rewrite": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "origin_path": "evaluation/raw/four-arm-other-targets-20260716/builds/bedrock/audit/bedrock_level-c62027c8cd2e2ba8.json",
+          "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+          "semantic_scope_rewrite_applied_count": 7,
+          "sha256": "603a2918da544aa13391c1c4c01531ce1c0769a81fcfbaa9c9d26a8e7b87625d"
+        }
+      ],
+      "measurement_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+      "target": "bedrock"
+    }
+  ]
+}
