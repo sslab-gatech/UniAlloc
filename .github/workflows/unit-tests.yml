@@ -1,0 +1,44 @@
+name: Unit tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  default-lib:
+    name: Default lib tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install "$(cat rust-toolchain)" --profile minimal
+      - name: Run default lib tests in parallel
+        run: cargo test -p unialloc --lib
+
+  stats-lib:
+    name: Stats lib tests (serial isolation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install "$(cat rust-toolchain)" --profile minimal
+      - name: Run stats lib tests serially
+        run: cargo test -p unialloc --lib --features stats -- --test-threads=1
+
+  fixed-heap-stats-lib:
+    name: Fixed-heap stats lib tests (parallel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install "$(cat rust-toolchain)" --profile minimal
+      - name: Run fixed-heap stats lib tests in parallel
+        run: >-
+          cargo test -p unialloc --lib --no-default-features
+          --features fixed_heap,stats
