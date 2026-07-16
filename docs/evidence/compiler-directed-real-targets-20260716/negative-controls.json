@@ -1,0 +1,111 @@
+{
+  "controls": [
+    {
+      "balanced_mean_percent": 4.099588197972855,
+      "evidence": {
+        "path": "evaluation/raw/analytics-target-scout-20260716/summary/parquet-balanced-two-order-aggregate.json",
+        "sha256": "d945fadeeb0f408caac3e4973aa8c33aace1a1b178c739584c445d6b97b84381"
+      },
+      "latency_reduction_percent_by_order": [
+        7.9692979785712454,
+        -0.2533521211976632
+      ],
+      "mechanism": "proven: exact compiler Long site routed 262144 times per arm; both THP arms obtained one 2MiB AnonHugePages collapse and both ordinary arms stayed at zero",
+      "reason": "one order positive and the reverse order approximately flat/negative; keep as mechanism evidence",
+      "status": "mechanism_positive_performance_order_sensitive",
+      "target": "Parquet 58.3.0 dictionary decoder"
+    },
+    {
+      "anon_hugepages_kib": 4096,
+      "evidence": {
+        "path": "evaluation/raw/compiler-directed-sled-v0347-20260716/result.json",
+        "sha256": "c1a8d427b9bb6b3174dfba419ef16ccd039ac0a6fb0216cc846a5263ffeeb1b3"
+      },
+      "latency_reduction_percent_median": -0.2683905658803086,
+      "reason": "only 4 MiB hinted THP inside about 848 MiB process RSS; coverage density too low",
+      "status": "mechanism_positive_performance_negative",
+      "target": "Sled 0.34.7"
+    },
+    {
+      "anon_hugepages_kib": 2048,
+      "evidence": {
+        "path": "evaluation/raw/fixed-medium-target-scout-keyhog-20260716/result.json",
+        "sha256": "7aafa4a596b93eb5dc97ea051e5122377d195a4de2b39e38b42f52672c4b0ff2"
+      },
+      "latency_reduction_percent_median": -9.132353325830977,
+      "reason": "one hugepage and lockstep same-offset probes expose cache-set aliasing",
+      "status": "mechanism_positive_performance_negative",
+      "target": "Keyhog 0.5.40"
+    },
+    {
+      "anon_hugepages_kib": 8192,
+      "evidence": {
+        "path": "evaluation/raw/ironrdp-target-scout-20260716/alternate-image/result.json",
+        "sha256": "f7a966ca28d1d834ff894b39e795d0ac4ce2bc6f6cef44b6ae6964962a99f8d3"
+      },
+      "latency_reduction_percent_median": -2.7661265653798717,
+      "reason": "sequential palette consumption does not amortize collapse or benefit from TLB reach",
+      "status": "mechanism_positive_performance_negative",
+      "target": "image-rs 0.25.8 TGA"
+    },
+    {
+      "evidence": {
+        "path": "evaluation/raw/compiler-directed-fdeflate-v037-20260716/result.json",
+        "sha256": "48ee236d1a1eba68ca3fecd7be920d54227afacb70310bef45712fb710a29b29"
+      },
+      "latency_reduction_percent_median": -0.584901044735104,
+      "process_wall_reduction_percent_median": -1.0810721965676349,
+      "reason": "synchronous collapse startup cost and sequential decoder access dominate",
+      "status": "startup_and_end_to_end_negative",
+      "target": "fdeflate 0.3.7"
+    }
+  ],
+  "coverage_blockers": {
+    "evidence": {
+      "path": "evaluation/raw/analytics-target-scout-20260716/summary/coverage-blockers.json",
+      "sha256": "7fe977a5042e4a2d3ae3cb72326c1bf8fc67eb2821c31246f9dfc94ff79a3c93"
+    },
+    "summary": "dynamic/unjoinable layouts remain the main compiler coverage limit",
+    "targets": [
+      {
+        "applied_long_hints": null,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/cubestore/metadata-offline-screen/result.json",
+        "evidence_sha256": "403756a3282733e31d59e3928cc87f00d3e2e49d71bab23d36a9f32b1c4c6ca1",
+        "reason": "Pinned cube-js/arrow-datafusion ea204976 was absent locally; full Linux build also carries RocksDB and Kafka/SASL. No compiler coverage result was fabricated.",
+        "source_commit": "1d461420f7b543d386ace7b8b2b408071c926705",
+        "status": "coverage_blocked_build_not_attempted",
+        "target": "CubeStore 1.7.2"
+      },
+      {
+        "applied_long_hints": 0,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/actix/build/coverage-summary.json",
+        "evidence_sha256": "64b272089e40f7ca788fb79f18fe0923ba626931dda6c8b1b90df264419760cb",
+        "reason": "The production 8KiB BytesMut body/encoding buffers received zero relevant static Long hints. Two bytes Vec<u8> dynamic reserve hints were a different code path.",
+        "status": "coverage_rejected_zero_relevant_static_long_hints",
+        "target": "Actix-Web 4.12.1 / actix-http 3.11.2"
+      },
+      {
+        "applied_long_hints": 0,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/arrow-ipc/build/coverage-summary.json",
+        "evidence_sha256": "58b75c9662019b62612f409130fe2022f4315abf26c302f04a11f6c360c8636e",
+        "reason": "arrow_ipc, arrow_array, and arrow_buffer emitted zero static Short/Long hints; runtime-sized capacity defeated exact placement.",
+        "source_commit": "913bab26ba9bed8fc2bc1acda300cc52345b0da1",
+        "status": "coverage_rejected_zero_static_short_or_long_hints",
+        "target": "Arrow IPC 58.3.0"
+      },
+      {
+        "applied_long_hints": 0,
+        "artifact_owner": "root lane",
+        "compiler_sites_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-rustfft-v641-20260716/build/compiler-sites.json",
+        "compiler_sites_sha256": "f46f0ed6ecdd184f8a942d0df5cbea3d5e5ca5a80873452562fa880ad8ac0495",
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-rustfft-v641-20260716/build/build.json",
+        "evidence_sha256": "173fc8e6e2aebf8ae1169152b78b9c41288245756d56c3d46ef39785662afc5f",
+        "reason": "142 compiler allocation candidates remained unknown, primarily return-long with unjoinable layout; zero executable prior hints.",
+        "source_commit": "4758ab0dd6f256c50ac8987c75c9cb96152dc2ca",
+        "status": "coverage_rejected_zero_static_long_hints",
+        "target": "RustFFT 6.4.1"
+      }
+    ]
+  },
+  "schema_version": 1
+}

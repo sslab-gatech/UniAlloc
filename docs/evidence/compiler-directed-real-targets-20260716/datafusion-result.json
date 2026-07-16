@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "classification": "compiler-directed-datafusion-final-directional-evidence",
+  "result_status": "directional_positive_evidence",
+  "subject": {
+    "workload": "Apache DataFusion 54.0.0 ApproxDistinct grouped aggregation",
+    "source_repository": "https://github.com/apache/datafusion.git",
+    "source_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b",
+    "feature": "compiler-directed lifetime placement with density-gated transparent huge pages",
+    "comparison": "compiler-prior ordinary placement policy 10 versus compiler-prior THP placement policy 9",
+    "primary_comparison": "allocator default policy 0 versus compiler-directed THP policy 9",
+    "secondary_ablation": "compiler-prior ordinary placement policy 10 versus compiler-prior THP placement policy 9"
+  },
+  "claim_status": {
+    "presentation_directional_evidence": true,
+    "performance_claim_eligible": false,
+    "confidence_interval_available": false,
+    "clean_end_to_end_reproduction_required": true,
+    "claim_boundary": "Two opposite-order pinned-core fixed-work pairs show a 5.409% median query-time improvement against allocator default for the single-partition geometry, with a 4.259% median peak-RSS cost. No confidence interval is available; the result is directional macro evidence.",
+    "defensible_claim": "On the measured real DataFusion workload, compiler-directed 16 KiB Long allocations formed physically backed THP cohorts with zero runtime lifetime learning. Against allocator default, both opposite-order single-partition pairs improved query time by 5.174% to 5.644% (median 5.409%) while increasing peak RSS by a median 4.259%. The 128-group matched-placement geometry separately reduced peak RSS by 1.491%.",
+    "causal_attribution_boundary": "The compiler lifetime hint selects placement; full-density THP construction and exact-key extent reuse realize the performance effect. The primary comparison uses the same compiler-instrumented binary in policy 0 and policy 9, so it supports the combined compiler-directed placement mechanism against allocator default."
+  },
+  "causal_mechanism": {
+    "compiler_audit": {
+      "audited_dependency_site_count": 2290,
+      "applied_long_site_count": 19,
+      "applied_long_requested_sizes_bytes": [
+        16384
+      ],
+      "numeric_hll_accumulator_site_count": 14,
+      "measured_uint64_numeric_hll_site_count": 1,
+      "hint": 2,
+      "confidence": 70,
+      "hint_basis": "automatic_rust_lifetime_prior_return_long",
+      "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+      "target_crate": "datafusion_functions_aggregate",
+      "generated_runner_excluded": true
+    },
+    "runtime": {
+      "thp_policy": 9,
+      "ordinary_control_policy": 10,
+      "compiler_directed_layout_admission_min_bytes": 4096,
+      "compiler_directed_layout_admission_max_bytes": 28032,
+      "runtime_lifetime_analysis": false,
+      "runtime_validation": false,
+      "adaptive_live_trailers": 0,
+      "runtime_site_rows": 0,
+      "diagnostic_telemetry_on_measured_path": false,
+      "placement_strategy": "full-density 2 MiB cohorts followed by MADV_COLLAPSE and exact-key promoted-extent reuse"
+    },
+    "measurement_controls": {
+      "benchmark_kind": "fixed-work macrobenchmark",
+      "criterion_used": false,
+      "warmup_iterations": 0,
+      "fresh_process_per_arm": true,
+      "cpu_affinity": [
+        120,
+        121,
+        122,
+        123
+      ],
+      "peak_memory_source": "procfs smaps_rollup conservative query-window samples",
+      "physical_backing_required": true,
+      "fixed_work_and_result_digest_required": true,
+      "full_output_validation": "first and last fixed-work result; every iteration executes and materializes the query"
+    }
+  },
+  "results": {
+    "g1024_single_partition_default_performance_direction": {
+      "verdict": "performance_positive_memory_cost_against_allocator_default",
+      "comparison": "allocator default policy 0 versus compiler-directed THP policy 9",
+      "source_synthesis": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-default-two-pairs-q896.json",
+        "sha256": "b55254f2bcdd1ee9ccb9b0c6c4d36f41ded9705f3faa96ebc3ae40a679dcb81f"
+      },
+      "workload_geometry": {
+        "group_count": 1024,
+        "query_iterations": 896,
+        "target_partitions": 1,
+        "live_bytes_per_hll_cohort": 16777216,
+        "routed_allocations_per_thp_arm": 917504
+      },
+      "pair_count": 2,
+      "pairs": [
+        {
+          "default_peak_anon_hugepages_kib": 0,
+          "default_peak_rss_kib": 121744,
+          "default_query_seconds": 19.94537015,
+          "default_run_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-default-first-q896-r2/default-first/run.json",
+          "default_run_sha256": "3b51b02a479db7d363da1bbba597ff06cc171a50f200bf576d6a92e43d264379",
+          "pair_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-default-first-q896-r2/pair.json",
+          "pair_sha256": "84384266db7adc6bbfeaba0a4c814a0b14f9fc5a303e6521ec93d76b7d65c44b",
+          "peak_rss_cost_percent": 4.166119069522933,
+          "query_speedup_percent": 5.644443078936778,
+          "routed_allocations": 917504,
+          "run_order": "default-then-thp",
+          "thp_all_query_samples_physically_backed": true,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 8,
+          "thp_extent_mappings": 8,
+          "thp_peak_anon_hugepages_kib": 16384,
+          "thp_peak_rss_kib": 126816,
+          "thp_positive_backing_sample_count": 106,
+          "thp_query_seconds": 18.819565085,
+          "thp_query_window_sample_count": 106,
+          "thp_reuse_hits": 7160,
+          "thp_run_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-default-first-q896-r2/thp-second/run.json",
+          "thp_run_sha256": "2fe6758cd8b28fdea9683868a37afa6c87e495bd8e8dc5664f29e74f24ea54e1"
+        },
+        {
+          "default_peak_anon_hugepages_kib": 0,
+          "default_peak_rss_kib": 122044,
+          "default_query_seconds": 19.376867861,
+          "default_run_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-thp-first-q896/default-second/run.json",
+          "default_run_sha256": "77b1f125df3d546b841e6fa52ab566bb5c92a319ed941bb401cf84f224a78fe2",
+          "pair_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-thp-first-q896/pair.json",
+          "pair_sha256": "65b4f2fa0bf0516c0f875e4a76db93d4c612b7fdd679ca91cab25a37a635acef",
+          "peak_rss_cost_percent": 4.352528596243976,
+          "query_speedup_percent": 5.173943947968174,
+          "routed_allocations": 917504,
+          "run_order": "thp-then-default",
+          "thp_all_query_samples_physically_backed": true,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 8,
+          "thp_extent_mappings": 8,
+          "thp_peak_anon_hugepages_kib": 16384,
+          "thp_peak_rss_kib": 127356,
+          "thp_positive_backing_sample_count": 104,
+          "thp_query_seconds": 18.374319579,
+          "thp_query_window_sample_count": 104,
+          "thp_reuse_hits": 7160,
+          "thp_run_path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-p1-validation-sampled-thp-first-q896/thp-first/run.json",
+          "thp_run_sha256": "bd78f6275c5b392bec38322a2e5691009dab6b6616937e3815638603da0e1f26"
+        }
+      ],
+      "aggregate": {
+        "adaptive_trailers": 0,
+        "all_collapse_attempts_succeeded": true,
+        "all_thp_query_samples_physically_backed": true,
+        "both_pairs_query_time_positive": true,
+        "maximum_query_speedup_percent": 5.644443078936778,
+        "median_peak_rss_cost_percent": 4.259323832883455,
+        "median_query_speedup_percent": 5.409193513452475,
+        "minimum_query_speedup_percent": 5.173943947968174,
+        "pair_count": 2,
+        "runtime_lifetime_learning": false,
+        "runtime_validation": false
+      },
+      "gates": {
+        "same_binary_all_arms": true,
+        "fixed_work_match_across_all_arms": true,
+        "both_opposite_order_pairs_faster": true,
+        "all_thp_query_window_samples_physically_backed": true,
+        "all_collapse_attempts_succeeded": true,
+        "default_peak_anon_hugepages_kib": 0,
+        "runtime_learning_zero": true,
+        "runtime_validation_zero": true,
+        "adaptive_trailers_zero": true,
+        "warmup_zero": true,
+        "full_output_validation": "first and last fixed-work result"
+      },
+      "claim_boundary": "two opposite-order pinned-core fixed-work directional macro pairs; no confidence interval"
+    },
+    "g128_memory_direction": {
+      "verdict": "memory_positive_time_cost",
+      "source_pair": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/pinned-q1536/pair.json",
+        "sha256": "7af3054e64ddc2f119bc5e9537f8832df0de8d4af431f28d3eab7d03d19180e2"
+      },
+      "workload_geometry": {
+        "group_count": 128,
+        "query_iterations": 1536,
+        "target_partitions": 2,
+        "live_bytes_per_partial_hll_cohort": 2097152,
+        "routed_allocations_per_arm": 589824
+      },
+      "ordinary": {
+        "query_seconds": 17.600039436,
+        "peak_rss_kib": 131420,
+        "peak_anonymous_kib": 78232,
+        "peak_pss_kib": 129086,
+        "peak_anon_hugepages_kib": 0,
+        "positive_hugepage_samples": 0,
+        "query_window_samples": 96
+      },
+      "thp": {
+        "query_seconds": 17.982793571,
+        "peak_rss_kib": 129460,
+        "peak_anonymous_kib": 76336,
+        "peak_pss_kib": 127136,
+        "peak_anon_hugepages_kib": 4096,
+        "positive_hugepage_samples": 99,
+        "query_window_samples": 99,
+        "extent_mappings": 2,
+        "collapse_attempts": 2,
+        "collapse_successes": 2,
+        "collapse_errors": 0,
+        "retained_empty_extent_reuse_hits": 4606
+      },
+      "deltas_thp_relative_to_ordinary": {
+        "query_time_percent_change": 2.174734530520972,
+        "peak_rss_reduction_kib": 1960,
+        "peak_rss_reduction_percent": 1.4914016131486796,
+        "peak_anonymous_reduction_kib": 1896,
+        "peak_anonymous_reduction_percent": 2.4235606912772267,
+        "peak_pss_reduction_kib": 1950,
+        "peak_pss_reduction_percent": 1.5106208264257937
+      },
+      "gates": {
+        "fixed_work_match": true,
+        "physical_backing_gate_passed": true,
+        "all_thp_query_window_samples_physically_backed": true,
+        "runtime_learning_zero": true,
+        "runtime_validation_zero": true,
+        "warmup_zero": true
+      }
+    },
+    "g1024_performance_direction": {
+      "verdict": "performance_positive_memory_cost",
+      "source_synthesis": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-two-pairs-q256.json",
+        "sha256": "72ee23364759f54f5b982387292a5148d49f11afe563a3034ed499ea2a13101e"
+      },
+      "workload_geometry": {
+        "group_count": 1024,
+        "query_iterations": 256,
+        "target_partitions": 2,
+        "live_bytes_per_partial_hll_cohort": 16777216,
+        "routed_allocations_per_arm": 786432
+      },
+      "pair_count": 2,
+      "pairs": [
+        {
+          "run_order": [
+            "ordinary",
+            "thp"
+          ],
+          "source_pair": {
+            "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-calibration-q256/pair.json",
+            "sha256": "33a8223e7ca1b017d5bc43559bf6704ecddb4aea5046c48612ee8fb2653fb95f"
+          },
+          "ordinary_query_seconds": 21.267359294,
+          "thp_query_seconds": 21.196044047,
+          "query_speedup_percent": 0.3353272308711963,
+          "ordinary_peak_rss_kib": 252028,
+          "thp_peak_rss_kib": 257920,
+          "peak_rss_cost_percent": 2.337835478597605,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_positive_hugepage_samples": 113,
+          "thp_query_window_samples": 113,
+          "thp_extent_mappings": 16,
+          "thp_collapse_successes": 16,
+          "thp_collapse_errors": 0,
+          "thp_retained_empty_extent_reuse_hits": 6127,
+          "physical_backing_gate_passed": true
+        },
+        {
+          "run_order": [
+            "thp",
+            "ordinary"
+          ],
+          "ordinary_run": {
+            "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-reverse-q256/ordinary-second/run.json",
+            "sha256": "b84b531ef313d2eb385ea0a2503ea3a55b5c20529e13af26dee980a042bc16a9"
+          },
+          "thp_run": {
+            "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/g1024-reverse-q256/thp-first/run.json",
+            "sha256": "554c1dbfb535ba24cc6bebf4b96da9a2ae488b1a85651a6cb4df3a1e6800d361"
+          },
+          "ordinary_query_seconds": 21.382530748,
+          "thp_query_seconds": 21.013681698,
+          "query_speedup_percent": 1.725001845417673,
+          "ordinary_peak_rss_kib": 258780,
+          "thp_peak_rss_kib": 261664,
+          "peak_rss_cost_percent": 1.1144601592085968,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_positive_hugepage_samples": 115,
+          "thp_query_window_samples": 115,
+          "thp_extent_mappings": 16,
+          "thp_collapse_successes": 16,
+          "thp_collapse_errors": 0,
+          "thp_retained_empty_extent_reuse_hits": 6127,
+          "physical_backing_gate_passed": true
+        }
+      ],
+      "aggregate": {
+        "both_pairs_query_time_positive": true,
+        "median_query_speedup_percent": 1.0301645381444402,
+        "median_peak_rss_cost_percent": 1.726147818903101,
+        "all_physical_backing_gates_passed": true
+      },
+      "gates": {
+        "fixed_work_match": true,
+        "runtime_learning_zero": true,
+        "runtime_validation_zero": true,
+        "warmup_zero": true
+      }
+    }
+  },
+  "artifact_provenance": {
+    "source_artifact_root": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716",
+    "successful_measurement_artifacts_only": true,
+    "compiler_sites": {
+      "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/compiler-sites.json",
+      "sha256": "31d5a62ae71502785262ce0b656512a1caaff2b708ba3eae90899ea3246eada1",
+      "audit_digest": "126eddeb5aca5bceb51569418932678c96a02e803369b0011adb03333fe910bb"
+    },
+    "runtime_snapshot": {
+      "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/allocator-compatibility/datafusion/snapshot/unialloc/src/alloc_api/lifetime_hugepage.rs",
+      "sha256": "e73480ff9da9d3b7a8cab88021481b57231bb13cd419d5732165e013528a359d"
+    },
+    "g128": {
+      "build_provenance": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g128-reuse/build-provenance.json",
+        "sha256": "fae7362e633b97c8a01e918ba45d46b1799e9bfdf6f327bf5054bca53f8e76a3"
+      },
+      "binary": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g128-reuse/unialloc-lifetime-resident-datafusion",
+        "sha256": "14c6392128d8e5dfd601f93c39963bfb0300f1caf670930d1457b65a72134931"
+      },
+      "generated_source": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g128-reuse/main.rs",
+        "sha256": "e594f0f5476050b3a1644dcb6dbf4c596d73cce835305274d4bd11e8023fd89b"
+      },
+      "force_load_rlib": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g128-reuse/libunialloc-3c9034191c32eeee.rlib",
+        "sha256": "d4ace886979ffd5a38d5229c11b91e347dcc388f1cd0ec9b12a5b4730f44d1d3"
+      },
+      "measurement_wrapper": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/tools/taskset-cpu120-123-datafusion-g128",
+        "sha256": "8b6e10e8c4d62d20293173f1b3861821a9ab68be49964b75a101bf2e8bb7240a",
+        "archival_note": "immutable wrapper restored after the original mutable cargo-target path was reused for g1024"
+      }
+    },
+    "g1024": {
+      "binary": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-reuse/unialloc-lifetime-resident-datafusion",
+        "sha256": "3e42d1f67f1c3cdde7980e3b97d33761196c9b7b529ee7ed7a864aa3f2c23b68"
+      },
+      "generated_source": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-reuse/main.rs",
+        "sha256": "3a6a3084662230c9cc6f285409c1d95aa1a3903f02787a8bf7111af2361fc0ff"
+      },
+      "measurement_wrapper": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/tools/taskset-cpu120-123-datafusion-g1024",
+        "sha256": "f027418fe389f178e47e74c3662e0f3a4f64d0bdcc509d34b5a53c677ff4e05b"
+      },
+      "source_relation_to_g128": "Only GROUP_COUNT and the corresponding live-cohort assertion differ. The compiler audit and runtime snapshot are shared."
+    },
+    "provenance_caveat": "The captured binaries, generated sources, compiler audit, runtime snapshot, and measured runs are hashed. The allocator compatibility snapshot received an explicitly hashed runtime overlay, so a clean end-to-end rebuild remains required before a CI-backed claim.",
+    "g1024_validation_sampled": {
+      "build_provenance": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-validation-sampled/build-provenance.json",
+        "sha256": "d657e73b42e2bef0233d9377be670f69ab92a5cfd2335cb920c0c494d9495d47"
+      },
+      "binary": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-validation-sampled/unialloc-lifetime-resident-datafusion",
+        "sha256": "393ca05c6348778d443ed0107c4c802c4293bad0cfbf0393d011dca914107e92"
+      },
+      "generated_source": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-validation-sampled/main.rs",
+        "sha256": "a823160ce6006049e94b2861f2d7153b4401244249c82628693901025437e504"
+      },
+      "force_load_rlib": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/build/variants/g1024-validation-sampled/libunialloc-3c9034191c32eeee.rlib",
+        "sha256": "d4ace886979ffd5a38d5229c11b91e347dcc388f1cd0ec9b12a5b4730f44d1d3"
+      },
+      "measurement_wrapper": {
+        "path": "evaluation/raw/compiler-directed-datafusion-approx-r1-20260716/tools/taskset-cpu120-123-datafusion-g1024-validation-sampled",
+        "sha256": "5a642c080419593688647ae6ffa87cc6027bcb574b2740f9b0e4ce9a7bd942e0"
+      },
+      "source_relation_to_g1024": "Same real DataFusion query and 1024-group geometry; expensive 1024-row output decoding is performed on the first and last fixed-work result while every iteration still executes and materializes the query."
+    }
+  }
+}

@@ -1,0 +1,24 @@
+Verification date: 2026-07-16
+Owned worktree: /home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716
+Base HEAD: d328e9f5d2c4b5cb6a8d50f06c9b814f6c18d752
+
+PASS: jq parsed every JSON artifact in this evidence directory.
+PASS: all seven copied result records are byte-identical to their immutable raw experiment records.
+PASS: 20 unique evidence references across aggregate.json and negative-controls.json exist and match their recorded SHA-256 values.
+PASS: aggregate.json contains five primary both-order directional positives and one additional Tantivy both-order directional positive.
+PASS: git diff --check reports no whitespace errors in this evidence directory.
+PASS: SHA256SUMS verifies every evidence file other than the manifest itself.
+
+Targeted compiler regression test:
+  python3 -m unittest tools.unialloc-rustc-pass.test_mir_marker_free_heap_lifetime_inference.MirMarkerFreeHeapLifetimeInferenceTest.test_direct_long_requires_exact_in_band_vec_or_box_layout -v
+Result:
+  Ran 1 test in 1.669s
+  OK
+
+Compiler source SHA-256 used by the Tantivy build:
+  6356349e1c0bbf8f6afa359cd09484935fdf978d82175888a9363a42315c7f89  tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs
+Compiler test SHA-256:
+  da10031bd331a8d3adcec9cd6b43f028bfdd782acfeffc7beaf4d4bf600b0081  tools/unialloc-rustc-pass/test_mir_marker_free_heap_lifetime_inference.py
+
+Measurement boundary:
+  One fresh-process AB block and one fresh-process BA block per target, warmup 0, fixed work, correctness digests matched, no confidence intervals.

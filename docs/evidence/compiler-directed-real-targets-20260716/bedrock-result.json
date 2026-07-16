@@ -1,0 +1,109 @@
+{
+  "aggregate": {
+    "all_digests_equal": true,
+    "latency_reduction_percent_median": 15.004996753615817,
+    "rss_change_percent_median": 0.8748232070704742,
+    "rss_delta_kib_pairs": [
+      68,
+      156
+    ],
+    "speedup_percent_median": 17.692547620317256,
+    "speedup_percent_range": [
+      15.561892308848213,
+      19.823202931786298
+    ]
+  },
+  "build": {
+    "binary": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/fixed-medium-target-scout-bedrock-20260716/build/cargo-target/release/unialloc-compiler-directed-bedrock",
+    "binary_sha256": "194780b413d737b16a9c80b9b51dc001910a875f3c40a25a6049828bd2d6b780",
+    "build_record_sha256": "06e11b7d233d2d7f1e0f4ba29930ffd980f5bd90aef8776de0168ecd59d74a10",
+    "global_allocator": "UniAlloc",
+    "runner_source_sha256": "d563be290eae0230d4a6a4d8f90dc02dd7d0d2c145833aae184175bf668cdf05",
+    "target_cpu_core": 7,
+    "toolchain": "nightly-2026-06-11"
+  },
+  "build_transport_correction": {
+    "evidence": "final nm has one ACTIVE_METADATA and one SEMANTIC_SLOW_PATH_FLAGS symbol; mechanism routes exact 1024/8MiB.",
+    "issue": "First build force-loaded a stale pre-final unialloc rlib, producing duplicate allocator TLS state and zero routes. Rebuilding target crate against the final Cargo rlib produced one state instance."
+  },
+  "claim_boundary": "One no-warmup AB+BA screen on one host/core; internal fixed-work operation time; polling used symmetrically for RSS/AHP. Confirm with larger repetitions before final publication.",
+  "compiler_audit": {
+    "applied_long_count": 1,
+    "audit_sha256": "f729798a9142acc091e881d7d9a39fe6c327c63c96abe90a6e7b104943769f2d",
+    "basis": "automatic_rust_lifetime_prior_return_long",
+    "callsite": 6298338055214673517,
+    "confidence": 70,
+    "module_id": 8707002487950845866,
+    "requested_align_bytes": 2,
+    "requested_size_bytes": 8192,
+    "runtime_join_key_complete": true,
+    "type_id": 24939070688604790
+  },
+  "mechanism": {
+    "default_max_anon_huge_pages_kib": 0,
+    "default_routes": 0,
+    "hint_collapse_attempts": 4,
+    "hint_collapse_successes": 4,
+    "hint_max_anon_huge_pages_kib": 8192,
+    "hint_peak_confirmed_extents": 4,
+    "hint_requested_bytes": 8388608,
+    "hint_routes": 1024,
+    "hint_slot_bytes": 8388608,
+    "hint_thp_extents": 4,
+    "unknown_bypasses": 0,
+    "unsupported_layout_bypasses": 0
+  },
+  "pairs": {
+    "AB": {
+      "default_max_rss_kib": 12864,
+      "default_operation_seconds": 6.450842497,
+      "digest_equal": true,
+      "hint_max_rss_kib": 12932,
+      "hint_operation_seconds": 5.582153743,
+      "latency_reduction_percent": 13.466283735868428,
+      "rss_change_percent": 0.5286069651741387,
+      "speedup_percent": 15.561892308848213
+    },
+    "BA": {
+      "default_max_rss_kib": 12776,
+      "default_operation_seconds": 6.606813019,
+      "digest_equal": true,
+      "hint_max_rss_kib": 12932,
+      "hint_operation_seconds": 5.513801048,
+      "latency_reduction_percent": 16.543709771363204,
+      "rss_change_percent": 1.2210394489668097,
+      "speedup_percent": 19.823202931786298
+    }
+  },
+  "production_site": {
+    "expression": "Box::new([0u16; 4096])",
+    "line": 94,
+    "path": "crates/level/src/greedy.rs",
+    "public_path": "GreedyArray::from_disk -> GreedyArray::unpack",
+    "requested_align_bytes": 2,
+    "requested_size_bytes": 8192,
+    "semantic": "Persistent fully-unpacked Minecraft Bedrock chunk palette array"
+  },
+  "project": {
+    "commit": "173381a9a4de01894aca3e0814bcc22b2ddb0a12",
+    "crate": "bedrock_level 0.1.0",
+    "name": "bedrock-rs",
+    "repository": "https://github.com/bedrock-crustaceans/bedrock-rs.git",
+    "stars_observed_at_scout": 175,
+    "status": "",
+    "tree": "259b87d4a8f062926bacf7ecd439c333fafde11c"
+  },
+  "raw_runs": "measurement/runs.json",
+  "schema_version": 1,
+  "verdict": "positive_provisional_single_ab_ba",
+  "workload": {
+    "chunks": 1024,
+    "fixed_work": true,
+    "iterations": 3000000,
+    "live_hinted_requested_bytes": 8388608,
+    "lookups": 3072000000,
+    "operation": "Randomized-index GreedyArray::get across 1024 production-deserialized chunk arrays",
+    "target_duration_seconds": "5.5-6.6",
+    "warmup_iterations": 0
+  }
+}

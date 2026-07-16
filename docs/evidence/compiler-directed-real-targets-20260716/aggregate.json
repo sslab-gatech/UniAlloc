@@ -1,0 +1,381 @@
+{
+  "additional_directional_target": {
+    "boundary": "Both AB/BA orders improved, but the 1.08% median effect has no confidence interval and costs about 8.2 MiB peak RSS.",
+    "classification": "exploratory_directional_perf_positive_with_material_rss_cost",
+    "comparison": "allocator default policy0 vs compiler-hint THP policy9",
+    "compiler_long_layout": {
+      "align": 1,
+      "basis": "automatic_rust_lifetime_prior_return_long",
+      "bytes": 8000,
+      "coverage_fix": "fail-closed dominating single-assignment integer Add/Mul constant propagation"
+    },
+    "evidence": {
+      "path": "docs/evidence/compiler-directed-real-targets-20260716/tantivy-sstable-result.json",
+      "sha256": "713a7a990c2d52b0bae18341f3439741c8bec27b3675b1c2e1d756afd10d7848"
+    },
+    "latency_reduction_percent": {
+      "median": 1.0780477311374197,
+      "range": [
+        0.62009814398036,
+        1.5359973182944793
+      ]
+    },
+    "mechanism": {
+      "anon_hugepages_kib": 16384,
+      "collapse_errors": 0,
+      "collapse_successes_per_hint_arm": 8,
+      "routes_per_hint_arm": 2048
+    },
+    "orders": 2,
+    "peak_rss_change_percent": {
+      "median": 8.214179799198211,
+      "range": [
+        8.168149004905676,
+        8.260210593490747
+      ]
+    },
+    "production_path": "DeltaWriter::new streaming SSTable encoder",
+    "source_commit": "d8f4c0b703120ed98f06297724dc1522df6019b9",
+    "target": "Tantivy-SSTable 0.7.0"
+  },
+  "claim_boundary": "Five primary real projects show matched correctness plus physical THP and both-order time improvements. Tantivy supplies a sixth both-order directional positive with a material RSS cost. All results are one AB and one BA screen on one host without confidence intervals; publication-grade effect sizes need isolated repetitions and CIs.",
+  "classification": "compiler-directed-real-target-screen-20260716",
+  "coverage_blockers": {
+    "evidence": {
+      "path": "evaluation/raw/analytics-target-scout-20260716/summary/coverage-blockers.json",
+      "sha256": "7fe977a5042e4a2d3ae3cb72326c1bf8fc67eb2821c31246f9dfc94ff79a3c93"
+    },
+    "summary": "dynamic/unjoinable layouts remain the main compiler coverage limit",
+    "targets": [
+      {
+        "applied_long_hints": null,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/cubestore/metadata-offline-screen/result.json",
+        "evidence_sha256": "403756a3282733e31d59e3928cc87f00d3e2e49d71bab23d36a9f32b1c4c6ca1",
+        "reason": "Pinned cube-js/arrow-datafusion ea204976 was absent locally; full Linux build also carries RocksDB and Kafka/SASL. No compiler coverage result was fabricated.",
+        "source_commit": "1d461420f7b543d386ace7b8b2b408071c926705",
+        "status": "coverage_blocked_build_not_attempted",
+        "target": "CubeStore 1.7.2"
+      },
+      {
+        "applied_long_hints": 0,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/actix/build/coverage-summary.json",
+        "evidence_sha256": "64b272089e40f7ca788fb79f18fe0923ba626931dda6c8b1b90df264419760cb",
+        "reason": "The production 8KiB BytesMut body/encoding buffers received zero relevant static Long hints. Two bytes Vec<u8> dynamic reserve hints were a different code path.",
+        "status": "coverage_rejected_zero_relevant_static_long_hints",
+        "target": "Actix-Web 4.12.1 / actix-http 3.11.2"
+      },
+      {
+        "applied_long_hints": 0,
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/analytics-target-scout-20260716/arrow-ipc/build/coverage-summary.json",
+        "evidence_sha256": "58b75c9662019b62612f409130fe2022f4315abf26c302f04a11f6c360c8636e",
+        "reason": "arrow_ipc, arrow_array, and arrow_buffer emitted zero static Short/Long hints; runtime-sized capacity defeated exact placement.",
+        "source_commit": "913bab26ba9bed8fc2bc1acda300cc52345b0da1",
+        "status": "coverage_rejected_zero_static_short_or_long_hints",
+        "target": "Arrow IPC 58.3.0"
+      },
+      {
+        "applied_long_hints": 0,
+        "artifact_owner": "root lane",
+        "compiler_sites_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-rustfft-v641-20260716/build/compiler-sites.json",
+        "compiler_sites_sha256": "f46f0ed6ecdd184f8a942d0df5cbea3d5e5ca5a80873452562fa880ad8ac0495",
+        "evidence_path": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/compiler-directed-rustfft-v641-20260716/build/build.json",
+        "evidence_sha256": "173fc8e6e2aebf8ae1169152b78b9c41288245756d56c3d46ef39785662afc5f",
+        "reason": "142 compiler allocation candidates remained unknown, primarily return-long with unjoinable layout; zero executable prior hints.",
+        "source_commit": "4758ab0dd6f256c50ac8987c75c9cb96152dc2ca",
+        "status": "coverage_rejected_zero_static_long_hints",
+        "target": "RustFFT 6.4.1"
+      }
+    ]
+  },
+  "measurement_contract": {
+    "ab_ba_opposite_orders": true,
+    "confidence_interval_available": false,
+    "criterion_used": false,
+    "fixed_work_and_digest_match_required": true,
+    "fresh_process_per_arm": true,
+    "physical_anon_hugepages_required": true,
+    "warmup_iterations": 0
+  },
+  "mechanism_or_negative_controls": [
+    {
+      "balanced_mean_percent": 4.099588197972855,
+      "evidence": {
+        "path": "evaluation/raw/analytics-target-scout-20260716/summary/parquet-balanced-two-order-aggregate.json",
+        "sha256": "d945fadeeb0f408caac3e4973aa8c33aace1a1b178c739584c445d6b97b84381"
+      },
+      "latency_reduction_percent_by_order": [
+        7.9692979785712454,
+        -0.2533521211976632
+      ],
+      "mechanism": "proven: exact compiler Long site routed 262144 times per arm; both THP arms obtained one 2MiB AnonHugePages collapse and both ordinary arms stayed at zero",
+      "reason": "one order positive and the reverse order approximately flat/negative; keep as mechanism evidence",
+      "status": "mechanism_positive_performance_order_sensitive",
+      "target": "Parquet 58.3.0 dictionary decoder"
+    },
+    {
+      "anon_hugepages_kib": 4096,
+      "evidence": {
+        "path": "evaluation/raw/compiler-directed-sled-v0347-20260716/result.json",
+        "sha256": "c1a8d427b9bb6b3174dfba419ef16ccd039ac0a6fb0216cc846a5263ffeeb1b3"
+      },
+      "latency_reduction_percent_median": -0.2683905658803086,
+      "reason": "only 4 MiB hinted THP inside about 848 MiB process RSS; coverage density too low",
+      "status": "mechanism_positive_performance_negative",
+      "target": "Sled 0.34.7"
+    },
+    {
+      "anon_hugepages_kib": 2048,
+      "evidence": {
+        "path": "evaluation/raw/fixed-medium-target-scout-keyhog-20260716/result.json",
+        "sha256": "7aafa4a596b93eb5dc97ea051e5122377d195a4de2b39e38b42f52672c4b0ff2"
+      },
+      "latency_reduction_percent_median": -9.132353325830977,
+      "reason": "one hugepage and lockstep same-offset probes expose cache-set aliasing",
+      "status": "mechanism_positive_performance_negative",
+      "target": "Keyhog 0.5.40"
+    },
+    {
+      "anon_hugepages_kib": 8192,
+      "evidence": {
+        "path": "evaluation/raw/ironrdp-target-scout-20260716/alternate-image/result.json",
+        "sha256": "f7a966ca28d1d834ff894b39e795d0ac4ce2bc6f6cef44b6ae6964962a99f8d3"
+      },
+      "latency_reduction_percent_median": -2.7661265653798717,
+      "reason": "sequential palette consumption does not amortize collapse or benefit from TLB reach",
+      "status": "mechanism_positive_performance_negative",
+      "target": "image-rs 0.25.8 TGA"
+    },
+    {
+      "evidence": {
+        "path": "evaluation/raw/compiler-directed-fdeflate-v037-20260716/result.json",
+        "sha256": "48ee236d1a1eba68ca3fecd7be920d54227afacb70310bef45712fb710a29b29"
+      },
+      "latency_reduction_percent_median": -0.584901044735104,
+      "process_wall_reduction_percent_median": -1.0810721965676349,
+      "reason": "synchronous collapse startup cost and sequential decoder access dominate",
+      "status": "startup_and_end_to_end_negative",
+      "target": "fdeflate 0.3.7"
+    }
+  ],
+  "naive_runtime_profile_vs_compiler_hint": {
+    "compiler_hint_peak_rss_change_percent_median": 4.05191797721693,
+    "compiler_hint_query_latency_reduction_percent_median": 7.226199480391893,
+    "compiler_hint_query_window_anon_hugepages_kib": 16384,
+    "evidence": {
+      "path": "docs/evidence/datafusion-runtime-profile-vs-hint-20260716/aggregate.json",
+      "sha256": "f7517623b891d93da956e848500f5c66c5746603bf3d869ea4418488f45e074f"
+    },
+    "program": "Apache DataFusion 54.0.0",
+    "range": [
+      5.71755395594514,
+      8.734845004838645
+    ],
+    "runtime_profile_learned_sites": 192,
+    "runtime_profile_lock_traffic_lower_bound_ratio": 4.078675406319754,
+    "runtime_profile_query_window_anon_hugepages_kib": 0,
+    "same_binary": true,
+    "verdict": "compiler hints win both orders; online learning found Long sites but did not retain dense physical THP cohorts"
+  },
+  "positive_targets": [
+    {
+      "comparison": "allocator default policy0 vs compiler-hint THP policy9",
+      "compiler_long_layout": {
+        "align": 1,
+        "basis": "automatic_rust_lifetime_prior_return_long",
+        "bytes": 16384
+      },
+      "evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/datafusion-result.json",
+        "sha256": "b446ffa431e6bb4b7ff629b623f77cdafbb3192a18019725971c02571a025ebf"
+      },
+      "latency_reduction_percent": {
+        "median": 5.409193513452475,
+        "range": [
+          5.173943947968174,
+          5.644443078936778
+        ]
+      },
+      "mechanism": {
+        "anon_hugepages_kib": 16384,
+        "collapse_errors": 0,
+        "collapse_successes_per_arm": 8,
+        "routes_per_hint_arm": 917504
+      },
+      "orders": 2,
+      "peak_rss_change_percent": {
+        "median": 4.259323832883455
+      },
+      "production_path": "ApproxDistinct grouped aggregation / NumericHLLAccumulator",
+      "secondary_controls": {
+        "evidence": {
+          "path": "docs/evidence/compiler-directed-datafusion-20260716/global-nohint-thp-vs-hint-thp.json",
+          "sha256": "24eb37274db8474fec7e5969141cbf46ab7a28241aaba2d3442ca7770c256549"
+        },
+        "global_nohint_thp_vs_hint_thp_latency_reduction_percent_median": 2.063859374332994,
+        "global_nohint_thp_vs_hint_thp_peak_rss_change_percent_median": -0.8078067976962977
+      },
+      "source_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b",
+      "target": "Apache DataFusion 54.0.0"
+    },
+    {
+      "comparison": "allocator default policy0 vs compiler-hint THP policy9",
+      "compiler_long_layout": {
+        "align": 8,
+        "basis": "automatic_rust_lifetime_prior_return_long",
+        "bytes": 8192
+      },
+      "evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/roaring-result.json",
+        "sha256": "1c8eb11a07aac80ce3460638922cfc268220e73ceaa7c52eeba98f2b245ed493"
+      },
+      "latency_reduction_percent": {
+        "median": 1.825851901423194,
+        "range": [
+          1.636801839266082,
+          2.014901963580306
+        ]
+      },
+      "mechanism": {
+        "anon_hugepages_kib": 16384,
+        "collapse_errors": 0,
+        "collapse_successes_per_arm": 8,
+        "routes_per_hint_arm": 2048
+      },
+      "orders": 2,
+      "peak_rss_change_percent": {
+        "median": 0.08489380473265244
+      },
+      "production_path": "serialized bitmap intersection / BitmapStore::new",
+      "source_commit": "6a4dda228b8d434b10fdc9306b412d2505b8e3d9",
+      "target": "Roaring 0.11.3"
+    },
+    {
+      "comparison": "allocator default policy0 vs compiler-hint THP policy9",
+      "compiler_long_layout": {
+        "align": 8,
+        "basis": "automatic_rust_lifetime_prior_return_long",
+        "bytes": 8192
+      },
+      "evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/lume-default-result.json",
+        "sha256": "b730fd7d9cd656bc49e2481a33600c67311569b979d1e995a4b0cc6af398109e"
+      },
+      "latency_reduction_percent": {
+        "median": 12.12600897065612,
+        "range": [
+          9.06302786167222,
+          15.188990079640021
+        ]
+      },
+      "mechanism": {
+        "anon_hugepages_kib": 16384.0,
+        "collapse_errors": 0,
+        "collapse_successes_per_arm": 8,
+        "routes_per_hint_arm": 2048
+      },
+      "orders": 2,
+      "peak_rss_change_percent": {
+        "median": 0.2683951207602452
+      },
+      "production_path": "Bm25Index JSON load / MiniRoaring Deserialize",
+      "same_arena_ablation": {
+        "comparison": "compiler-hint ordinary policy10 vs compiler-hint THP policy9",
+        "latency_reduction_percent_median": 1.5805955114651837,
+        "latency_reduction_percent_range": [
+          1.2826663927607884,
+          1.8785246301695793
+        ],
+        "peak_rss_change_percent_median": -0.5431017838194471
+      },
+      "same_arena_evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/lume-ordinary-vs-thp-result.json",
+        "sha256": "1f4621a53be7649cba57b6ca6c3a6ddedf0342f0adc7a303ce6dcc81df603781"
+      },
+      "source_commit": "867c8db5ee959ee0110bb099fc47dd5e3bd26916",
+      "target": "Lume search engine"
+    },
+    {
+      "comparison": "compiler-hint ordinary policy10 vs compiler-hint THP policy9",
+      "compiler_long_layout": {
+        "align": 8,
+        "basis": "automatic_rust_lifetime_prior_return_long",
+        "bytes": 6000
+      },
+      "evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/convex-result.json",
+        "sha256": "449a930b711c9ebed5988e2114454e02069259f0470b73ebb4a9fc35bebf3105"
+      },
+      "latency_reduction_percent": {
+        "median": 4.862448210561872,
+        "range": [
+          3.2278531694568167,
+          6.497043251666927
+        ]
+      },
+      "mechanism": {
+        "anon_hugepages_kib": 16384,
+        "collapse_errors": 0,
+        "collapse_successes_per_hint_arm": 8,
+        "hinted_live_bytes": 16386000,
+        "routes_per_arm": 2731
+      },
+      "orders": 2,
+      "peak_rss_change_percent": {
+        "median": -0.026314679253610467,
+        "range": [
+          -0.10574550581600281,
+          0.05311614730878188
+        ]
+      },
+      "production_path": "HolidayBitmap::new plus public calendar lookups",
+      "source_commit": "6150120ce147e2c034742f9bbb97a4dd703e80dc",
+      "target": "Convex fixed-income analytics 0.13.0"
+    },
+    {
+      "comparison": "allocator default policy0 vs compiler-hint THP policy9",
+      "compiler_long_layout": {
+        "align": 2,
+        "basis": "automatic_rust_lifetime_prior_return_long",
+        "bytes": 8192
+      },
+      "evidence": {
+        "path": "docs/evidence/compiler-directed-real-targets-20260716/bedrock-result.json",
+        "sha256": "466d2d73ee519161f500e30ee743dae4726b4f0559984190528467b91babd041"
+      },
+      "latency_reduction_percent": {
+        "median": 15.004996753615817,
+        "range": [
+          13.466283735868428,
+          16.543709771363204
+        ]
+      },
+      "mechanism": {
+        "anon_hugepages_kib": 8192,
+        "collapse_errors": 0,
+        "collapse_successes_per_hint_arm": 4,
+        "hinted_live_bytes": 8388608,
+        "routes_per_hint_arm": 1024
+      },
+      "orders": 2,
+      "peak_rss_change_percent": {
+        "median": 0.8748232070704742
+      },
+      "production_path": "GreedyArray::from_disk -> GreedyArray::unpack",
+      "source_commit": "173381a9a4de01894aca3e0814bcc22b2ddb0a12",
+      "target": "Bedrock-RS level storage",
+      "throughput_equivalent_speedup_percent": {
+        "median": 17.692547620317256,
+        "range": [
+          15.561892308848213,
+          19.823202931786298
+        ]
+      },
+      "transport_correction": {
+        "evidence": "final nm has one ACTIVE_METADATA and one SEMANTIC_SLOW_PATH_FLAGS symbol; mechanism routes exact 1024/8MiB.",
+        "issue": "First build force-loaded a stale pre-final unialloc rlib, producing duplicate allocator TLS state and zero routes. Rebuilding target crate against the final Cargo rlib produced one state instance."
+      }
+    }
+  ],
+  "schema_version": 1,
+  "status": "five_primary_directional_positive_targets_plus_one_exploratory_positive"
+}
