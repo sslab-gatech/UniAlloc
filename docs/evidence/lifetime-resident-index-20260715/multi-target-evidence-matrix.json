@@ -1,0 +1,480 @@
+{
+  "matrix_scope": "backing-qualified results, dependency ground truth, and explicit compiler-coverage nulls; claim flags are per row",
+  "rows": [
+    {
+      "claim_boundary": "The exact compiler/runtime join is a generated-driver allocation site inside a real DataFusion query process. DataFusion-library-internal compiler sites remain unmeasured. Three pairs provide a preliminary direction without a stable speed estimate.",
+      "claim_flags": {
+        "mechanism_contrast_backing_eligible": true,
+        "performance_claim_eligible": false,
+        "presentation_claim_eligible": false
+      },
+      "compiler_coverage": {
+        "applied_prior_sites": 1,
+        "dependency_internal_sites_measured": false,
+        "exactly_matched_applied_sites": 1,
+        "site_origin": "generated Rust harness driver",
+        "target_allocations": 2048,
+        "target_requested_bytes": 50331648
+      },
+      "physical_backing": {
+        "all_pairs_verified": true,
+        "ordinary_anon_hugepages_kib_each_pair": 0,
+        "pair_count": 3,
+        "selective_thp_anon_hugepages_kib_each_pair": 51200
+      },
+      "provenance": {
+        "allocator_revision": "55bc6799864e7564c154a1bf66a76d73131f7ae7",
+        "binary_sha256": "c4ddca5cf63e622b1423e84ae3a87a832d72e5b4d3cf57385faa2c5b117d3da6",
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/datafusion-resident-summary.json",
+          "sha256": "54fa01cd33d3e048588bd4e55d83c19b843d04d1991dcd2c17d57c07f2856866"
+        },
+        "datafusion_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b",
+        "raw_result": {
+          "bytes": 117869,
+          "path": "evaluation/raw/lifetime-resident-datafusion-55bc679-q512-r3-20260715/result.json",
+          "sha256": "47e2210773f898888d7d407928e41cadca313bd7038bbaf812af0ba21890714a"
+        }
+      },
+      "rss": {
+        "median_peak_rss_increase_percent": 7.266031974133291
+      },
+      "runtime_ground_truth": {
+        "all_target_outcomes_long": true,
+        "exact_runtime_sites": 15,
+        "long_requested_bytes": 50581920,
+        "short_requested_bytes": 0,
+        "target_long_outcomes": 2048,
+        "target_short_outcomes": 0
+      },
+      "target": "DataFusion 54.0.0 resident tables",
+      "time": {
+        "median_query_saving_percent": 1.2205500668785119,
+        "median_total_operation_saving_percent": 1.1401933381446905,
+        "pair_count": 3,
+        "query_faster_pairs": 2,
+        "representative_fixed_work_query_seconds": 8.903080285,
+        "stable_speed_claim": false
+      },
+      "workload": {
+        "correctness": true,
+        "query_iterations": 512,
+        "resident_payload_bytes": 50331648,
+        "single_process": true,
+        "table_count": 2
+      }
+    },
+    {
+      "claim_boundary": "Single-run ground-truth and fail-closed admission evidence only. The selective smoke issued zero THP advice and realized zero physical THP, so its time and RSS cannot support a THP performance comparison.",
+      "claim_flags": {
+        "performance_claim_eligible": false,
+        "presentation_claim_eligible_field_present": false
+      },
+      "compiler_coverage": {
+        "applied_allocation_rewrites": 499,
+        "classified_candidates": 140,
+        "dependency_internal_sites_measured": true,
+        "executed_exact_prior_sites": 10,
+        "target_crates_include_tantivy_dependencies": true
+      },
+      "physical_backing": {
+        "adaptive_smoke_peak_anon_hugepages_kib": 0,
+        "adaptive_smoke_procfs_samples": 17,
+        "backing_realized": false,
+        "thp_advice_attempts": 0,
+        "timing_causal_comparison_eligible": false
+      },
+      "provenance": {
+        "binary_sha256": "9d48c984638893f36b5b3478f95ab3762504951ecc4ac3e3e5c6f5248802d33b",
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/tantivy-ground-truth-summary.json",
+          "sha256": "0b6b1ea7b7a7b33c24e312de73684b1793d53cbae6fd94c5a91d4d7ad38d7e25"
+        },
+        "ground_truth_result": {
+          "bytes": 40669,
+          "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/result.json",
+          "sha256": "3e77947d1297df6c3d6755385bf4d91704debc354a712a7da0495adb4ce43b92"
+        },
+        "selective_thp_smoke": {
+          "bytes": 5189,
+          "path": "evaluation/raw/lifetime-resident-tantivy-ground-truth-20260715/thp-opportunity-smoke/smoke.json",
+          "sha256": "d9906cfa18215656cf80c3261fb1ed7a49c7b94b81986cdb62950f82acfa306d"
+        },
+        "tantivy_commit": "d8f4c0b703120ed98f06297724dc1522df6019b9"
+      },
+      "rss": {
+        "adaptive_smoke_peak_rss_kib": 51512,
+        "ground_truth_peak_rss_kib": 41192,
+        "matched_delta_available": false
+      },
+      "runtime_ground_truth": {
+        "broad_static_prior_requested_byte_precision": 0.00020682704683353686,
+        "confirmed_short_requested_bytes": 5171077058,
+        "long_requested_bytes": 9220049,
+        "runtime_exact_sites": 104,
+        "runtime_predictor_byte_precision": 0.9982596801421276,
+        "runtime_predictor_byte_recall": 0.9834957405691502
+      },
+      "target": "Tantivy 0.26.1 resident in-memory index",
+      "time": {
+        "adaptive_smoke_elapsed_seconds": 5.326281792,
+        "ground_truth_elapsed_seconds": 20.346176869,
+        "performance_result_excluded": true
+      },
+      "workload": {
+        "commits": 216,
+        "correctness": true,
+        "documents_indexed": 442368,
+        "query_evaluations": 27648,
+        "single_process": true
+      }
+    },
+    {
+      "claim_boundary": "Claim-grade matched physical-backing contrast for this fixed SWC workload. The same static-THP path remained slower than the default allocator, and classification accuracy uses the Stage-A pressure clock.",
+      "claim_flags": {
+        "performance_claim_eligible_field_present": false,
+        "presentation_claim_eligible": true
+      },
+      "compiler_coverage": {
+        "applied_long_hints": 313,
+        "dependency_internal_sites_measured": true,
+        "executed_exact_sites": 59,
+        "routed_allocations_per_process": 996240
+      },
+      "physical_backing": {
+        "all_pairs_verified": true,
+        "ordinary_median_anon_hugepages_kib": 0.0,
+        "pair_count": 20,
+        "thp_advice_successes_per_process": 256,
+        "thp_median_anon_hugepages_kib": 22528.0
+      },
+      "provenance": {
+        "allocator_revision": "170478b283d1680b034a0ec6a8afc28dff19c851",
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/swc-thp-matched-summary.json",
+          "sha256": "f9e896558f24b12b27e5a900d684692b0d5020f4474b572aa1faa95e5c65fd57"
+        },
+        "swc_commit": "73f0f386da64fe432975183f9ccf28429b52638a",
+        "timing_result": {
+          "path": "evaluation/raw/lifetime-prior-swc-thp-no-procfs-n16-r20-20260715/thp-timing-confirmation-results.json",
+          "sha256": "5eb133913c3b0ecec688a69bb21a8800807b3fe2c73c41f2e48ff2b0963826e1"
+        }
+      },
+      "rss": {
+        "median_vmhwm_increase_percent": 65.47737887807948,
+        "paired_bootstrap_95_percent": [
+          63.84390466497413,
+          67.1556972137728
+        ]
+      },
+      "runtime_ground_truth": {
+        "evidence_stage": "stage-a-pressure-clock",
+        "long_precision": 0.9617426961262061,
+        "long_recall": 1.0
+      },
+      "target": "SWC full parse/transform/codegen, N=20",
+      "time": {
+        "operation_faster_pairs": 20,
+        "operation_paired_bootstrap_95_percent": [
+          3.5434306565176943,
+          4.353369458577273
+        ],
+        "operation_saving_percent": 4.049954512883891,
+        "pipeline_faster_pairs": 20,
+        "pipeline_paired_bootstrap_95_percent": [
+          3.5670665862931203,
+          4.3746211042148655
+        ],
+        "pipeline_saving_percent": 4.076150480485866
+      },
+      "workload": {
+        "application_warmup_runs": 0,
+        "criterion_used": false,
+        "fixed_work_units_per_process": 16,
+        "fresh_process_per_arm_sample": true,
+        "output_equivalence_passed": true
+      }
+    },
+    {
+      "claim_boundary": "Quick N=8 dirty-working-tree diagnostic. Performance and presentation claim eligibility remain false. Mixed-versus-legacy uses separate allocator binaries; no equivalence margin was preregistered.",
+      "claim_flags": {
+        "claim_grade": false,
+        "performance_claim_eligible": false,
+        "presentation_claim_eligible": false
+      },
+      "compiler_coverage": {
+        "classification_reestimated_in_this_diagnostic": false,
+        "dependency_internal_site_status": "shared SWC compiler-prior workload; accuracy not re-estimated in this diagnostic",
+        "routed_allocations_per_process": 996240
+      },
+      "physical_backing": {
+        "all_mixed_samples_verified": true,
+        "mixed_ordinary_anon_hugepages_kib_each_sample": 0,
+        "mixed_thp_anon_hugepages_kib_each_sample": 6144,
+        "sample_count_per_arm": 8
+      },
+      "provenance": {
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/mixed-filler-fastpath-swc-quick-summary.json",
+          "sha256": "0543c6d01bd20bbd15e7de3ca288caeed1aaa982bcdb0cd117439b7886b520c5"
+        },
+        "current_binary_sha256": "2bc2d093128579ab316eaa02a65e2300e33690dbdc771b9c3f4fd4c6df7ac07a",
+        "prior_binary_sha256": "b1ac7bdbf6a0697453ea0472f3304a38f353e4f1bc1a774f43dc5dd5b003244c",
+        "raw_result": {
+          "bytes": 186559,
+          "path": "evaluation/raw/lifetime-tcmalloc-fastpath-swc-quick-n16-r8-20260715/results.json",
+          "sha256": "d757723b9561ed1362c56bb5fd59939cf340aa3d3dcf5bcc3204d4c6f0c83c2e",
+          "source_worktree": "/home/hanqing/alloc/UniAlloc-lifetime-tcmalloc-fastpath-20260715"
+        },
+        "repository_head": "2b1f41fe4b778fbe5792729c7c0b0b5dd2efa10f"
+      },
+      "rss": {
+        "mixed_thp_vs_legacy_thp_paired_saving_percent": 34.18503621897719,
+        "mixed_thp_vs_legacy_thp_paired_saving_percent_95_ci": [
+          32.56133127466118,
+          37.152060791277776
+        ],
+        "mixed_thp_vs_mixed_ordinary_paired_saving_percent": -0.3390219866025254,
+        "mixed_thp_vs_mixed_ordinary_paired_saving_percent_95_ci": [
+          -0.6400409626216078,
+          2.611032893894791
+        ]
+      },
+      "runtime_ground_truth": {
+        "available_in_this_artifact": false
+      },
+      "target": "SWC mixed filler cache-first, N=8 diagnostic",
+      "time": {
+        "mixed_thp_vs_legacy_thp_paired_saving_percent": -0.057636944420684455,
+        "mixed_thp_vs_legacy_thp_paired_saving_percent_95_ci": [
+          -0.46346753751836534,
+          0.7044280283096322
+        ],
+        "mixed_thp_vs_mixed_ordinary_faster_pairs": 8,
+        "mixed_thp_vs_mixed_ordinary_paired_saving_percent": 1.4847296164439783,
+        "mixed_thp_vs_mixed_ordinary_paired_saving_percent_95_ci": [
+          0.7970892695458655,
+          2.2112013959277403
+        ]
+      },
+      "workload": {
+        "application_warmup_runs": 0,
+        "criterion_used": false,
+        "fixed_work_units_per_process": 16,
+        "fresh_processes": 32,
+        "output_identity_equal": true
+      }
+    },
+    {
+      "claim_boundary": "The ground-truth counts and exact dependency compiler/runtime join are presentation evidence. The THP arm produced zero advice, zero collapse, and zero sampled AnonHugePages, so its observed timing is excluded. The lifetime-aware/default contrast has one sample per arm on a shared host and remains directional only.",
+      "claim_flags": {
+        "ground_truth_presentation_eligible": true,
+        "performance_claim_eligible": false,
+        "physical_thp_claim_eligible": false
+      },
+      "compiler_coverage": {
+        "applied_prior_hinted_count": 649,
+        "compiler_site_count": 2304,
+        "complete_join_key_count": 742,
+        "dependency_internal_sites_measured": true,
+        "generated_runner_excluded": true,
+        "target_crate_count": 9,
+        "target_crates": [
+          "arrow_array",
+          "arrow_buffer",
+          "arrow_data",
+          "arrow_row",
+          "arrow_select",
+          "datafusion",
+          "datafusion_functions_aggregate",
+          "datafusion_physical_expr",
+          "datafusion_physical_plan"
+        ]
+      },
+      "exact_dependency_prior_join": {
+        "allocation_count": 143955,
+        "censored_outcomes": 60,
+        "key": [
+          "callsite",
+          "type_id",
+          "module_id",
+          "requested_size",
+          "align"
+        ],
+        "long_outcomes": 134947,
+        "matched_applied_prior_site_count": 8,
+        "matched_site_count": 8,
+        "short_outcomes": 8948
+      },
+      "physical_backing": {
+        "backing_gate": {
+          "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+          "ordinary_peak_anon_hugepages_kib": 0,
+          "ordinary_positive_backing_sample_count": 0,
+          "ordinary_sample_count": 82,
+          "ordinary_thp_advice_attempts": 0,
+          "ordinary_thp_collapse_successes": 0,
+          "ordinary_thp_extent_mappings": 0,
+          "passed": false,
+          "reasons": [
+            "selective-THP backing is absent from one or more operation-window samples",
+            "selective-THP process reports no advice attempt",
+            "selective-THP process reports no successful collapse"
+          ],
+          "thp_advice_attempts": 0,
+          "thp_collapse_successes": 0,
+          "thp_peak_anon_hugepages_kib": 0,
+          "thp_positive_backing_sample_count": 0,
+          "thp_sample_count": 87
+        },
+        "thp_candidate_extent_mappings": 8,
+        "thp_extent_mappings": 8,
+        "timing_excluded": true
+      },
+      "provenance": {
+        "allocator_revision": "dfaf5271ed2c2564ca6806258b8124942e358113",
+        "binary_sha256": "8ec2f32f33fa0a52a64fb94239c90c4179cc391bc275672b80740cda3df4fbed",
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/datafusion-natural-minute-summary.json",
+          "sha256": "315523f99e4df6eca5944d977bd54ea6c8252b548f71aa21cf3c2160202d12ab"
+        },
+        "datafusion_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b"
+      },
+      "rss": {
+        "comparative_rss_claim_eligible": false,
+        "single_pair_lifetime_vs_default_observed_delta_percent": 0.0789265982636067,
+        "single_pair_thp_observed_delta_percent": 0.2468797147167745
+      },
+      "runtime_ground_truth": {
+        "censored_requested_bytes": 95556,
+        "confirmed_short_requested_bytes": 6896270389,
+        "confirmed_short_site_count": 145,
+        "distinct_requested_size_count": 100,
+        "long_byte_density": 0.008382636400142375,
+        "long_requested_bytes": 67432538,
+        "long_site_count": 147,
+        "opportunity_gate": {
+          "confirmed_short_passed": true,
+          "long_cohort_passed": true,
+          "minimum_confirmed_short_requested_bytes": 8388608,
+          "minimum_long_requested_bytes": 2097152,
+          "observed_confirmed_short_requested_bytes": 6896270389,
+          "observed_long_requested_bytes": 67432538,
+          "passed": true
+        },
+        "routed_allocation_count": 37943834,
+        "routed_requested_bytes": 8044407009,
+        "runtime_site_count": 307,
+        "short_requested_bytes": 7976878915,
+        "short_site_count": 182,
+        "unsupported_layout_bypasses": 4226
+      },
+      "target": "DataFusion 54.0.0 natural dependency-internal resident query",
+      "time": {
+        "all_comparative_timing_claims_excluded": true,
+        "ground_truth_query_seconds": 65.106990997,
+        "single_pair_lifetime_vs_default_observed_delta_percent": 2.679690307008009,
+        "single_pair_thp_observed_delta_percent": 6.87875933193085
+      },
+      "workload": {
+        "correctness": true,
+        "force_tracked_ground_truth_query_seconds": 65.106990997,
+        "materialized_digest": "1d99fa30e8da897b",
+        "materialized_rows": 786432,
+        "query_digest": "984dfbf69696ae91",
+        "query_iterations": 4218,
+        "resident_array_memory_bytes": 44249184,
+        "resident_batch_count": 311,
+        "resident_build_seconds": 0.143921603,
+        "resident_payload_bytes": 44040192,
+        "result_digest": "c7f35eaac33fb608",
+        "single_process": true
+      }
+    },
+    {
+      "claim_boundary": "One four-arm Williams block from a dirty working-tree snapshot supports a compiler-coverage null and mechanism diagnosis only. It supports no performance or RSS improvement claim.",
+      "claim_flags": {
+        "claim_grade": false,
+        "performance_claim_eligible": false,
+        "presentation_coverage_null_eligible": true
+      },
+      "compiler_coverage": {
+        "allocation_candidates": 40,
+        "coverage_interpretation": "The five Long hints cover tiny CLI/deflate boxes. No hint covers the 4-16 KiB image-buffer size range, so the allocator sees only four routed allocations and cannot exercise mixed filling.",
+        "extent_mappings_per_arm": 1,
+        "hinted_site_origins": {
+          "16_byte_deflate_box_sites": 1,
+          "8_byte_cli_box_sites": 4
+        },
+        "hinted_sites_4_to_16_kib": 0,
+        "hinted_size_histogram_bytes": {
+          "16": 1,
+          "8": 4
+        },
+        "long_hints": 5,
+        "mixed_geometry_reuse_allocations": 0,
+        "routed_allocations_per_arm": 4
+      },
+      "physical_backing": {
+        "both_thp_arms_backed": true,
+        "legacy_thp_anon_hugepages_kib": 2048.0,
+        "mixed_thp_anon_hugepages_kib": 2048.0
+      },
+      "provenance": {
+        "allocator_implementation_sha256": "e6ff96819d4e732db84c56fdc2b2c768dea57e1fc0fb536028b29ed2a348c3f3",
+        "allocator_revision": "2b1f41fe4b778fbe5792729c7c0b0b5dd2efa10f",
+        "allocator_snapshot_sha256": "86e1f09f6b6221fb4568a61389a08a9ecf863699e7b9bcfccc2b7125d652f0cf",
+        "binary_sha256": "045d517bbdbd3b43bff5c1a200903eb196f5c99eeb642320a33d7c340c878604",
+        "compact_summary": {
+          "path": "docs/evidence/lifetime-resident-index-20260715/oxipng-fastpath-null-summary.json",
+          "sha256": "eba0978457244d80de4524bd339b4e756d74a95f33ac4b34aa23da1bdf065939"
+        },
+        "compiler_sites": {
+          "bytes": 226704,
+          "path": "/home/hanqing/alloc/UniAlloc-lifetime-tcmalloc-fastpath-20260715/evaluation/raw/lifetime-tcmalloc-fastpath-oxipng-quick-u2-r4-20260715/builds/oxipng/compiler-prior/compiler-sites.json",
+          "sha256": "c927ff7a31f05dce2ef0589cbcf825885307e2a6d216af682f9ac32bc28e7e59"
+        },
+        "raw_result": {
+          "bytes": 55130,
+          "path": "/home/hanqing/alloc/UniAlloc-lifetime-tcmalloc-fastpath-20260715/evaluation/raw/lifetime-tcmalloc-fastpath-oxipng-quick-u2-r4-20260715/results.json",
+          "sha256": "a08a9af27f3cdf322e8d1ae872757c4d3d85dc0ec9f4eb2fa6d63fdf99d05211"
+        }
+      },
+      "rss": {
+        "mixed_vs_legacy_thp_observed_saving_percent": -0.39075219798111366,
+        "rss_claim_eligible": false
+      },
+      "runtime_ground_truth": {
+        "available": false,
+        "routed_allocations_per_arm": 4
+      },
+      "target": "Oxipng 10.1.1 compiler-coverage null",
+      "time": {
+        "mixed_vs_legacy_thp_observed_saving_percent": -0.4188595191264101,
+        "performance_claim_eligible": false
+      },
+      "workload": {
+        "application_warmup_runs": 0,
+        "cpu_affinity": {
+          "cpu": 24,
+          "pinned": true
+        },
+        "criterion_used": false,
+        "fresh_processes": 4,
+        "output_identity": {
+          "equal_across_all_arms": true,
+          "unique_output_bytes": [
+            1349961
+          ],
+          "unique_output_digests": [
+            "e310efff8613eaae72ad5028b9021e7c56203e801d77eb3f73a47de5169173bd"
+          ]
+        },
+        "rounds_per_arm": 1,
+        "timing_boundary": "complete pinned Oxipng CLI process; input copies precede the clock and output hashing follows it"
+      }
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-lifetime-multi-target-evidence-matrix-v2"
+}

@@ -1,0 +1,193 @@
+{
+  "artifacts": {
+    "build_record": {
+      "bytes": 11219,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-cal-q64-20260715/build/build.json",
+      "sha256": "921c57839261359980348218dd9b178dc8576638ab3a13617291fd50d91e4065"
+    },
+    "compiler_runtime_join": {
+      "bytes": 13529775,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-minute-q4218-20260715/ground-truth-ordinary/compiler-runtime-exact-join.json",
+      "sha256": "f0fa5786b3a314acdf03b84a4b8002e96faefc4707314f44a72f58a88acd4952"
+    },
+    "compiler_sites": {
+      "bytes": 11223970,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-cal-q64-20260715/build/compiler-sites.json",
+      "sha256": "255937340092c3d05ac9c0ec81c17bf4f744a2680294f3d44edcbed11ba18eb6"
+    },
+    "ground_truth_run": {
+      "bytes": 12950,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-minute-q4218-20260715/ground-truth-ordinary/run.json",
+      "sha256": "74fbb226a422eaacc6cc23370366146f4e4dbf5f15281dc101f6d65e3d800988"
+    },
+    "ground_truth_summary": {
+      "bytes": 2568,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-minute-q4218-20260715/ground-truth-summary.json",
+      "sha256": "dc7ce5117186bd6f67d18309336b4ef134c98e23b3acb634827df056af8bab41"
+    },
+    "single_pair_default": {
+      "bytes": 19197,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-minute-q4218-20260715/lifetime-aware-vs-default-single.json",
+      "sha256": "a20e4292ea760bf82cbba13f67c5235620b49f9ea2804e2f3d066658a067998c"
+    },
+    "single_pair_thp": {
+      "bytes": 20808,
+      "path": "evaluation/raw/lifetime-resident-datafusion-natural-dfaf527-minute-q4218-20260715/one-pair-result.json",
+      "sha256": "792e416838a12f680ed928c788a76b38cbd877452a9665c3c724d27f3ed471d9"
+    }
+  },
+  "claim_boundary": "The ground-truth counts and exact dependency compiler/runtime join are presentation evidence. The THP arm produced zero advice, zero collapse, and zero sampled AnonHugePages, so its observed timing is excluded. The lifetime-aware/default contrast has one sample per arm on a shared host and remains directional only.",
+  "claim_flags": {
+    "ground_truth_presentation_eligible": true,
+    "lifetime_vs_default_performance_claim_eligible": false,
+    "physical_thp_performance_claim_eligible": false
+  },
+  "claim_scope": "dependency-internal compiler/runtime ground truth plus fail-closed single-process diagnostics",
+  "compiler": {
+    "applied_prior_hinted_count": 649,
+    "compiler_site_count": 2304,
+    "complete_join_key_count": 742,
+    "generated_runner_excluded": true,
+    "target_crate_count": 9,
+    "target_crates": [
+      "arrow_array",
+      "arrow_buffer",
+      "arrow_data",
+      "arrow_row",
+      "arrow_select",
+      "datafusion",
+      "datafusion_functions_aggregate",
+      "datafusion_physical_expr",
+      "datafusion_physical_plan"
+    ]
+  },
+  "exact_dependency_prior_join": {
+    "allocation_count": 143955,
+    "censored_outcomes": 60,
+    "key": [
+      "callsite",
+      "type_id",
+      "module_id",
+      "requested_size",
+      "align"
+    ],
+    "long_outcomes": 134947,
+    "matched_applied_prior_site_count": 8,
+    "matched_site_count": 8,
+    "short_outcomes": 8948
+  },
+  "process_wide_ground_truth": {
+    "censored_requested_bytes": 95556,
+    "confirmed_short_requested_bytes": 6896270389,
+    "confirmed_short_site_count": 145,
+    "distinct_requested_size_count": 100,
+    "long_byte_density": 0.008382636400142375,
+    "long_requested_bytes": 67432538,
+    "long_site_count": 147,
+    "opportunity_gate": {
+      "confirmed_short_passed": true,
+      "long_cohort_passed": true,
+      "minimum_confirmed_short_requested_bytes": 8388608,
+      "minimum_long_requested_bytes": 2097152,
+      "observed_confirmed_short_requested_bytes": 6896270389,
+      "observed_long_requested_bytes": 67432538,
+      "passed": true
+    },
+    "routed_allocation_count": 37943834,
+    "routed_requested_bytes": 8044407009,
+    "runtime_site_count": 307,
+    "short_requested_bytes": 7976878915,
+    "short_site_count": 182,
+    "unsupported_layout_bypasses": 4226
+  },
+  "provenance": {
+    "allocator_implementation_sha256": "2679f95d3087b63064ad9f0bc1d9c9fe296b8dbb66772e63154d9cc81be1285d",
+    "allocator_revision": "dfaf5271ed2c2564ca6806258b8124942e358113",
+    "allocator_snapshot_sha256": "d7bd3ca59888de78aa70837095f39d8c82a41a5f69f083c53e43c11e9842b930",
+    "arrow_version": "58.3.0",
+    "binary_sha256": "8ec2f32f33fa0a52a64fb94239c90c4179cc391bc275672b80740cda3df4fbed",
+    "compiler_sites_sha256": "255937340092c3d05ac9c0ec81c17bf4f744a2680294f3d44edcbed11ba18eb6",
+    "datafusion_commit": "45d943dfb8699dc9cb9ef2320e955b73e3e6c03b",
+    "datafusion_repository": "https://github.com/apache/datafusion.git",
+    "datafusion_version": "54.0.0",
+    "force_loaded_crates": [
+      "unialloc_lifetime_resident_datafusion",
+      "datafusion",
+      "datafusion_physical_plan",
+      "datafusion_functions_aggregate",
+      "datafusion_physical_expr",
+      "arrow_select",
+      "arrow_array",
+      "arrow_buffer",
+      "arrow_data",
+      "arrow_row"
+    ],
+    "generated_runner_excluded_from_compiler_claim": true
+  },
+  "schema_version": 1,
+  "single_pair_lifetime_aware_vs_default_diagnostic": {
+    "claim_boundary": "one CPU-affined fresh-process sample per arm on a shared host is directional overhead evidence only",
+    "cpu_affinity": [
+      20,
+      21
+    ],
+    "default_peak_rss_kib": 116564,
+    "default_query_seconds": 27.42085039,
+    "lifetime_ordinary_peak_rss_kib": 116656,
+    "lifetime_ordinary_query_seconds": 28.15564426,
+    "observed_lifetime_peak_rss_delta_percent": 0.0789265982636067,
+    "observed_lifetime_query_delta_percent": 2.679690307008009,
+    "same_binary": true
+  },
+  "single_pair_selective_thp_diagnostic": {
+    "backing_gate": {
+      "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+      "ordinary_peak_anon_hugepages_kib": 0,
+      "ordinary_positive_backing_sample_count": 0,
+      "ordinary_sample_count": 82,
+      "ordinary_thp_advice_attempts": 0,
+      "ordinary_thp_collapse_successes": 0,
+      "ordinary_thp_extent_mappings": 0,
+      "passed": false,
+      "reasons": [
+        "selective-THP backing is absent from one or more operation-window samples",
+        "selective-THP process reports no advice attempt",
+        "selective-THP process reports no successful collapse"
+      ],
+      "thp_advice_attempts": 0,
+      "thp_collapse_successes": 0,
+      "thp_peak_anon_hugepages_kib": 0,
+      "thp_positive_backing_sample_count": 0,
+      "thp_sample_count": 87
+    },
+    "claim_boundary": "one CPU-affined fresh-process pair is diagnostic; zero physical THP and zero advice/collapse make its timing ineligible for a THP claim",
+    "cpu_affinity": [
+      20,
+      21
+    ],
+    "observed_peak_rss_delta_percent": 0.2468797147167745,
+    "observed_query_delta_percent": 6.87875933193085,
+    "ordinary_peak_rss_kib": 116656,
+    "ordinary_query_seconds": 28.15564426,
+    "selective_thp_peak_rss_kib": 116944,
+    "selective_thp_query_seconds": 30.092403267,
+    "thp_candidate_extent_mappings": 8,
+    "thp_extent_mappings": 8,
+    "timing_excluded": true
+  },
+  "source": "unialloc-lifetime-resident-datafusion-natural-minute-summary-v1",
+  "workload": {
+    "correctness": true,
+    "force_tracked_ground_truth_query_seconds": 65.106990997,
+    "materialized_digest": "1d99fa30e8da897b",
+    "materialized_rows": 786432,
+    "query_digest": "984dfbf69696ae91",
+    "query_iterations": 4218,
+    "resident_array_memory_bytes": 44249184,
+    "resident_batch_count": 311,
+    "resident_build_seconds": 0.143921603,
+    "resident_payload_bytes": 44040192,
+    "result_digest": "c7f35eaac33fb608",
+    "single_process": true
+  }
+}

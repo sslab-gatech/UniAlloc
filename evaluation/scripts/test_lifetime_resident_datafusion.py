@@ -50,12 +50,11 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             "table_count": runner.TABLE_COUNT,
             "columns_per_table": runner.COLUMNS_PER_TABLE,
             "routable_buffer_bytes": runner.ROUTABLE_BUFFER_BYTES,
-            "resident_payload_bytes": (
-                batches_per_table
-                * runner.TABLE_COUNT
-                * runner.COLUMNS_PER_TABLE
-                * runner.ROUTABLE_BUFFER_BYTES
-            ),
+            "resident_payload_bytes": rows_per_table * 7 * 8,
+            "resident_array_memory_bytes": rows_per_table * 7 * 8 + 1_024,
+            "resident_batch_count": 4,
+            "materialized_rows": rows_per_table,
+            "materialized_digest": runner.expected_materialized_digest(rows_per_table),
             "query_iterations": query_iterations,
             "target_partitions": target_partitions,
             "query_output_rows": len(runner.expected_aggregate_rows(rows_per_table)),
@@ -89,17 +88,18 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             "MemTable::try_new",
             "fact_table",
             "dimension_table",
-            "SessionConfig::new().with_target_partitions(target_partitions)",
+            ".with_target_partitions(target_partitions)",
+            ".with_batch_size(ROWS_PER_BATCH)",
+            ".with_enforce_batch_size_in_joins(true)",
+            "MATERIALIZE_SQL",
+            "resident_rows",
+            "validate_materialized",
             "JOIN dimensions",
-            "GROUP BY f.group_id",
+            "GROUP BY group_id",
             "selector < 8",
             "const ROUTABLE_BUFFER_BYTES: usize = ROWS_PER_BATCH * 8",
             "assert_eq!(ROUTABLE_BUFFER_BYTES, 24 * 1024)",
-            "fn reserved_u64_column() -> Vec<u64>",
-            "fn zeroed_u64_column() -> Vec<u64>",
-            "Vec::with_capacity(ROWS_PER_BATCH)",
-            "let mut values = reserved_u64_column()",
-            "values.resize(ROWS_PER_BATCH, 0_u64)",
+            "UInt64Array::from_iter_values",
             "let expected = expected_aggregates(rows_per_table)",
             "let resident_build_seconds",
             "let query_seconds",
@@ -111,8 +111,8 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             self.assertIn(required, source)
         self.assertNotIn("Command::new", source)
         self.assertNotIn("std::process", source)
-        self.assertEqual(8, source.count("= zeroed_u64_column();"))
-        self.assertNotIn("vec![0_u64; ROWS_PER_BATCH]", source)
+        self.assertNotIn("reserved_u64_column", source)
+        self.assertNotIn("zeroed_u64_column", source)
 
     def test_manifest_binds_pinned_source_arrow_and_allocator(self) -> None:
         runner = self.runner
@@ -129,12 +129,18 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
             manifest,
         )
         self.assertIn('arrow = "=58.3.0"', manifest)
-        self.assertIn(
-            f'unialloc = {{ path = {json.dumps("/tmp/allocator snapshot/unialloc")}',
-            manifest,
-        )
-        self.assertIn('features = ["lifetime_hugepage"]', manifest)
+        self.assertNotIn("unialloc =", manifest)
         self.assertIn("[workspace]", manifest)
+
+    def test_force_load_wrapper_keeps_one_allocator_and_runner_panic_strategy(self) -> None:
+        runner = self.runner
+        with tempfile.TemporaryDirectory() as directory:
+            path = runner.ensure_lifetime_force_load_wrapper(Path(directory) / "wrapper")
+            source = path.read_text(encoding="utf-8")
+        self.assertIn("UNIALLOC_FORCE_LOAD_CRATES", source)
+        self.assertIn("arguments.extend([\"-L\", f\"dependency={dependency_dir}\"])", source)
+        self.assertIn(f"if current_crate == {runner.RUNNER_CRATE!r}:", source)
+        self.assertIn('arguments.extend(["-C", "panic=abort"])', source)
 
     def test_result_parser_checks_the_full_fixed_work_contract(self) -> None:
         runner = self.runner
@@ -194,37 +200,27 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
     def test_resident_target_is_routable_and_coverage_fails_closed(self) -> None:
         runner = self.runner
         self.assertEqual(24 * 1024, runner.ROUTABLE_BUFFER_BYTES)
-        batches = 2
-        allocation_count = batches * runner.TABLE_COUNT * runner.COLUMNS_PER_TABLE
-        row = {
-            "callsite": 11,
-            "type_id": 22,
-            "module_id": 33,
-            "requested_size": runner.ROUTABLE_BUFFER_BYTES,
-            "align": 8,
-            "allocation_count": allocation_count,
-            "allocation_requested_bytes": (
-                allocation_count * runner.ROUTABLE_BUFFER_BYTES
-            ),
-        }
-        summary = runner.validate_target_routing(
-            {"unsupported_layout_bypasses": 0},
-            [row],
-            batches_per_table=batches,
+        rows = [
+            {
+                "callsite": 11 + index,
+                "type_id": 22 + index,
+                "module_id": 33 + index,
+                "requested_size": 64 << index,
+                "align": 8,
+                "allocation_count": 256,
+                "allocation_requested_bytes": 256 * (64 << index),
+            }
+            for index in range(4)
+        ]
+        summary = runner.validate_process_wide_routing(
+            {"unsupported_layout_bypasses": 7}, rows, batches_per_table=2
         )
-        self.assertEqual(allocation_count, summary["allocation_count"])
-        self.assertEqual(0, summary["unsupported_layout_bypasses"])
-        with self.assertRaisesRegex(runner.ContractError, "unsupported layouts"):
-            runner.validate_target_routing(
-                {"unsupported_layout_bypasses": 1},
-                [row],
-                batches_per_table=batches,
-            )
-        with self.assertRaisesRegex(runner.ContractError, "allocation count"):
-            runner.validate_target_routing(
-                {"unsupported_layout_bypasses": 0},
-                [{**row, "allocation_count": allocation_count - 1}],
-                batches_per_table=batches,
+        self.assertEqual(1_024, summary["allocation_count"])
+        self.assertEqual(7, summary["unsupported_layout_bypasses"])
+        self.assertEqual(4, summary["site_count"])
+        with self.assertRaisesRegex(runner.ContractError, "fewer than four"):
+            runner.validate_process_wide_routing(
+                {"unsupported_layout_bypasses": 0}, rows[:3], batches_per_table=2
             )
 
     def test_opportunity_then_backing_gates_fail_closed(self) -> None:
@@ -289,16 +285,50 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
         runner = self.runner
         ordinary = [{"anon_hugepages_kib": 0}, {"anon_hugepages_kib": 0}]
         thp = [{"anon_hugepages_kib": 2_048}, {"anon_hugepages_kib": 4_096}]
-        admitted = runner.measured_pair_backing_gate(ordinary, thp)
+        ordinary_mechanism = {
+            "thp_advice_attempts": 0,
+            "thp_collapse_successes": 0,
+            "thp_extent_mappings": 0,
+        }
+        thp_mechanism = {
+            "thp_advice_attempts": 2,
+            "thp_collapse_successes": 1,
+        }
+        admitted = runner.measured_pair_backing_gate(
+            ordinary,
+            thp,
+            ordinary_mechanism=ordinary_mechanism,
+            thp_mechanism=thp_mechanism,
+        )
         self.assertTrue(admitted["passed"])
         self.assertEqual(0, admitted["ordinary_positive_backing_sample_count"])
         self.assertEqual(2, admitted["thp_positive_backing_sample_count"])
+        self.assertFalse(
+            runner.measured_pair_backing_gate(
+                ordinary,
+                thp,
+                ordinary_mechanism=ordinary_mechanism,
+                thp_mechanism={},
+            )["passed"]
+        )
         contaminated = [{"anon_hugepages_kib": 2_048}]
         self.assertFalse(
-            runner.measured_pair_backing_gate(contaminated, thp)["passed"]
+            runner.measured_pair_backing_gate(
+                contaminated,
+                thp,
+                ordinary_mechanism=ordinary_mechanism,
+                thp_mechanism=thp_mechanism,
+            )["passed"]
         )
         absent = [{"anon_hugepages_kib": 0}]
-        self.assertFalse(runner.measured_pair_backing_gate(ordinary, absent)["passed"])
+        self.assertFalse(
+            runner.measured_pair_backing_gate(
+                ordinary,
+                absent,
+                ordinary_mechanism=ordinary_mechanism,
+                thp_mechanism=thp_mechanism,
+            )["passed"]
+        )
 
     def test_three_pair_screen_only_unlocks_a_backing_mechanism_contrast(self) -> None:
         runner = self.runner
@@ -320,6 +350,11 @@ class LifetimeResidentDataFusionTests(unittest.TestCase):
                     "fixed_work": fixed_work,
                     "wall_seconds": 3.0,
                     "procfs": {"peak_rss_kib": 200 if is_thp else 100},
+                    "mechanism": {
+                        "thp_advice_attempts": 1 if is_thp else 0,
+                        "thp_collapse_successes": 1 if is_thp else 0,
+                        "thp_extent_mappings": 1 if is_thp else 0,
+                    },
                     "smaps_samples_path": str(
                         thp_samples if is_thp else ordinary_samples
                     ),
@@ -413,113 +448,106 @@ checksum = "{'a' * 64}"
             record = runner.verify_generated_lock(path)
             self.assertTrue(record["verified"])
             self.assertEqual("58.3.0", record["arrow"]["version"])
-            path.write_text(lock.replace('version = "58.3.0"', 'version = "58.2.0"'), encoding="utf-8")
+            self.assertEqual(0, record["cargo_graph_unialloc_package_count"])
+            path.write_text(
+                lock + '\n[[package]]\nname = "unialloc"\nversion = "0.1.0"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(runner.ContractError, "force-loaded rlib"):
+                runner.verify_generated_lock(path)
+            path.write_text(
+                lock.replace('version = "58.3.0"', 'version = "58.2.0"'),
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(runner.ContractError, "arrow 58.3.0"):
                 runner.verify_generated_lock(path)
 
-    def test_resident_compiler_site_requires_preoptimization_return_long(self) -> None:
+    def test_dependency_compiler_scope_excludes_generated_runner(self) -> None:
         runner = self.runner
-        row = {
-            "mir_function": "reserved_u64_column",
-            "callee": "alloc::vec::Vec::with_capacity",
-            "semantic_object_type": "std::vec::Vec<u64, std::alloc::Global>",
-            "callsite": 11,
-            "type_id": 22,
-            "module_id": 33,
-            "lifetime_hint": 2,
-            "lifetime_hint_confidence": 70,
-            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
-            "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
-            "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
-            "lowering_kind": "semantic_scope_enter_exit_rewrite",
-            "lifetime_analysis_features": {
-                "runtime_join_key_complete": True,
-                "runtime_join_key": {
-                    "callsite": 11,
-                    "type_id": 22,
-                    "module_id": 33,
-                    "requested_size_bytes": 24_576,
-                    "requested_align_bytes": 8,
-                },
-                "requested_layout_basis": (
-                    "exact_vec_with_capacity_requested_layout"
-                ),
-            },
+        audit = {"audited_crates": list(runner.TARGET_CRATES)}
+        sites = {
+            "site_count": 12,
+            "applied_prior_hinted_count": 5,
+            "complete_join_key_count": 4,
         }
-        compiler_pass = {
-            "marker_free_heap_preoptimization_rewrite": True,
-            "actual_allocator_call_replacement_requested": False,
-            "actual_semantic_scope_rewrite_requested": True,
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            audit = Path(directory) / "audit.json"
-            audit.write_text(
-                json.dumps(
-                    {
-                        "compiler_pass": compiler_pass,
-                        "rewrite_candidates": [row],
-                    }
-                ),
-                encoding="utf-8",
+        result = runner.validate_dependency_compiler_scope(audit, sites)
+        self.assertEqual(len(runner.TARGET_CRATES), result["target_crate_count"])
+        self.assertTrue(result["generated_runner_excluded"])
+        with self.assertRaisesRegex(runner.ContractError, "exactly match"):
+            runner.validate_dependency_compiler_scope(
+                {"audited_crates": [*runner.TARGET_CRATES, runner.RUNNER_CRATE]}, sites
             )
-            result = runner.validate_resident_compiler_site(Path(directory))
-            self.assertEqual(11, result["callsite"])
-            self.assertEqual(
-                "automatic_rust_lifetime_prior_return_long",
-                result["lifetime_hint_basis"],
-            )
-            self.assertEqual(24_576, result["requested_size"])
-            audit.write_text(
-                json.dumps(
-                    {
-                        "compiler_pass": {
-                            **compiler_pass,
-                            "marker_free_heap_preoptimization_rewrite": False,
-                        },
-                        "rewrite_candidates": [row],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(runner.ContractError, "pre-optimization"):
-                runner.validate_resident_compiler_site(Path(directory))
 
-    def test_resident_compiler_runtime_join_requires_exact_numeric_match(self) -> None:
+    def test_dependency_compiler_runtime_join_requires_an_executed_match(self) -> None:
         runner = self.runner
-        resident = {
-            "callsite": 11,
-            "type_id": 22,
-            "module_id": 33,
-            "requested_size": 24_576,
-            "align": 8,
-        }
-        key = dict(resident)
         runtime = {
-            **key,
             "allocation_count": 2048,
-            "latest_static_prior": 2,
             "long_outcomes": 2048,
             "short_outcomes": 0,
             "censored_outcomes": 0,
         }
         row = {
-            "compiler_audit_key": key,
-            "identity_mode": "numeric_exact",
             "matched": True,
             "applied_prior_hint": True,
-            "resolution_status": "exact_numeric_match",
-            "resolved_runtime_exact_key": key,
             "runtime": runtime,
         }
-        result = runner.validate_resident_compiler_runtime_join(
-            {"rows": [row]}, resident
-        )
-        self.assertTrue(result["matched"])
+        exact_join = {
+            "rows": [row],
+            "static_prior_join_success": True,
+            "matched_applied_prior_site_count": 1,
+        }
+        result = runner.validate_dependency_compiler_runtime_join(exact_join)
+        self.assertEqual(1, result["matched_site_count"])
         self.assertEqual(2048, result["allocation_count"])
+        with self.assertRaisesRegex(runner.ContractError, "static-prior"):
+            runner.validate_dependency_compiler_runtime_join(
+                {
+                    "rows": [{**row, "matched": False}],
+                    "static_prior_join_success": False,
+                    "matched_applied_prior_site_count": 0,
+                }
+            )
 
-        row["identity_mode"] = "generic_runtime_type"
-        with self.assertRaisesRegex(runner.ContractError, "exact join failed"):
-            runner.validate_resident_compiler_runtime_join({"rows": [row]}, resident)
+    def test_fixed_work_uses_logical_results_not_scheduler_batching(self) -> None:
+        runner = self.runner
+        expected = self.result_record()
+        observed = dict(expected)
+        observed["resident_array_memory_bytes"] = (
+            int(expected["resident_array_memory_bytes"]) + 4096
+        )
+        observed["resident_batch_count"] = int(expected["resident_batch_count"]) + 2
+        runner.validate_fixed_work_match(observed, expected)
+        observed["result_digest"] = "0" * 16
+        with self.assertRaisesRegex(runner.ContractError, "fixed work"):
+            runner.validate_fixed_work_match(observed, expected)
+
+    def test_query_window_intersects_the_two_phase_clocks(self) -> None:
+        runner = self.runner
+        samples = [
+            {"elapsed_seconds": 0.6},
+            {"elapsed_seconds": 0.8},
+            {"elapsed_seconds": 2.4},
+            {"elapsed_seconds": 2.6},
+        ]
+        selected, bounds = runner.conservative_query_window_samples(
+            samples,
+            fixed_work=self.result_record(),
+            process_wall_seconds=2.7,
+        )
+        self.assertEqual([0.8, 2.4], [row["elapsed_seconds"] for row in selected])
+        self.assertAlmostEqual(0.7, bounds["conservative_start_seconds"])
+        self.assertAlmostEqual(2.5, bounds["conservative_end_seconds"])
+
+    def test_build_directories_drop_stale_injected_inputs(self) -> None:
+        runner = self.runner
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / "audit", Path(directory) / "target"]
+            for root in roots:
+                root.mkdir()
+                (root / "stale-sentinel").write_text("stale", encoding="utf-8")
+            runner.prepare_fresh_build_directories(roots)
+            self.assertTrue(all(root.is_dir() for root in roots))
+            self.assertTrue(all(not any(root.iterdir()) for root in roots))
 
     def test_dry_run_is_mechanism_only_and_records_provenance(self) -> None:
         runner = self.runner

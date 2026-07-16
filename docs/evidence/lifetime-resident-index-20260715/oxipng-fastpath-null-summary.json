@@ -1,0 +1,80 @@
+{
+  "claim_boundary": "One four-arm Williams block from a dirty working-tree snapshot supports a compiler-coverage null and mechanism diagnosis only. It supports no performance or RSS improvement claim.",
+  "claim_flags": {
+    "claim_grade": false,
+    "performance_claim_eligible": false,
+    "presentation_coverage_null_eligible": true
+  },
+  "classification": "credible-coverage-null-quick-diagnostic",
+  "compiler_coverage": {
+    "allocation_candidates": 40,
+    "coverage_interpretation": "The five Long hints cover tiny CLI/deflate boxes. No hint covers the 4-16 KiB image-buffer size range, so the allocator sees only four routed allocations and cannot exercise mixed filling.",
+    "extent_mappings_per_arm": 1,
+    "hinted_site_origins": {
+      "16_byte_deflate_box_sites": 1,
+      "8_byte_cli_box_sites": 4
+    },
+    "hinted_sites_4_to_16_kib": 0,
+    "hinted_size_histogram_bytes": {
+      "16": 1,
+      "8": 4
+    },
+    "long_hints": 5,
+    "mixed_geometry_reuse_allocations": 0,
+    "routed_allocations_per_arm": 4
+  },
+  "physical_backing": {
+    "both_thp_arms_backed": true,
+    "legacy_thp_anon_hugepages_kib": 2048.0,
+    "mixed_thp_anon_hugepages_kib": 2048.0
+  },
+  "provenance": {
+    "allocator_implementation_sha256": "e6ff96819d4e732db84c56fdc2b2c768dea57e1fc0fb536028b29ed2a348c3f3",
+    "allocator_revision": "2b1f41fe4b778fbe5792729c7c0b0b5dd2efa10f",
+    "allocator_snapshot_sha256": "86e1f09f6b6221fb4568a61389a08a9ecf863699e7b9bcfccc2b7125d652f0cf",
+    "binary_sha256": "045d517bbdbd3b43bff5c1a200903eb196f5c99eeb642320a33d7c340c878604",
+    "compiler_sites": {
+      "bytes": 226704,
+      "path": "/home/hanqing/alloc/UniAlloc-lifetime-tcmalloc-fastpath-20260715/evaluation/raw/lifetime-tcmalloc-fastpath-oxipng-quick-u2-r4-20260715/builds/oxipng/compiler-prior/compiler-sites.json",
+      "sha256": "c927ff7a31f05dce2ef0589cbcf825885307e2a6d216af682f9ac32bc28e7e59"
+    },
+    "raw_result": {
+      "bytes": 55130,
+      "path": "/home/hanqing/alloc/UniAlloc-lifetime-tcmalloc-fastpath-20260715/evaluation/raw/lifetime-tcmalloc-fastpath-oxipng-quick-u2-r4-20260715/results.json",
+      "sha256": "a08a9af27f3cdf322e8d1ae872757c4d3d85dc0ec9f4eb2fa6d63fdf99d05211"
+    }
+  },
+  "schema_version": 1,
+  "single_pair_observation": {
+    "interpretation": "The observed -0.419% time saving and -0.391% RSS saving are null directional values from one pair; negative saving means mixed is larger/slower.",
+    "mixed_vs_legacy_thp_operation_saving_percent": -0.4188595191264101,
+    "mixed_vs_legacy_thp_peak_rss_saving_percent": -0.39075219798111366
+  },
+  "source": "unialloc-lifetime-fastpath-oxipng-null-summary-v1",
+  "target": {
+    "input_sha256": "909418f09bfb42612575aa3d12c7d7b57546d361b382a9ebd8d3c83531948334",
+    "name": "Oxipng",
+    "real_crate_api_boundary": "pinned lossless PNG optimizer CLI",
+    "version": "10.1.1"
+  },
+  "workload": {
+    "application_warmup_runs": 0,
+    "cpu_affinity": {
+      "cpu": 24,
+      "pinned": true
+    },
+    "criterion_used": false,
+    "fresh_processes": 4,
+    "output_identity": {
+      "equal_across_all_arms": true,
+      "unique_output_bytes": [
+        1349961
+      ],
+      "unique_output_digests": [
+        "e310efff8613eaae72ad5028b9021e7c56203e801d77eb3f73a47de5169173bd"
+      ]
+    },
+    "rounds_per_arm": 1,
+    "timing_boundary": "complete pinned Oxipng CLI process; input copies precede the clock and output hashing follows it"
+  }
+}

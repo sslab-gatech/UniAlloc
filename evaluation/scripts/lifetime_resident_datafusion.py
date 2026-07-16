@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Fail-closed resident-heap screen for pinned DataFusion 54.0.0.
+"""Fail-closed natural resident-heap screen for pinned DataFusion 54.0.0.
 
-The generated single-process workload keeps two ``MemTable`` instances and
-their Arrow ``RecordBatch`` payloads resident while repeatedly executing one
-fixed selective join and hash aggregate.  A force-tracked ordinary run exports
-exact runtime ground truth.  An adaptive THP smoke runs only when that ground
-truth exposes a large enough lifetime cohort.  Three matched ordinary/THP
-pairs are available as an explicit preliminary follow-on and remain disabled
-by default.
+The generated process uses uninstrumented input fixtures, asks DataFusion to
+materialize a large join result, retains that DataFusion-produced ``MemTable``,
+and repeatedly executes a fixed analytical query over it.  Lifetime inference
+targets pinned DataFusion and Arrow dependency crates; the generated driver is
+outside the compiler-claim boundary.  Runtime ground truth precedes every THP
+or timing comparison.
 """
 
 from __future__ import annotations
@@ -45,7 +44,22 @@ TOKIO_VERSION = "1.52.0"
 DATAFUSION_CHECKOUT_NAME = "datafusion-54.0.0"
 RUNNER_PACKAGE = "unialloc-lifetime-resident-datafusion"
 RUNNER_CRATE = RUNNER_PACKAGE.replace("-", "_")
-TARGET_CRATES = (RUNNER_CRATE,)
+# Selected crates cover query planning/execution plus the Arrow kernels and
+# buffers that DataFusion uses to materialize the resident table.  The direct
+# force-extern wrapper supplies one UniAlloc rlib to these registry/path crates
+# without mutating the pristine pinned checkout or Cargo registry.
+TARGET_CRATES = (
+    "datafusion",
+    "datafusion_physical_plan",
+    "datafusion_functions_aggregate",
+    "datafusion_physical_expr",
+    "arrow_select",
+    "arrow_array",
+    "arrow_buffer",
+    "arrow_data",
+    "arrow_row",
+)
+FORCE_LOAD_CRATES = (RUNNER_CRATE, *TARGET_CRATES)
 RESULT_PREFIX = "UNIALLOC_LIFETIME_RESIDENT_DATAFUSION="
 
 # 24 KiB keeps every intended Vec<u64> inside UniAlloc's 28,032-byte routed
@@ -55,10 +69,13 @@ COLUMNS_PER_TABLE = 4
 TABLE_COUNT = 2
 ROUTABLE_BUFFER_BYTES = ROWS_PER_BATCH * 8
 DEFAULT_BATCHES_PER_TABLE = 256
-DEFAULT_QUERY_ITERATIONS = 32
+DEFAULT_QUERY_ITERATIONS = 3_072
 DEFAULT_TARGET_PARTITIONS = 2
-DEFAULT_MINIMUM_SECONDS = 5.0
-DEFAULT_MAXIMUM_SECONDS = 60.0
+DEFAULT_MINIMUM_SECONDS = 45.0
+# A busy shared host can move the same fixed work a few seconds around the
+# one-minute target.  The 45--70 second gate preserves a bounded macro window
+# without wasting a successful minute-long process on a narrow cutoff.
+DEFAULT_MAXIMUM_SECONDS = 70.0
 DEFAULT_TIMEOUT_SECONDS = 300
 MATCHED_BLOCK_COUNT = 3
 DATAFUSION_ALLOCATOR_COMPATIBILITY_RULES = (
@@ -78,6 +95,8 @@ FIXED_WORK_INVARIANT_FIELDS = (
     "columns_per_table",
     "routable_buffer_bytes",
     "resident_payload_bytes",
+    "materialized_rows",
+    "materialized_digest",
     "query_iterations",
     "target_partitions",
     "query_output_rows",
@@ -208,7 +227,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Instant;
 
-use arrow::array::{ArrayRef, UInt64Array};
+use arrow::array::{Array, ArrayRef, UInt64Array};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use arrow::record_batch::RecordBatch;
 use datafusion::datasource::MemTable;
@@ -218,7 +237,8 @@ const ROWS_PER_BATCH: usize = 3072;
 const COLUMNS_PER_TABLE: usize = 4;
 const TABLE_COUNT: usize = 2;
 const ROUTABLE_BUFFER_BYTES: usize = ROWS_PER_BATCH * 8;
-const SQL: &str = "SELECT f.group_id, COUNT(*) AS row_count, SUM(f.value) AS value_sum, SUM(d.weight) AS weight_sum FROM facts f JOIN dimensions d ON f.join_key = d.join_key WHERE f.selector < 8 AND d.active = 1 AND d.category < 8 GROUP BY f.group_id ORDER BY f.group_id";
+const MATERIALIZE_SQL: &str = "SELECT f.join_key, f.group_id, f.value, f.selector, d.category, d.weight, d.active FROM facts f JOIN dimensions d ON f.join_key = d.join_key";
+const SQL: &str = "SELECT group_id, COUNT(*) AS row_count, SUM(value) AS value_sum, SUM(weight) AS weight_sum FROM resident_rows WHERE selector < 8 AND active = 1 AND category < 8 GROUP BY group_id ORDER BY group_id";
 
 type AnyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -254,45 +274,14 @@ fn dimension_schema() -> SchemaRef {
 }
 
 #[inline(never)]
-fn reserved_u64_column() -> Vec<u64> {
-    // Return the exact owner immediately. This gives the compiler a real
-    // escape/return fact even with panic=unwind; initialization happens in the
-    // caller-owned wrapper after the allocation site has been classified.
-    Vec::with_capacity(ROWS_PER_BATCH)
-}
-
-#[inline(never)]
-fn zeroed_u64_column() -> Vec<u64> {
-    // `vec![0; N]` lowers through SpecFromElem and currently has no exact
-    // owner/layout proof. The reserved Vec already has enough capacity, so
-    // resize initializes the payload without another allocation.
-    let mut values = reserved_u64_column();
-    values.resize(ROWS_PER_BATCH, 0_u64);
-    values
-}
-
-#[inline(never)]
 fn fact_batch(schema: &SchemaRef, batch_index: usize) -> AnyResult<RecordBatch> {
     let base = batch_index.checked_mul(ROWS_PER_BATCH).expect("fact row offset");
-    // Keep each 24 KiB allocation explicit at a stable MIR site. Moving these
-    // Vecs into Arrow arrays and then a resident MemTable exercises the real
-    // owner-escape path while preserving exact compiler/runtime join keys.
-    let mut join_keys = zeroed_u64_column();
-    let mut groups = zeroed_u64_column();
-    let mut values = zeroed_u64_column();
-    let mut selectors = zeroed_u64_column();
-    for row in 0..ROWS_PER_BATCH {
-        let key = base + row;
-        join_keys[row] = key as u64;
-        groups[row] = (key % 64) as u64;
-        values[row] = ((key * 3 + 7) % 1009) as u64;
-        selectors[row] = ((key * 11 + 5) % 32) as u64;
-    }
+    let keys = (base..base + ROWS_PER_BATCH).map(|key| key as u64);
     let columns: Vec<ArrayRef> = vec![
-        Arc::new(UInt64Array::from(join_keys)),
-        Arc::new(UInt64Array::from(groups)),
-        Arc::new(UInt64Array::from(values)),
-        Arc::new(UInt64Array::from(selectors)),
+        Arc::new(UInt64Array::from_iter_values(keys.clone())),
+        Arc::new(UInt64Array::from_iter_values(keys.clone().map(|key| key % 64))),
+        Arc::new(UInt64Array::from_iter_values(keys.clone().map(|key| (key * 3 + 7) % 1009))),
+        Arc::new(UInt64Array::from_iter_values(keys.map(|key| (key * 11 + 5) % 32))),
     ];
     Ok(RecordBatch::try_new(schema.clone(), columns)?)
 }
@@ -300,22 +289,12 @@ fn fact_batch(schema: &SchemaRef, batch_index: usize) -> AnyResult<RecordBatch> 
 #[inline(never)]
 fn dimension_batch(schema: &SchemaRef, batch_index: usize) -> AnyResult<RecordBatch> {
     let base = batch_index.checked_mul(ROWS_PER_BATCH).expect("dimension row offset");
-    let mut join_keys = zeroed_u64_column();
-    let mut categories = zeroed_u64_column();
-    let mut weights = zeroed_u64_column();
-    let mut active = zeroed_u64_column();
-    for row in 0..ROWS_PER_BATCH {
-        let key = base + row;
-        join_keys[row] = key as u64;
-        categories[row] = ((key * 7 + 1) % 16) as u64;
-        weights[row] = ((key * 5 + 3) % 97) as u64;
-        active[row] = u64::from(key % 5 != 0);
-    }
+    let keys = (base..base + ROWS_PER_BATCH).map(|key| key as u64);
     let columns: Vec<ArrayRef> = vec![
-        Arc::new(UInt64Array::from(join_keys)),
-        Arc::new(UInt64Array::from(categories)),
-        Arc::new(UInt64Array::from(weights)),
-        Arc::new(UInt64Array::from(active)),
+        Arc::new(UInt64Array::from_iter_values(keys.clone())),
+        Arc::new(UInt64Array::from_iter_values(keys.clone().map(|key| (key * 7 + 1) % 16))),
+        Arc::new(UInt64Array::from_iter_values(keys.clone().map(|key| (key * 5 + 3) % 97))),
+        Arc::new(UInt64Array::from_iter_values(keys.map(|key| u64::from(key % 5 != 0)))),
     ];
     Ok(RecordBatch::try_new(schema.clone(), columns)?)
 }
@@ -336,6 +315,87 @@ fn expected_aggregates(rows: usize) -> BTreeMap<u64, (u64, u128, u128)> {
         entry.2 += ((key * 5 + 3) % 97) as u128;
     }
     expected
+}
+
+fn validate_materialized(
+    batches: &[RecordBatch],
+    expected_rows: usize,
+) -> AnyResult<(usize, usize, u64)> {
+    let expected_names = [
+        "join_key", "group_id", "value", "selector", "category", "weight", "active",
+    ];
+    let mut seen = vec![false; expected_rows];
+    let mut observed_rows = 0_usize;
+    let mut array_memory_bytes = 0_usize;
+    for batch in batches {
+        let names: Vec<&str> = batch
+            .schema_ref()
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str())
+            .collect();
+        if names != expected_names {
+            return Err(format!("unexpected materialized schema: {names:?}").into());
+        }
+        let columns: Vec<&UInt64Array> = batch
+            .columns()
+            .iter()
+            .map(|column| {
+                column
+                    .as_any()
+                    .downcast_ref::<UInt64Array>()
+                    .ok_or("materialized column is not UInt64")
+            })
+            .collect::<Result<_, _>>()?;
+        for row in 0..batch.num_rows() {
+            let key = usize::try_from(columns[0].value(row))?;
+            if key >= expected_rows || seen[key] {
+                return Err(format!("invalid or duplicate materialized key {key}").into());
+            }
+            seen[key] = true;
+            let expected = [
+                key as u64,
+                (key % 64) as u64,
+                ((key * 3 + 7) % 1009) as u64,
+                ((key * 11 + 5) % 32) as u64,
+                ((key * 7 + 1) % 16) as u64,
+                ((key * 5 + 3) % 97) as u64,
+                u64::from(key % 5 != 0),
+            ];
+            if columns
+                .iter()
+                .enumerate()
+                .any(|(column, values)| values.value(row) != expected[column])
+            {
+                return Err(format!("materialized row mismatch at key {key}").into());
+            }
+            observed_rows += 1;
+        }
+        array_memory_bytes = array_memory_bytes
+            .checked_add(batch.get_array_memory_size())
+            .expect("resident array memory size");
+    }
+    if observed_rows != expected_rows || seen.iter().any(|value| !value) {
+        return Err(format!(
+            "materialized row count mismatch: observed={observed_rows} expected={expected_rows}"
+        )
+        .into());
+    }
+    let mut digest = 0xcbf29ce484222325_u64;
+    for key in 0..expected_rows {
+        for value in [
+            key as u64,
+            (key % 64) as u64,
+            ((key * 3 + 7) % 1009) as u64,
+            ((key * 11 + 5) % 32) as u64,
+            ((key * 7 + 1) % 16) as u64,
+            ((key * 5 + 3) % 97) as u64,
+            u64::from(key % 5 != 0),
+        ] {
+            digest = mix(digest, value);
+        }
+    }
+    Ok((observed_rows, array_memory_bytes, digest))
 }
 
 fn cell(batch: &RecordBatch, column: usize, row: usize) -> AnyResult<String> {
@@ -407,16 +467,38 @@ async fn main() -> AnyResult<()> {
         dimension_batches.push(dimension_batch(&dimensions_schema, batch_index)?);
     }
     let rows_per_table = batches_per_table.checked_mul(ROWS_PER_BATCH).expect("row count");
-    let resident_payload_bytes = batches_per_table
-        .checked_mul(TABLE_COUNT * COLUMNS_PER_TABLE * ROUTABLE_BUFFER_BYTES)
-        .expect("resident payload bytes");
     let fact_table = Arc::new(MemTable::try_new(facts_schema, vec![fact_batches])?);
     let dimension_table = Arc::new(MemTable::try_new(dimensions_schema, vec![dimension_batches])?);
 
-    let config = SessionConfig::new().with_target_partitions(target_partitions);
+    let config = SessionConfig::new()
+        .with_target_partitions(target_partitions)
+        .with_batch_size(ROWS_PER_BATCH)
+        .with_enforce_batch_size_in_joins(true);
     let ctx = SessionContext::new_with_config(config);
     ctx.register_table("facts", fact_table.clone())?;
     ctx.register_table("dimensions", dimension_table.clone())?;
+
+    // DataFusion performs the join and Arrow output materialization.  The
+    // resulting batches, rather than driver-created seed columns, define the
+    // resident lifetime cohort under study.
+    let resident_batches = ctx.sql(MATERIALIZE_SQL).await?.collect().await?;
+    assert!(!resident_batches.is_empty(), "materialization returned no batches");
+    let (materialized_rows, resident_array_memory_bytes, materialized_digest) =
+        validate_materialized(&resident_batches, rows_per_table)?;
+    let resident_batch_count = resident_batches.len();
+    let resident_payload_bytes = rows_per_table
+        .checked_mul(7 * std::mem::size_of::<u64>())
+        .expect("resident payload bytes");
+    let resident_schema = resident_batches[0].schema();
+    let resident_table = Arc::new(MemTable::try_new(
+        resident_schema,
+        vec![resident_batches],
+    )?);
+    ctx.register_table("resident_rows", resident_table.clone())?;
+    drop(ctx.deregister_table("facts")?);
+    drop(ctx.deregister_table("dimensions")?);
+    drop(fact_table);
+    drop(dimension_table);
 
     // Build the independent oracle once. Recomputing it inside the query loop
     // would add O(rows * iterations) allocator-independent work to the measured
@@ -441,13 +523,12 @@ async fn main() -> AnyResult<()> {
         result_digest = mix(result_digest, digest);
         black_box(&output);
     }
-    assert_eq!(fact_table.batches.len(), 1);
-    assert_eq!(dimension_table.batches.len(), 1);
-    black_box((&ctx, &fact_table, &dimension_table));
+    assert_eq!(resident_table.batches.len(), 1);
+    black_box((&ctx, &resident_table));
     let query_seconds = query_started.elapsed().as_secs_f64();
     let total_seconds = total_started.elapsed().as_secs_f64();
     println!(
-        "@@RESULT_PREFIX@@{{\"schema_version\":1,\"correctness\":true,\"batches_per_table\":{},\"rows_per_batch\":{},\"rows_per_table\":{},\"table_count\":{},\"columns_per_table\":{},\"routable_buffer_bytes\":{},\"resident_payload_bytes\":{},\"query_iterations\":{},\"target_partitions\":{},\"query_output_rows\":{},\"query_digest\":\"{:016x}\",\"result_digest\":\"{:016x}\",\"resident_build_seconds\":{:.9},\"query_seconds\":{:.9},\"total_seconds\":{:.9}}}",
+        "@@RESULT_PREFIX@@{{\"schema_version\":1,\"correctness\":true,\"batches_per_table\":{},\"rows_per_batch\":{},\"rows_per_table\":{},\"table_count\":{},\"columns_per_table\":{},\"routable_buffer_bytes\":{},\"resident_payload_bytes\":{},\"resident_array_memory_bytes\":{},\"resident_batch_count\":{},\"materialized_rows\":{},\"materialized_digest\":\"{:016x}\",\"query_iterations\":{},\"target_partitions\":{},\"query_output_rows\":{},\"query_digest\":\"{:016x}\",\"result_digest\":\"{:016x}\",\"resident_build_seconds\":{:.9},\"query_seconds\":{:.9},\"total_seconds\":{:.9}}}",
         batches_per_table,
         ROWS_PER_BATCH,
         rows_per_table,
@@ -455,6 +536,10 @@ async fn main() -> AnyResult<()> {
         COLUMNS_PER_TABLE,
         ROUTABLE_BUFFER_BYTES,
         resident_payload_bytes,
+        resident_array_memory_bytes,
+        resident_batch_count,
+        materialized_rows,
+        materialized_digest,
         query_iterations,
         target_partitions,
         query_output_rows,
@@ -479,9 +564,7 @@ def generated_runner_source() -> str:
 
 
 def generated_manifest(*, datafusion_checkout: Path, allocator_snapshot: Path) -> str:
-    unialloc = campaign.matrix.cargo_path_dependency(
-        allocator_snapshot / "unialloc", ("lifetime_hugepage",)
-    )
+    del allocator_snapshot
     datafusion_core = datafusion_checkout / "datafusion/core"
     return (
         f'[package]\nname = "{RUNNER_PACKAGE}"\n'
@@ -491,8 +574,7 @@ def generated_manifest(*, datafusion_checkout: Path, allocator_snapshot: Path) -
         'default-features = false, features = ["sql"] }\n'
         f'arrow = "={ARROW_VERSION}"\n'
         f'tokio = {{ version = "={TOKIO_VERSION}", features = ["macros", "rt-multi-thread"] }}\n'
-        + unialloc
-        + "\n\n[workspace]\n"
+        "\n[workspace]\n"
     )
 
 
@@ -530,6 +612,23 @@ def expected_digests(*, rows_per_table: int, query_iterations: int) -> tuple[str
     return f"{query_digest:016x}", f"{result_digest:016x}"
 
 
+@functools.lru_cache(maxsize=16)
+def expected_materialized_digest(rows_per_table: int) -> str:
+    digest = 0xCBF29CE484222325
+    for key in range(rows_per_table):
+        for value in (
+            key,
+            key % 64,
+            (key * 3 + 7) % 1009,
+            (key * 11 + 5) % 32,
+            (key * 7 + 1) % 16,
+            (key * 5 + 3) % 97,
+            int(key % 5 != 0),
+        ):
+            digest = _mix_digest(digest, value)
+    return f"{digest:016x}"
+
+
 def parse_result_record(
     stdout: str,
     *,
@@ -550,9 +649,7 @@ def parse_result_record(
     if len(rows) != 1:
         raise ContractError("DataFusion emitted an invalid number of result records")
     rows_per_table = batches_per_table * ROWS_PER_BATCH
-    resident_payload_bytes = (
-        batches_per_table * TABLE_COUNT * COLUMNS_PER_TABLE * ROUTABLE_BUFFER_BYTES
-    )
+    resident_payload_bytes = rows_per_table * 7 * 8
     query_digest, result_digest = expected_digests(
         rows_per_table=rows_per_table, query_iterations=query_iterations
     )
@@ -566,6 +663,8 @@ def parse_result_record(
         "columns_per_table": COLUMNS_PER_TABLE,
         "routable_buffer_bytes": ROUTABLE_BUFFER_BYTES,
         "resident_payload_bytes": resident_payload_bytes,
+        "materialized_rows": rows_per_table,
+        "materialized_digest": expected_materialized_digest(rows_per_table),
         "query_iterations": query_iterations,
         "target_partitions": target_partitions,
         "query_output_rows": len(expected_aggregate_rows(rows_per_table)),
@@ -575,6 +674,12 @@ def parse_result_record(
     row = rows[0]
     if any(row.get(field) != value for field, value in expected.items()):
         raise ContractError("DataFusion fixed-work result does not match the command")
+    for field in ("resident_array_memory_bytes", "resident_batch_count"):
+        value = row.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ContractError(f"DataFusion {field} is invalid")
+    if int(row["resident_array_memory_bytes"]) < resident_payload_bytes:
+        raise ContractError("DataFusion resident Arrow memory is smaller than its payload")
     for field in ("resident_build_seconds", "query_seconds", "total_seconds"):
         elapsed = row.get(field)
         if (
@@ -637,6 +742,9 @@ def adaptive_thp_backing_gate(
 def measured_pair_backing_gate(
     ordinary_samples: Sequence[Mapping[str, Any]],
     thp_samples: Sequence[Mapping[str, Any]],
+    *,
+    ordinary_mechanism: Mapping[str, Any],
+    thp_mechanism: Mapping[str, Any],
 ) -> dict[str, Any]:
     if not ordinary_samples or not thp_samples:
         raise ContractError("measured pair lacks procfs samples")
@@ -651,6 +759,17 @@ def measured_pair_backing_gate(
         reasons.append(
             "selective-THP backing is absent from one or more operation-window samples"
         )
+    ordinary_attempts = int(ordinary_mechanism.get("thp_advice_attempts", 0))
+    ordinary_collapses = int(ordinary_mechanism.get("thp_collapse_successes", 0))
+    ordinary_mappings = int(ordinary_mechanism.get("thp_extent_mappings", 0))
+    thp_attempts = int(thp_mechanism.get("thp_advice_attempts", 0))
+    thp_collapses = int(thp_mechanism.get("thp_collapse_successes", 0))
+    if ordinary_attempts or ordinary_collapses or ordinary_mappings:
+        reasons.append("ordinary process reports a THP mechanism action")
+    if thp_attempts <= 0:
+        reasons.append("selective-THP process reports no advice attempt")
+    if thp_collapses <= 0:
+        reasons.append("selective-THP process reports no successful collapse")
     ordinary_positive_samples = sum(value > 0 for value in ordinary_values)
     thp_positive_samples = sum(value > 0 for value in thp_values)
     return {
@@ -662,6 +781,11 @@ def measured_pair_backing_gate(
         "thp_positive_backing_sample_count": thp_positive_samples,
         "ordinary_peak_anon_hugepages_kib": max(ordinary_values),
         "thp_peak_anon_hugepages_kib": max(thp_values),
+        "ordinary_thp_advice_attempts": ordinary_attempts,
+        "ordinary_thp_collapse_successes": ordinary_collapses,
+        "ordinary_thp_extent_mappings": ordinary_mappings,
+        "thp_advice_attempts": thp_attempts,
+        "thp_collapse_successes": thp_collapses,
         "claim_boundary": (
             "both processes and every operation-window sample in this measured "
             "block are gated independently"
@@ -690,54 +814,40 @@ def live_survival_counters(*records: Mapping[str, Any]) -> dict[str, int]:
     return dict(sorted(counters.items()))
 
 
-def validate_target_routing(
+def validate_process_wide_routing(
     stats: Mapping[str, Any],
     sites: Sequence[Mapping[str, Any]],
     *,
     batches_per_table: int,
 ) -> dict[str, int]:
-    """Prove that the resident Vec payloads actually entered the lifetime arena."""
+    """Prove that several process-wide GlobalAlloc sites entered the arena."""
+    del batches_per_table
     unsupported = stats.get("unsupported_layout_bypasses")
     if isinstance(unsupported, bool) or not isinstance(unsupported, int):
         raise ContractError("unsupported-layout bypass telemetry is missing")
-    if unsupported != 0:
-        raise ContractError("DataFusion resident target observed unsupported layouts")
-
-    target_rows = [
-        row
-        for row in sites
-        if row.get("requested_size") == ROUTABLE_BUFFER_BYTES
-        and row.get("align") == 8
-    ]
-    expected_allocations = batches_per_table * TABLE_COUNT * COLUMNS_PER_TABLE
+    target_rows = [row for row in sites if int(row.get("allocation_count", 0)) > 0]
     observed_allocations = sum(int(row["allocation_count"]) for row in target_rows)
     observed_requested_bytes = sum(
         int(row["allocation_requested_bytes"]) for row in target_rows
     )
-    expected_requested_bytes = expected_allocations * ROUTABLE_BUFFER_BYTES
-    if not target_rows:
-        raise ContractError("DataFusion resident target produced no exact runtime site")
+    if len(target_rows) < 4:
+        raise ContractError("DataFusion process produced fewer than four runtime sites")
+    if observed_allocations < 1_024:
+        raise ContractError("DataFusion process produced too few routed allocations")
     if any(
         int(row.get(field, 0)) == 0
         for row in target_rows
         for field in ("callsite", "type_id", "module_id")
     ):
-        raise ContractError("DataFusion resident target has an incomplete exact identity")
-    if observed_allocations != expected_allocations:
-        raise ContractError(
-            "DataFusion resident target allocation count does not match fixed work"
-        )
-    if observed_requested_bytes != expected_requested_bytes:
-        raise ContractError(
-            "DataFusion resident target requested bytes do not match fixed work"
-        )
+        raise ContractError("DataFusion process has an incomplete exact identity")
     return {
         "site_count": len(target_rows),
-        "requested_size": ROUTABLE_BUFFER_BYTES,
-        "align": 8,
         "allocation_count": observed_allocations,
         "allocation_requested_bytes": observed_requested_bytes,
         "unsupported_layout_bypasses": unsupported,
+        "distinct_requested_size_count": len(
+            {int(row["requested_size"]) for row in target_rows}
+        ),
     }
 
 
@@ -795,10 +905,16 @@ def verify_generated_lock(path: Path) -> dict[str, Any]:
     runner = exact(RUNNER_PACKAGE, "0.0.0")
     if runner.get("source") is not None:
         raise ContractError("generated runner unexpectedly has an external source")
+    cargo_unialloc = [row for row in packages if row.get("name") == "unialloc"]
+    if cargo_unialloc:
+        raise ContractError(
+            "generated Cargo.lock contains UniAlloc in addition to the force-loaded rlib"
+        )
     return {
         "verified": True,
         "sha256": sha256_file(path),
         "package_count": len(packages),
+        "cargo_graph_unialloc_package_count": 0,
         "datafusion": {"version": datafusion["version"], "source": None},
         "arrow": {
             "version": arrow["version"],
@@ -808,133 +924,68 @@ def verify_generated_lock(path: Path) -> dict[str, Any]:
     }
 
 
-def validate_resident_compiler_site(audit_dir: Path) -> dict[str, Any]:
-    """Require the pre-optimization Rust lifetime prior at the resident site."""
-    matches: list[dict[str, Any]] = []
-    audited_files = 0
-    for path in sorted(audit_dir.rglob("*.json")):
-        try:
-            document = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        compiler_pass = document.get("compiler_pass")
-        candidates = document.get("rewrite_candidates")
-        if not isinstance(compiler_pass, dict) or not isinstance(candidates, list):
-            continue
-        audited_files += 1
-        if compiler_pass.get("marker_free_heap_preoptimization_rewrite") is not True:
-            raise ContractError("DataFusion compiler audit lacks pre-optimization lifetime MIR")
-        if compiler_pass.get("actual_allocator_call_replacement_requested") is not False:
-            raise ContractError("DataFusion compiler audit enabled the conflicting direct rewrite")
-        if compiler_pass.get("actual_semantic_scope_rewrite_requested") is not True:
-            raise ContractError("DataFusion compiler audit lacks semantic-scope rewriting")
-        for row in candidates:
-            if not isinstance(row, dict):
-                continue
-            if (
-                str(row.get("mir_function") or "").endswith("reserved_u64_column")
-                and "with_capacity" in str(row.get("callee") or "")
-                and row.get("semantic_object_type")
-                == "std::vec::Vec<u64, std::alloc::Global>"
-            ):
-                matches.append({**row, "audit_path": str(path.resolve())})
-    if audited_files == 0:
-        raise ContractError("DataFusion compiler audit is missing")
-    if len(matches) != 1:
-        raise ContractError("DataFusion resident compiler site is missing or ambiguous")
-    row = matches[0]
-    expected = {
-        "lifetime_hint": 2,
-        "lifetime_hint_confidence": 70,
-        "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
-        "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
-        "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
-        "lowering_kind": "semantic_scope_enter_exit_rewrite",
-    }
-    if any(row.get(field) != value for field, value in expected.items()):
-        raise ContractError("DataFusion resident compiler site did not receive the Long prior")
-    if any(int(row.get(field) or 0) == 0 for field in ("callsite", "type_id", "module_id")):
-        raise ContractError("DataFusion resident compiler site lacks exact identity")
-    features = row.get("lifetime_analysis_features")
-    if not isinstance(features, dict):
-        raise ContractError("DataFusion resident compiler site lacks lifetime features")
-    runtime_key = features.get("runtime_join_key")
-    if not isinstance(runtime_key, dict):
-        raise ContractError("DataFusion resident compiler site lacks a runtime join key")
-    expected_runtime_key = {
-        "callsite": row["callsite"],
-        "type_id": row["type_id"],
-        "module_id": row["module_id"],
-        "requested_size_bytes": ROUTABLE_BUFFER_BYTES,
-        "requested_align_bytes": 8,
-    }
-    if runtime_key != expected_runtime_key:
-        raise ContractError("DataFusion resident compiler site has the wrong exact layout key")
-    if features.get("runtime_join_key_complete") is not True:
-        raise ContractError("DataFusion resident compiler site has an incomplete join key")
-    if (
-        features.get("requested_layout_basis")
-        != "exact_vec_with_capacity_requested_layout"
-    ):
-        raise ContractError("DataFusion resident compiler site lacks exact Vec layout proof")
-    return {
-        **expected,
-        "callsite": row["callsite"],
-        "type_id": row["type_id"],
-        "module_id": row["module_id"],
-        "requested_size": ROUTABLE_BUFFER_BYTES,
-        "align": 8,
-        "requested_layout_basis": features["requested_layout_basis"],
-        "audit_path": row["audit_path"],
-    }
-
-
-def validate_resident_compiler_runtime_join(
-    exact_join: Mapping[str, Any], resident_site: Mapping[str, Any]
+def validate_dependency_compiler_scope(
+    audit: Mapping[str, Any], compiler_sites: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Require the intended resident site to match one executed runtime KEY5."""
-    expected_key = {
-        field: resident_site[field]
-        for field in ("callsite", "type_id", "module_id", "requested_size", "align")
+    """Require a multi-crate dependency audit and exclude the generated driver."""
+    audited = {
+        str(value).replace("-", "_") for value in audit.get("audited_crates", [])
     }
+    expected = {value.replace("-", "_") for value in TARGET_CRATES}
+    if audited != expected:
+        raise ContractError(
+            "DataFusion audited crate set does not exactly match the dependency allowlist"
+        )
+    if RUNNER_CRATE in audited:
+        raise ContractError("generated DataFusion runner entered the compiler-claim scope")
+    site_count = int(compiler_sites.get("site_count", 0))
+    hinted = int(compiler_sites.get("applied_prior_hinted_count", 0))
+    if site_count < 4:
+        raise ContractError("DataFusion dependency compiler scope has fewer than four sites")
+    if hinted <= 0:
+        raise ContractError("DataFusion dependency compiler scope transported no lifetime prior")
+    return {
+        "target_crates": sorted(expected),
+        "target_crate_count": len(expected),
+        "generated_runner_excluded": True,
+        "compiler_site_count": site_count,
+        "applied_prior_hinted_count": hinted,
+        "complete_join_key_count": int(compiler_sites.get("complete_join_key_count", 0)),
+    }
+
+
+def validate_dependency_compiler_runtime_join(
+    exact_join: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require and summarize executed exact dependency lifetime priors."""
     rows = exact_join.get("rows")
     if not isinstance(rows, list):
         raise ContractError("DataFusion compiler/runtime join rows are missing")
+    if exact_join.get("static_prior_join_success") is not True:
+        raise ContractError("DataFusion static-prior compiler/runtime join failed")
+    reported_matches = int(exact_join.get("matched_applied_prior_site_count", 0))
+    if reported_matches <= 0:
+        raise ContractError("DataFusion executed no exact applied lifetime prior")
     matches = [
         row
         for row in rows
-        if isinstance(row, dict) and row.get("compiler_audit_key") == expected_key
+        if isinstance(row, dict)
+        and row.get("matched") is True
+        and row.get("applied_prior_hint") is True
+        and isinstance(row.get("runtime"), dict)
+        and int(row["runtime"].get("allocation_count", 0)) > 0
     ]
-    if len(matches) != 1:
-        raise ContractError("DataFusion resident compiler/runtime site is missing or ambiguous")
-    row = matches[0]
-    if (
-        row.get("identity_mode") != "numeric_exact"
-        or row.get("matched") is not True
-        or row.get("applied_prior_hint") is not True
-        or row.get("resolution_status") != "exact_numeric_match"
-        or row.get("resolved_runtime_exact_key") != expected_key
-    ):
-        raise ContractError("DataFusion resident compiler/runtime exact join failed")
-    runtime = row.get("runtime")
-    if not isinstance(runtime, dict):
-        raise ContractError("DataFusion resident runtime observation is missing")
-    allocation_count = runtime.get("allocation_count")
-    if (
-        isinstance(allocation_count, bool)
-        or not isinstance(allocation_count, int)
-        or allocation_count <= 0
-        or runtime.get("latest_static_prior") != 2
-    ):
-        raise ContractError("DataFusion resident static Long prior was not transported")
+    if len(matches) != reported_matches:
+        raise ContractError("DataFusion applied-prior join summary disagrees with its rows")
     return {
-        "matched": True,
-        "resolution_status": "exact_numeric_match",
-        "runtime_key": expected_key,
-        "allocation_count": allocation_count,
-        "long_outcomes": int(runtime.get("long_outcomes", 0)),
-        "short_outcomes": int(runtime.get("short_outcomes", 0)),
-        "censored_outcomes": int(runtime.get("censored_outcomes", 0)),
+        "matched_site_count": len(matches),
+        "matched_applied_prior_site_count": len(matches),
+        "allocation_count": sum(int(row["runtime"]["allocation_count"]) for row in matches),
+        "long_outcomes": sum(int(row["runtime"].get("long_outcomes", 0)) for row in matches),
+        "short_outcomes": sum(int(row["runtime"].get("short_outcomes", 0)) for row in matches),
+        "censored_outcomes": sum(
+            int(row["runtime"].get("censored_outcomes", 0)) for row in matches
+        ),
     }
 
 
@@ -972,6 +1023,84 @@ def prepare_datafusion_compatible_allocator_snapshot(
             campaign.TARGET_SNAPSHOT_DEPENDENCY_REWRITES["datafusion"] = previous
 
 
+def build_lifetime_force_load(
+    *, raw_dir: Path, snapshot: Mapping[str, Any], jobs: int, timeout: int
+) -> dict[str, Any]:
+    """Build the one UniAlloc rlib force-loaded into driver and dependencies."""
+    build_root = raw_dir / "build/force-load-lifetime-hugepage"
+    target_dir = build_root / "target"
+    shutil.rmtree(build_root, ignore_errors=True)
+    build_root.mkdir(parents=True)
+    command = [
+        "cargo",
+        f"+{campaign.TOOLCHAIN}",
+        "build",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        str((Path(str(snapshot["path"])) / "unialloc/Cargo.toml").resolve()),
+        "--lib",
+        "--features",
+        "lifetime_hugepage",
+        "--target-dir",
+        str(target_dir.resolve()),
+        "--jobs",
+        str(jobs),
+    ]
+    environment = os.environ.copy()
+    environment["CARGO_INCREMENTAL"] = "0"
+    result = campaign.matrix.execute(
+        command, cwd=ROOT, env=environment, timeout=timeout
+    )
+    (build_root / "build.stdout").write_bytes(result["stdout"])
+    (build_root / "build.stderr").write_bytes(result["stderr"])
+    candidates = sorted((target_dir / "release/deps").glob("libunialloc-*.rlib"))
+    if result["timed_out"] or result["exit_code"] != 0 or len(candidates) != 1:
+        raise ContractError(
+            "lifetime force-load rlib build failed:\n"
+            + result["stderr"].decode(errors="replace")[-8_000:]
+        )
+    rlib = candidates[0].resolve()
+    return {
+        "success": True,
+        "features": ["lifetime_hugepage"],
+        "rlib": str(rlib),
+        "rlib_sha256": sha256_file(rlib),
+        "dependency_dir": str(rlib.parent),
+        "command": command,
+    }
+
+
+def ensure_lifetime_force_load_wrapper(path: Path) -> Path:
+    """Use a separate force-load allowlist while MIR targets exclude the driver."""
+    source = campaign.matrix.FORCE_LOAD_WRAPPER_SOURCE.replace(
+        'os.environ.get("UNIALLOC_RUSTC_TARGET_CRATES", "")',
+        'os.environ.get("UNIALLOC_FORCE_LOAD_CRATES", "")',
+    )
+    source = source.replace(
+        "selected = crate_name(arguments) in targets\nif selected:\n",
+        "current_crate = crate_name(arguments)\n"
+        "selected = current_crate in targets\n"
+        "if not dependency_dir.is_dir():\n"
+        "    fail(f\"missing force-load dependency directory: {dependency_dir}\")\n"
+        "arguments.extend([\"-L\", f\"dependency={dependency_dir}\"])\n"
+        f"if current_crate == {RUNNER_CRATE!r}:\n"
+        "    arguments.extend([\"-C\", \"panic=abort\"])\n"
+        "if selected:\n",
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    path.chmod(0o755)
+    return path.resolve()
+
+
+def prepare_fresh_build_directories(paths: Sequence[Path]) -> None:
+    """Remove inputs Cargo cannot fingerprint, then recreate empty directories."""
+    for path in paths:
+        shutil.rmtree(path, ignore_errors=True)
+        path.mkdir(parents=True)
+
+
 def build_runner(
     *,
     raw_dir: Path,
@@ -1001,16 +1130,27 @@ def build_runner(
     pass_log_dir = raw_dir / "build/pass-logs"
     target_dir = raw_dir / "build/cargo-target"
     temporary_dir = raw_dir / "build/tmp"
-    for path in (audit_dir, pass_log_dir, target_dir, temporary_dir):
-        path.mkdir(parents=True, exist_ok=True)
+    prepare_fresh_build_directories(
+        (audit_dir, pass_log_dir, target_dir, temporary_dir)
+    )
+    force_load = build_lifetime_force_load(
+        raw_dir=raw_dir, snapshot=snapshot, jobs=jobs, timeout=timeout
+    )
+    force_wrapper = ensure_lifetime_force_load_wrapper(
+        raw_dir / "build/tools/unialloc-lifetime-force-load-wrapper"
+    )
     environment = campaign._compiler_build_environment(
         "compiler-prior",
-        wrapper=wrapper,
+        wrapper=force_wrapper,
         audit_dir=audit_dir,
         pass_log_dir=pass_log_dir,
         target_dir=target_dir,
         target_crates=TARGET_CRATES,
         temporary_dir=temporary_dir,
+    )
+    environment["UNIALLOC_FORCE_LOAD_CRATES"] = ",".join(FORCE_LOAD_CRATES)
+    environment = campaign.matrix.force_load_environment(
+        environment, driver_wrapper=wrapper, force_load=force_load
     )
     # Marker-free owner/return analysis runs before MIR optimization. Direct
     # allocator-call replacement uses the optimized provider and would disable
@@ -1060,8 +1200,8 @@ def build_runner(
     arm = campaign.ARM_BY_NAME["force-track-compiler-prior-diagnostic"]
     audit = campaign.summarize_compiler_prior_audits(audit_dir)
     campaign.validate_build_audit_for_arm(arm, audit, TARGET_CRATES)
-    resident_compiler_site = validate_resident_compiler_site(audit_dir)
     compiler_sites = campaign.export_compiler_site_features(audit_dir)
+    dependency_compiler_scope = validate_dependency_compiler_scope(audit, compiler_sites)
     compiler_sites_path = build_dir / "compiler-sites.json"
     campaign.write_json(compiler_sites_path, compiler_sites)
     record = {
@@ -1079,14 +1219,18 @@ def build_runner(
         "cargo_lock": lock,
         "compiler_environment": build_environment,
         "compiler_audit": audit,
-        "resident_compiler_site": resident_compiler_site,
+        "dependency_compiler_scope": dependency_compiler_scope,
+        "force_load": force_load,
+        "force_load_crates": list(FORCE_LOAD_CRATES),
+        "force_load_wrapper": str(force_wrapper),
+        "force_load_wrapper_sha256": sha256_file(force_wrapper),
         "compiler_sites_path": str(compiler_sites_path.resolve()),
         "compiler_sites_sha256": sha256_file(compiler_sites_path),
         "compiler_sites": campaign.compiler_site_export_summary(compiler_sites),
         "target_crates": list(TARGET_CRATES),
         "rewrite_boundary": (
-            "the generated allocation sites are compiler-instrumented; DataFusion "
-            "and Arrow execute the real query engine through exact pinned dependencies"
+            "only pinned DataFusion/Arrow dependency crates are compiler-instrumented; "
+            "the generated input driver is explicitly excluded"
         ),
     }
     campaign.write_json(build_dir / "build.json", record)
@@ -1106,6 +1250,40 @@ def run_command(
         str(query_iterations),
         str(target_partitions),
     ]
+
+
+def conservative_query_window_samples(
+    samples: Sequence[Mapping[str, Any]],
+    *,
+    fixed_work: Mapping[str, Any],
+    process_wall_seconds: float,
+) -> tuple[list[Mapping[str, Any]], dict[str, float]]:
+    """Select the clock intersection guaranteed to lie inside the query phase.
+
+    Procfs sampling starts before ``main`` while Rust timers start inside
+    ``main``.  ``wall - query`` is therefore an upper bound on query start and
+    ``resident_build + query`` is a lower bound on query end.  Their
+    intersection conservatively excludes startup and shutdown without relying
+    on an unmeasured clock offset.
+    """
+    resident_build = float(fixed_work["resident_build_seconds"])
+    query = float(fixed_work["query_seconds"])
+    lower = float(process_wall_seconds) - query
+    upper = resident_build + query
+    if not math.isfinite(lower) or not math.isfinite(upper) or lower >= upper:
+        raise ContractError("DataFusion process and Rust phase clocks do not overlap")
+    selected = [
+        row
+        for row in samples
+        if lower <= float(row.get("elapsed_seconds", -1.0)) <= upper
+    ]
+    if not selected:
+        raise ContractError("DataFusion query window emitted no conservative smaps samples")
+    return selected, {
+        "conservative_start_seconds": lower,
+        "conservative_end_seconds": upper,
+        "process_wall_seconds": float(process_wall_seconds),
+    }
 
 
 def run_one(
@@ -1156,33 +1334,38 @@ def run_one(
         raise ContractError(f"DataFusion {arm_name} process failed:\n" + stderr[-8_000:])
     if process["single_process_guard"].get("passed") is not True:
         raise ContractError("DataFusion workload spawned a descendant process")
-    wall_seconds = float(process["wall_seconds"])
-    if not minimum_seconds <= wall_seconds <= maximum_seconds:
-        raise ContractError(
-            f"DataFusion duration {wall_seconds:.3f}s is outside "
-            f"{minimum_seconds:.1f}--{maximum_seconds:.1f}s"
-        )
     fixed_work = parse_result_record(
         stdout,
         batches_per_table=batches_per_table,
         query_iterations=query_iterations,
         target_partitions=target_partitions,
     )
+    query_seconds = float(fixed_work["query_seconds"])
+    if not minimum_seconds <= query_seconds <= maximum_seconds:
+        raise ContractError(
+            f"DataFusion query window {query_seconds:.3f}s is outside "
+            f"{minimum_seconds:.1f}--{maximum_seconds:.1f}s"
+        )
     stats = campaign.runtime_lifetime.parse_runtime_stats(stderr)
     if stats is None:
         raise ContractError("DataFusion process emitted no lifetime stats")
     sites = campaign.runtime_lifetime.parse_runtime_site_rows(stderr)
     campaign.validate_runtime_evidence(arm, stats, sites)
-    target_routing = validate_target_routing(
-        stats,
-        sites,
-        batches_per_table=batches_per_table,
-    )
+    process_wide_routing = None
+    if arm.name != "default":
+        process_wide_routing = validate_process_wide_routing(
+            stats,
+            sites,
+            batches_per_table=batches_per_table,
+        )
     fragmentation = campaign.parse_fragmentation(stderr)
     mechanism = campaign.parse_mechanism(stderr)
     samples = process["smaps_samples"]
-    if not samples:
-        raise ContractError("DataFusion process emitted no smaps samples")
+    query_samples, query_window_bounds = conservative_query_window_samples(
+        samples,
+        fixed_work=fixed_work,
+        process_wall_seconds=float(process["wall_seconds"]),
+    )
     record = {
         **{key: value for key, value in process.items() if key != "smaps_samples"},
         "success": True,
@@ -1193,18 +1376,23 @@ def run_one(
         "fixed_work": fixed_work,
         "runtime_stats": stats,
         "runtime_site_summary": campaign.summarize_screening_sites(sites),
-        "target_routing": target_routing,
+        "process_wide_routing": process_wide_routing,
         "fragmentation": fragmentation,
         "mechanism": mechanism,
         "live_survival_counters": live_survival_counters(stats, mechanism),
-        "procfs": campaign.summarize_proc_samples(samples),
+        "procfs": campaign.summarize_proc_samples(query_samples),
+        "query_window_sample_count": len(query_samples),
+        "query_window_clock_bounds": query_window_bounds,
         "runtime_sites_path": str((artifact_dir / "runtime-sites.json").resolve()),
-        "smaps_samples_path": str((artifact_dir / "smaps-samples.json").resolve()),
+        "smaps_samples_path": str(
+            (artifact_dir / "query-window-smaps-samples.json").resolve()
+        ),
     }
     campaign.write_json(artifact_dir / "runtime-stats.json", stats)
     campaign.write_json(artifact_dir / "runtime-sites.json", sites)
     campaign.write_json(artifact_dir / "mechanism.json", mechanism)
     campaign.write_json(artifact_dir / "smaps-samples.json", samples)
+    campaign.write_json(artifact_dir / "query-window-smaps-samples.json", query_samples)
     campaign.write_json(artifact_dir / "run.json", record)
     return record
 
@@ -1233,9 +1421,7 @@ def run_ground_truth(
         Path(str(build["compiler_sites_path"])).read_text(encoding="utf-8")
     )
     exact_join = campaign.join_compiler_runtime_sites(compiler_export, sites)
-    resident_exact_join = validate_resident_compiler_runtime_join(
-        exact_join, build["resident_compiler_site"]
-    )
+    dependency_exact_join = validate_dependency_compiler_runtime_join(exact_join)
     exact_join_path = raw_dir / "ground-truth-ordinary/compiler-runtime-exact-join.json"
     campaign.write_json(exact_join_path, exact_join)
     record["classification"] = "force-tracked-ordinary-ground-truth"
@@ -1248,7 +1434,7 @@ def run_ground_truth(
     record["compiler_runtime_exact_join"] = campaign.compact_compiler_runtime_exact_join(
         exact_join
     )
-    record["resident_compiler_runtime_exact_join"] = resident_exact_join
+    record["dependency_compiler_runtime_exact_join"] = dependency_exact_join
     campaign.write_json(raw_dir / "ground-truth-ordinary/run.json", record)
     return record
 
@@ -1327,7 +1513,12 @@ def run_matched_pairs(
         thp_samples = json.loads(
             Path(thp["smaps_samples_path"]).read_text(encoding="utf-8")
         )
-        gate = measured_pair_backing_gate(ordinary_samples, thp_samples)
+        gate = measured_pair_backing_gate(
+            ordinary_samples,
+            thp_samples,
+            ordinary_mechanism=ordinary["mechanism"],
+            thp_mechanism=thp["mechanism"],
+        )
         pairs.append(
             {
                 "block": block,
@@ -1416,14 +1607,17 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
             "rows_per_batch": ROWS_PER_BATCH,
             "resident_payload_bytes": (
                 args.batches_per_table
-                * TABLE_COUNT
-                * COLUMNS_PER_TABLE
-                * ROUTABLE_BUFFER_BYTES
+                * ROWS_PER_BATCH
+                * 7
+                * 8
             ),
             "routable_buffer_bytes": ROUTABLE_BUFFER_BYTES,
             "query_iterations": args.query_iterations,
             "target_partitions": args.target_partitions,
-            "query": "selective inner join plus hash aggregate and ordered output",
+            "materialization": "DataFusion join projection retained as resident_rows",
+            "query": "selective hash aggregate and ordered output over resident_rows",
+            "compiler_target_crates": list(TARGET_CRATES),
+            "generated_runner_compiler_target": False,
         },
         "stages": [
             "one force-tracked ordinary ground-truth process",
@@ -1485,10 +1679,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if any(value <= 0 for value in positive):
         parser.error("fixed-work and resource values must be positive")
     if not (
-        args.minimum_seconds <= args.maximum_seconds <= 60.0
+        args.minimum_seconds <= args.maximum_seconds <= DEFAULT_MAXIMUM_SECONDS
         and args.timeout <= campaign.HARD_PROCESS_CAP_SECONDS
     ):
-        parser.error("duration boundary must stay within the 60-second screen")
+        parser.error("duration boundary must stay within the 70-second screen")
     return args
 
 

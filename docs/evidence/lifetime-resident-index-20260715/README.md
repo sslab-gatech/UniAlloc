@@ -2,7 +2,7 @@
 
 ## Defended claims
 
-This package supports five bounded claims:
+This package supports six bounded claims:
 
 1. Bounded empty-extent retention removes repeated mapping work from measured
    lifetime-routed paths.
@@ -15,6 +15,8 @@ This package supports five bounded claims:
    authentication and runtime validation remain part of admission.
 5. Heterogeneous filling can reduce extent count and RSS, while an O(1) lookup
    remains necessary for competitive allocation speed.
+6. A minute-scale dependency-internal workload exposes substantial Long and
+   Short cohorts, while its density gate can still reject physical THP.
 
 The current evidence supports a presentation claim about the mechanism, exact
 classification, and a matched physical-backing benefit. It does not support a
@@ -50,9 +52,42 @@ unwind forces compiler abstention.
 | Syn fixed work | mappings 3,869 -> 13 in both ordinary and THP arms | mapping-churn mechanism; one timing sample excluded |
 | Tantivy resident index | runtime byte precision 99.826%, recall 98.350% | diagnostic ground truth; broad static admission failed |
 | DataFusion resident tables | generated-driver prior site matched 1/1; 2,048/2,048 target outcomes Long | exact classification mechanism inside a real query process; three timing pairs are preliminary |
+| DataFusion natural dependency run | 9 dependency crates, 2,304 compiler sites, 307 runtime sites, 37.94M routed allocations | minute-scale ground truth; selective arm realized zero physical THP |
 | SWC N=20 matched backing | THP pipeline time improved 4.076%, 95% CI [3.567%, 4.375%] | claim-grade physical-backing contrast; RSS increased 65.477% |
 | SWC mixed prototype N=8 | extents 11 -> 3; THP peak RSS improved 34.453%; mixed THP beat mixed ordinary by 1.045% | quick dirty-tree screen exposed an 8.732% scan penalty against legacy THP |
 | SWC mixed cache-first N=8 | extents 11 -> 3; THP peak RSS improved 34.185%; mixed THP beat mixed ordinary by 1.485% | quick dirty-tree rescue screen; mixed-versus-legacy estimate -0.058%, CI spans zero |
+| Oxipng 10.1.1 | 5 Long hints, 4 routed allocations, 1 extent, 0 mixed reuse | credible compiler-coverage null; image buffers were outside hinted sites |
+
+### Multi-target claim matrix
+
+Each target answers a distinct evidence question. The original DataFusion
+screen isolates one generated-driver site and physical backing. The natural
+DataFusion run instruments nine dependency crates and supplies a large mixed
+Long/Short population. Tantivy bounds broad-prior precision. SWC supplies the
+matched physical-backing result and packing result. Oxipng shows that a real
+application can miss the intended size range even when its few hinted objects
+receive physical THP.
+
+| Target | Compiler-site scope | Runtime ground truth | Physical backing | Time result | RSS result | Claim grade |
+| --- | --- | --- | --- | --- | --- | --- |
+| DataFusion 54.0.0, 512 queries | 1/1 exact site in generated driver; dependency-internal sites pending | 15 runtime sites; 50.58 MB Long, 0 Short; target 2,048 Long / 0 Short | 3/3 pairs: ordinary 0 KiB, THP 51,200 KiB | +1.221% median query time, 2/3 pairs; preliminary | THP peak RSS +7.266% | mechanism contrast only; performance and presentation flags false |
+| DataFusion 54.0.0, natural Q4218 | 9 dependency crates; 2,304 sites, 649 priors, 8 executed exact prior matches | 307 sites; 67.43 MB Long, 7.977 GB Short; 37.94M allocations | selective pair: 8 candidate mappings, 0 advice, 0 collapse, 0 KiB THP | observed +6.879% time; excluded because backing was absent | observed +0.247%; excluded | dependency ground truth is presentation-ready; comparative claims false |
+| Tantivy 0.26.1 resident index | 499 rewrites across Tantivy dependencies; 140 candidates, 10 executed exact matches | 104 sites; 9.22 MB Long and 5.171 GB confirmed Short; runtime byte precision 99.826%, recall 98.350% | selective smoke: 0 advice, 0 KiB in 17/17 samples | excluded because backing was absent | absolute peaks only; matched delta unavailable | ground-truth and fail-closed admission diagnostic |
+| SWC N=20 matched backing | 313 Long hints; 59 executed exact sites | Stage-A Long precision 96.174%, recall 100% | 20/20 pairs: ordinary median 0 KiB, THP 22,528 KiB | pipeline +4.076%, 95% CI [3.567%, 4.375%], 20/20 | `VmHWM` +65.477% | presentation-eligible matched backing mechanism |
+| SWC mixed cache-first N=8 | classifier evidence carried from the shared SWC prior stage; accuracy unmeasured here | ground-truth matrix absent from this artifact | 8/8 samples: mixed ordinary 0 KiB, mixed THP 6,144 KiB | within mixed layout +1.485%, CI [0.797%, 2.211%]; mixed-vs-legacy -0.058%, CI spans zero | mixed-vs-legacy THP -34.185%; within-layout CI spans zero | dirty-tree quick diagnostic; all claim flags false |
+| Oxipng 10.1.1 | 40 candidates; 5 Long hints at 8 or 16 bytes; zero hints at 4--16 KiB | no classifier ground truth; 4 routed allocations per arm | both THP arms 2,048 KiB; 1 extent and 0 mixed reuse | mixed-vs-legacy THP observed -0.419% saving | observed -0.391% saving | one-pair compiler-coverage null; performance/RSS claims false |
+
+The natural DataFusion ground-truth process ran 65.107 seconds and closed the
+dependency-internal duration gap. Its CPU-affined adaptive processes completed
+the same 4,218 queries in 28--30 seconds. The selective arm reached zero advice,
+zero collapse, and zero sampled `AnonHugePages`, so the observed timing remains
+outside a THP claim. One same-binary default comparison observed lifetime-aware
+ordinary routing 2.680% slower with 0.079% higher peak RSS; one sample per arm
+on a shared host keeps that comparison directional.
+
+The machine-readable source of this table is
+`multi-target-evidence-matrix.json`. It records the exact raw and compact
+artifact SHA-256 values and preserves each experiment's claim flags.
 
 ## Bounded empty-extent retention
 
@@ -158,6 +193,50 @@ reached 94.166% requested-byte precision and 100% recall with 99.484% classified
 byte coverage. Its absence of a Short-stable cohort leaves specificity
 unmeasured; the Tantivy counterexample supplies the broad-prior boundary.
 
+### DataFusion: natural dependency-internal result
+
+The natural fixed-work process asks DataFusion to materialize 786,432 joined
+rows into a resident Arrow `MemTable`, then executes 4,218 complete group
+aggregations. The retained logical payload is 44,040,192 bytes. The force-track
+ground-truth query phase lasted 65.107 seconds and preserved identical result
+digests.
+
+The compiler instrumented nine pinned DataFusion and Arrow dependency crates
+while excluding the generated driver. It exported 2,304 allocation sites, 649
+transported lifetime priors, and 742 complete exact runtime keys. The
+process-wide allocator observation recorded:
+
+- 37,943,834 routed allocations and 8,044,407,009 requested bytes;
+- 307 runtime sites and 100 requested sizes;
+- 67,432,538 Long requested bytes across 147 sites;
+- 7,976,878,915 Short requested bytes across 182 sites;
+- 6,896,270,389 confirmed-Short requested bytes across 145 sites.
+
+The exact `(callsite,type_id,module_id,size,align)` join matched eight executed
+dependency priors covering 143,955 allocations: 134,947 Long, 8,948 Short, and
+60 censored outcomes. The mixed outcomes support the design in which the Rust
+prior selects a packing lane and runtime survival controls THP admission.
+
+The CPU20/21 diagnostic pair used the same fixed work. Ordinary lifetime-aware
+routing took 28.156 seconds and peaked at 116,656 KiB RSS. The selective arm
+took 30.092 seconds and peaked at 116,944 KiB RSS. It created eight THP-candidate
+extent mappings, then produced zero advice attempts, zero collapse successes,
+and zero sampled `AnonHugePages`. The backing gate rejected the comparison, so
+the observed 6.879% time increase and 0.247% RSS increase carry no THP effect
+claim.
+
+A same-binary single-sample default arm took 27.421 seconds and peaked at
+116,564 KiB. Lifetime-aware ordinary routing was therefore observed 2.680%
+slower with 0.079% higher RSS. Shared-host, one-sample provenance makes this a
+directional overhead diagnosis. It motivates moving sampling and lane choice
+out of the common allocation path.
+
+The original 45--60 second wrapper rejected the successful 65-second
+force-track process before serializing procfs samples. Its stderr retained the
+complete authenticated runtime-site export, and the accepted 45--70 second
+recovery retains classification and exact-join evidence only. The adaptive
+pair independently supplies conservative query-window procfs samples.
+
 ## Matched physical-THP effect
 
 The claim-grade SWC campaign uses one compiler-prior binary, 996,240 routed
@@ -233,6 +312,22 @@ eligibility false. A clean committed rerun is the next gate. Routed deallocation
 still records one arena slow-path lock per object, so the larger TLS/per-CPU
 refill-lane work remains valuable.
 
+### Oxipng: compiler-coverage null
+
+The Oxipng 10.1.1 four-arm quick diagnostic used four fresh CPU24-pinned
+processes, zero warmup, no Criterion, and identical optimized PNG output. The
+compiler audited 40 allocation candidates and emitted five Long hints. Four
+hints describe 8-byte CLI parser boxes; one describes a 16-byte deflate box.
+No hinted site falls in the 4--16 KiB image-buffer range.
+
+Each arm routed only four allocations into one extent. Mixed geometry reuse was
+zero. Both THP arms obtained 2,048 KiB of physical backing, yet the mixed filler
+had no population to combine. The one-pair mixed-versus-legacy THP observations
+were -0.419% performance saving and -0.391% RSS saving, equivalent to 0.419%
+slower and 0.391% larger. These values form a credible null tied to compiler
+coverage and size admission. Dirty working-tree and N=1 provenance exclude
+performance and RSS claims.
+
 ## Modern TCMalloc relationship
 
 The relevant baseline is Google TCMalloc/Temeraire HPAA at compatibility pin
@@ -266,6 +361,11 @@ lane selector; exact runtime survival continues to correct its admission.
   one generated-driver resident allocation site inside a DataFusion query
   process, covering 2,048/2,048 Long target outcomes and 50.33 MB of requested
   traffic.
+- **Dependency-internal scale:** nine DataFusion/Arrow crates produced 2,304
+  compiler sites; eight applied priors matched 143,955 runtime outcomes inside
+  a 37.94-million-allocation workload.
+- **Mixed real-program opportunity:** the natural DataFusion run observed
+  67.43 MB Long and 7.977 GB Short traffic across 307 runtime sites.
 - **Learning before shutdown:** bounded live-survivor sampling promoted nine
   sites while owners remained live, enabling 25 physically backed THPs.
 - **Backing benefit:** matched physical THP improved SWC pipeline time by
@@ -275,6 +375,9 @@ lane selector; exact runtime survival continues to correct its admission.
 - **Precision boundary:** broad static Long admission reached 0.0207% byte
   precision on Tantivy, while the exact DataFusion site matched 1/1 and produced
   only Long target outcomes.
+- **Admission boundary:** natural DataFusion produced eight THP-candidate
+  mappings and zero physical THP; Oxipng routed four tiny objects while its
+  4--16 KiB image buffers had no compiler hint.
 - **Packing opportunity:** heterogeneous filling reduced SWC extents 11 -> 3.
   The cache-first rescue preserved a 34.185% THP peak-RSS saving and reduced
   scan selections by 99.854%, with a quick N=8 THP paired median saving of
@@ -292,12 +395,20 @@ Tracked compact evidence:
   outcomes, broad-prior matrix, and classifier metrics;
 - `datafusion-resident-summary.json` -- exact compiler/runtime join,
   live-survivor mechanism, per-pair backing, preliminary timing, and provenance;
+- `datafusion-natural-minute-summary.json` -- minute-scale dependency compiler
+  coverage, process-wide Long/Short ground truth, exact applied-prior join, and
+  fail-closed no-backing/default diagnostics;
+- `oxipng-fastpath-null-summary.json` -- tiny-site compiler coverage, physical
+  backing, and the one-pair mixed-filler null boundary;
 - `swc-thp-matched-summary.json` -- claim-grade paired physical-backing result;
 - `mixed-filler-swc-quick-summary.json` -- quick mixed-filler memory and scan
   diagnosis;
 - `mixed-filler-fastpath-swc-quick-summary.json` -- cache-first scan rescue,
   retained memory result, all four planned paired contrasts, per-arm backing
   proof, and remaining lock boundary.
+- `multi-target-evidence-matrix.json` -- target-by-target compiler coverage,
+  runtime ground truth, physical backing, time, RSS, claim flags, and exact
+  source hashes.
 
 Large raw artifacts remain gitignored under `evaluation/raw/`. Compact
 summaries record source identities and SHA-256 digests; summaries add source
@@ -311,7 +422,7 @@ paths and byte counts where those fields are available.
    the global filler only on refill/overflow.
 3. Keep adaptive observations sampled and apply learned state only to future
    refills.
-4. Repeat the DataFusion matched campaign after those changes and report query
-   time, peak RSS, `AnonHugePages`, mappings, live bytes, and packing slack.
-5. Evaluate a Short-rich resident target alongside DataFusion so static
-   specificity and Long recall are measured in one fixed-work process.
+4. Repeat the natural DataFusion pair after those changes and report query time,
+   peak RSS, `AnonHugePages`, mappings, live bytes, and packing slack.
+5. Extend compiler coverage toward medium resident buffers, then require exact
+   runtime Long-byte density before THP admission.
