@@ -466,6 +466,26 @@ fn main() {
             encoding="utf-8",
         )
 
+        cls.constant_vec_layout_fixture = cls.tmp / "rust_lifetime_prior_vec_layout.rs"
+        cls.constant_vec_layout_fixture.write_text(
+            """extern crate unialloc;
+
+const ROWS_PER_BATCH: usize = 3072;
+
+#[inline(never)]
+fn zeroed_u64_column() -> Vec<u64> {
+    let mut values = Vec::with_capacity(ROWS_PER_BATCH);
+    values.resize(ROWS_PER_BATCH, 0_u64);
+    values
+}
+
+fn main() {
+    drop(zeroed_u64_column());
+}
+""",
+            encoding="utf-8",
+        )
+
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
@@ -1106,6 +1126,43 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=0", completed.stdout)
+
+    def test_constant_vec_capacity_exports_exact_runtime_join_layout(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-constant-vec-layout",
+            rust_prior=True,
+            fixture=self.constant_vec_layout_fixture,
+            panic_abort=True,
+        )
+        row = self.assert_hint(
+            audit,
+            "zeroed_u64_column",
+            2,
+            70,
+            RUST_PRIOR_RETURN_LONG_BASIS,
+        )
+        self.assertEqual(
+            row["semantic_object_type"],
+            "std::vec::Vec<u64, std::alloc::Global>",
+            row,
+        )
+        self.assertTrue(
+            all(int(row[field]) != 0 for field in ("callsite", "type_id", "module_id")),
+            row,
+        )
+        features = row["lifetime_analysis_features"]
+        self.assertEqual(
+            features["requested_layout_basis"],
+            "exact_vec_with_capacity_requested_layout",
+            row,
+        )
+        self.assertTrue(features["runtime_join_key_complete"], row)
+        self.assertEqual(
+            features["runtime_join_key"]["requested_size_bytes"], 24_576, row
+        )
+        self.assertEqual(
+            features["runtime_join_key"]["requested_align_bytes"], 8, row
+        )
 
 
 if __name__ == "__main__":

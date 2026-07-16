@@ -2671,10 +2671,14 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 and key["requested_size"] > 0
                 and _positive_power_of_two(key["align"])
             )
-            if rewrite_status == GENERIC_REWRITE_STATUS:
-                identity_mode = "generic_runtime_type"
-            elif _plain_integer(key["type_id"]) and key["type_id"] > 0:
+            # A monomorphized semantic-scope helper can still carry a concrete,
+            # compiler-derived TypeId in the audit.  Prefer that authenticated
+            # KEY5 whenever it is present; reserve KEY4 runtime resolution for
+            # the genuine definition-level type_id=0 sentinel.
+            if _plain_integer(key["type_id"]) and key["type_id"] > 0:
                 identity_mode = "numeric_exact"
+            elif rewrite_status == GENERIC_REWRITE_STATUS:
+                identity_mode = "generic_runtime_type"
             else:
                 identity_mode = "invalid"
             numeric_complete = (
@@ -3622,12 +3626,12 @@ def join_compiler_runtime_sites(
             compiler_audit_key = _runtime_key_dict(compiler)
         identity_mode = compiler.get("identity_mode")
         if identity_mode not in {"numeric_exact", "generic_runtime_type"}:
-            if compiler.get("rewrite_status") == GENERIC_REWRITE_STATUS:
-                identity_mode = "generic_runtime_type"
-            elif _plain_integer(compiler_audit_key.get("type_id")) and (
+            if _plain_integer(compiler_audit_key.get("type_id")) and (
                 compiler_audit_key["type_id"] > 0
             ):
                 identity_mode = "numeric_exact"
+            elif compiler.get("rewrite_status") == GENERIC_REWRITE_STATUS:
+                identity_mode = "generic_runtime_type"
             else:
                 identity_mode = "invalid"
 

@@ -550,6 +550,48 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 campaign.SCREENING_ARM, summary, ("execution",)
             )
 
+    def test_concrete_generic_scope_rewrite_exports_and_joins_numeric_key5(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime_key = {
+                "callsite": 101,
+                "type_id": 102,
+                "module_id": 103,
+                "requested_size_bytes": 24_576,
+                "requested_align_bytes": 8,
+            }
+            write_audit(
+                root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="execution",
+                rewrite_status=campaign.GENERIC_REWRITE_STATUS,
+                runtime_key=runtime_key,
+            )
+            exported = campaign.export_compiler_site_features(root)
+            self.assertEqual(1, exported["numeric_site_count"])
+            self.assertEqual(0, exported["generic_site_count"])
+            self.assertEqual(1, exported["numeric_exact_key_complete_count"])
+            compiler = exported["rows"][0]
+            self.assertEqual("numeric_exact", compiler["identity_mode"])
+            self.assertIsNone(compiler["audit_type_id_sentinel"])
+
+            runtime = generic_runtime_row(
+                callsite=runtime_key["callsite"],
+                type_id=runtime_key["type_id"],
+                module_id=runtime_key["module_id"],
+                requested_size=runtime_key["requested_size_bytes"],
+                align=runtime_key["requested_align_bytes"],
+            )
+            joined = campaign.join_compiler_runtime_sites(exported, [runtime])
+            self.assertEqual(1, joined["numeric_matched_site_count"])
+            self.assertEqual(0, joined["generic_compiler_site_count"])
+            self.assertEqual(
+                "exact_numeric_match", joined["rows"][0]["resolution_status"]
+            )
+
     def test_reuse_refreshes_evaluator_derived_compiler_site_export(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

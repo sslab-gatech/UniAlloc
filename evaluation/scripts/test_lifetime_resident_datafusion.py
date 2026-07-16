@@ -361,6 +361,19 @@ checksum = "{'a' * 64}"
             "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
             "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
             "lowering_kind": "semantic_scope_enter_exit_rewrite",
+            "lifetime_analysis_features": {
+                "runtime_join_key_complete": True,
+                "runtime_join_key": {
+                    "callsite": 11,
+                    "type_id": 22,
+                    "module_id": 33,
+                    "requested_size_bytes": 24_576,
+                    "requested_align_bytes": 8,
+                },
+                "requested_layout_basis": (
+                    "exact_vec_with_capacity_requested_layout"
+                ),
+            },
         }
         compiler_pass = {
             "marker_free_heap_preoptimization_rewrite": True,
@@ -384,6 +397,7 @@ checksum = "{'a' * 64}"
                 "automatic_rust_lifetime_prior_return_long",
                 result["lifetime_hint_basis"],
             )
+            self.assertEqual(24_576, result["requested_size"])
             audit.write_text(
                 json.dumps(
                     {
@@ -398,6 +412,43 @@ checksum = "{'a' * 64}"
             )
             with self.assertRaisesRegex(runner.ContractError, "pre-optimization"):
                 runner.validate_resident_compiler_site(Path(directory))
+
+    def test_resident_compiler_runtime_join_requires_exact_numeric_match(self) -> None:
+        runner = self.runner
+        resident = {
+            "callsite": 11,
+            "type_id": 22,
+            "module_id": 33,
+            "requested_size": 24_576,
+            "align": 8,
+        }
+        key = dict(resident)
+        runtime = {
+            **key,
+            "allocation_count": 2048,
+            "latest_static_prior": 2,
+            "long_outcomes": 2048,
+            "short_outcomes": 0,
+            "censored_outcomes": 0,
+        }
+        row = {
+            "compiler_audit_key": key,
+            "identity_mode": "numeric_exact",
+            "matched": True,
+            "applied_prior_hint": True,
+            "resolution_status": "exact_numeric_match",
+            "resolved_runtime_exact_key": key,
+            "runtime": runtime,
+        }
+        result = runner.validate_resident_compiler_runtime_join(
+            {"rows": [row]}, resident
+        )
+        self.assertTrue(result["matched"])
+        self.assertEqual(2048, result["allocation_count"])
+
+        row["identity_mode"] = "generic_runtime_type"
+        with self.assertRaisesRegex(runner.ContractError, "exact join failed"):
+            runner.validate_resident_compiler_runtime_join({"rows": [row]}, resident)
 
     def test_dry_run_is_mechanism_only_and_records_provenance(self) -> None:
         runner = self.runner

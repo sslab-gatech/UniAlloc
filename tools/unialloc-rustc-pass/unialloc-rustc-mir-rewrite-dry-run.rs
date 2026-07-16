@@ -11008,6 +11008,73 @@ fn exact_box_new_requested_layout<'tcx>(
     None
 }
 
+#[cfg(unialloc_rustc_current)]
+fn exact_vec_with_capacity_requested_layout<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    let (func, args) = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return None,
+    };
+    let (def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, args) => (*def_id, args.types().collect::<Vec<Ty<'tcx>>>()),
+        _ => return None,
+    };
+    let argument_tys = args
+        .iter()
+        .map(|argument| argument.ty(&body.local_decls, tcx))
+        .collect::<Vec<_>>();
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    let owner_ty = vec_with_capacity_runtime_identity_owner_ty(
+        tcx,
+        def_id,
+        &callee_generic_types,
+        destination_ty,
+        &argument_tys,
+    )?;
+    let element_ty = match owner_ty.kind() {
+        ty::Adt(_, owner_args) => generic_arg_type(owner_args.get(0)?)?,
+        _ => return None,
+    };
+    if clone_result_has_unresolved_params(element_ty) {
+        return None;
+    }
+    let capacity_operand = args.first()?;
+    let capacity_constant = match capacity_operand {
+        Operand::Constant(constant) => constant,
+        _ => return None,
+    };
+    // Named constants remain `Const::Unevaluated` at the pre-optimization
+    // analysis point used by real Cargo builds. Evaluate that exact MIR
+    // constant; the existing literal label parser is only a consistency check
+    // for already-materialized scalar operands.
+    let capacity = capacity_constant
+        .const_
+        .try_eval_target_usize(tcx, body.typing_env(tcx))?;
+    if capacity_constant.const_.try_to_scalar_int().is_some()
+        && const_usize_operand_label(capacity_operand).and_then(|label| label.parse::<u64>().ok())
+            != Some(capacity)
+    {
+        return None;
+    }
+    let element_layout = tcx
+        .layout_of(body.typing_env(tcx).as_query_input(element_ty))
+        .ok()?;
+    let requested_size = capacity.checked_mul(element_layout.size.bytes())?;
+    (requested_size > 0).then_some((requested_size, element_layout.align.abi.bytes()))
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn exact_vec_with_capacity_requested_layout<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    _body: &Body<'tcx>,
+    _candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    None
+}
+
 fn rvalue_move_or_copy_source<'a, 'tcx>(rvalue: &'a Rvalue<'tcx>) -> Option<&'a Place<'tcx>> {
     #[cfg(unialloc_rustc_current)]
     match rvalue {
@@ -11455,7 +11522,14 @@ fn semantic_lifetime_feature_export<'tcx>(
     let (requested_size_bytes, requested_align_bytes, requested_layout_basis) =
         match exact_box_new_requested_layout(tcx, body, candidate) {
             Some((size, align)) => (Some(size), Some(align), "exact_box_new_payload_layout"),
-            None => (None, None, "dynamic_or_unproven_requested_layout"),
+            None => match exact_vec_with_capacity_requested_layout(tcx, body, candidate) {
+                Some((size, align)) => (
+                    Some(size),
+                    Some(align),
+                    "exact_vec_with_capacity_requested_layout",
+                ),
+                None => (None, None, "dynamic_or_unproven_requested_layout"),
+            },
         };
     let (normal_successor_count, cleanup_successor_count) = candidate
         .original_terminator

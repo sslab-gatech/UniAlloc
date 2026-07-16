@@ -833,12 +833,86 @@ def validate_resident_compiler_site(audit_dir: Path) -> dict[str, Any]:
         raise ContractError("DataFusion resident compiler site did not receive the Long prior")
     if any(int(row.get(field) or 0) == 0 for field in ("callsite", "type_id", "module_id")):
         raise ContractError("DataFusion resident compiler site lacks exact identity")
+    features = row.get("lifetime_analysis_features")
+    if not isinstance(features, dict):
+        raise ContractError("DataFusion resident compiler site lacks lifetime features")
+    runtime_key = features.get("runtime_join_key")
+    if not isinstance(runtime_key, dict):
+        raise ContractError("DataFusion resident compiler site lacks a runtime join key")
+    expected_runtime_key = {
+        "callsite": row["callsite"],
+        "type_id": row["type_id"],
+        "module_id": row["module_id"],
+        "requested_size_bytes": ROUTABLE_BUFFER_BYTES,
+        "requested_align_bytes": 8,
+    }
+    if runtime_key != expected_runtime_key:
+        raise ContractError("DataFusion resident compiler site has the wrong exact layout key")
+    if features.get("runtime_join_key_complete") is not True:
+        raise ContractError("DataFusion resident compiler site has an incomplete join key")
+    if (
+        features.get("requested_layout_basis")
+        != "exact_vec_with_capacity_requested_layout"
+    ):
+        raise ContractError("DataFusion resident compiler site lacks exact Vec layout proof")
     return {
         **expected,
         "callsite": row["callsite"],
         "type_id": row["type_id"],
         "module_id": row["module_id"],
+        "requested_size": ROUTABLE_BUFFER_BYTES,
+        "align": 8,
+        "requested_layout_basis": features["requested_layout_basis"],
         "audit_path": row["audit_path"],
+    }
+
+
+def validate_resident_compiler_runtime_join(
+    exact_join: Mapping[str, Any], resident_site: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Require the intended resident site to match one executed runtime KEY5."""
+    expected_key = {
+        field: resident_site[field]
+        for field in ("callsite", "type_id", "module_id", "requested_size", "align")
+    }
+    rows = exact_join.get("rows")
+    if not isinstance(rows, list):
+        raise ContractError("DataFusion compiler/runtime join rows are missing")
+    matches = [
+        row
+        for row in rows
+        if isinstance(row, dict) and row.get("compiler_audit_key") == expected_key
+    ]
+    if len(matches) != 1:
+        raise ContractError("DataFusion resident compiler/runtime site is missing or ambiguous")
+    row = matches[0]
+    if (
+        row.get("identity_mode") != "numeric_exact"
+        or row.get("matched") is not True
+        or row.get("applied_prior_hint") is not True
+        or row.get("resolution_status") != "exact_numeric_match"
+        or row.get("resolved_runtime_exact_key") != expected_key
+    ):
+        raise ContractError("DataFusion resident compiler/runtime exact join failed")
+    runtime = row.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ContractError("DataFusion resident runtime observation is missing")
+    allocation_count = runtime.get("allocation_count")
+    if (
+        isinstance(allocation_count, bool)
+        or not isinstance(allocation_count, int)
+        or allocation_count <= 0
+        or runtime.get("latest_static_prior") != 2
+    ):
+        raise ContractError("DataFusion resident static Long prior was not transported")
+    return {
+        "matched": True,
+        "resolution_status": "exact_numeric_match",
+        "runtime_key": expected_key,
+        "allocation_count": allocation_count,
+        "long_outcomes": int(runtime.get("long_outcomes", 0)),
+        "short_outcomes": int(runtime.get("short_outcomes", 0)),
+        "censored_outcomes": int(runtime.get("censored_outcomes", 0)),
     }
 
 
@@ -1137,6 +1211,9 @@ def run_ground_truth(
         Path(str(build["compiler_sites_path"])).read_text(encoding="utf-8")
     )
     exact_join = campaign.join_compiler_runtime_sites(compiler_export, sites)
+    resident_exact_join = validate_resident_compiler_runtime_join(
+        exact_join, build["resident_compiler_site"]
+    )
     exact_join_path = raw_dir / "ground-truth-ordinary/compiler-runtime-exact-join.json"
     campaign.write_json(exact_join_path, exact_join)
     record["classification"] = "force-tracked-ordinary-ground-truth"
@@ -1149,6 +1226,7 @@ def run_ground_truth(
     record["compiler_runtime_exact_join"] = campaign.compact_compiler_runtime_exact_join(
         exact_join
     )
+    record["resident_compiler_runtime_exact_join"] = resident_exact_join
     campaign.write_json(raw_dir / "ground-truth-ordinary/run.json", record)
     return record
 
