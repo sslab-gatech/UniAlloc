@@ -5,12 +5,12 @@
       "sha256": "a0c842db0f29f5757f988da69936b78d434a51c6742573f59ffac9c190ead4e8"
     },
     "macrobenchmarks.png": {
-      "bytes": 121886,
-      "sha256": "6d76a6bbbe7361a144a489abb86ee745312fcd495d056d70b3b7a55943b1c8cf"
+      "bytes": 134917,
+      "sha256": "14182d1650c25f9099967b01279e88eedf3032f91a37c5e1f50a2f24a479de4d"
     },
     "macrobenchmarks.svg": {
-      "bytes": 31973,
-      "sha256": "4280d5f24600fef0dee363e6c0d81a896eb4b2ba7231e4a1116271633c1a1969"
+      "bytes": 34593,
+      "sha256": "9caffe74747671bde17258a432e3224564a2fedfe08bbd2caad0f81747245edf"
     },
     "microbenchmarks.csv": {
       "bytes": 1033033,

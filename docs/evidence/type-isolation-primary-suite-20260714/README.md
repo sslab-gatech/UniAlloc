@@ -55,8 +55,8 @@ The campaign retains digest-checked `ldd` records and successful runtime probes.
 Compiler-route equivalence passes 13 of 34 harnesses. Every measurement remains
 in the final result. Route failures carry an attribution-limit marker because
 the typed compiler/runtime route dominates the end-to-end ratio in those
-harnesses. The Type Isolation versus typed-control comparison remains the
-matched policy-only contrast.
+harnesses. Type Isolation versus default UniAlloc is the deployment contrast;
+Type Isolation versus typed control remains the matched policy ablation.
 
 ## RSS interpretation
 

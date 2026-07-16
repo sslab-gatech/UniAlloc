@@ -13,6 +13,12 @@ The committee-facing evaluation has two parts. **Microbenchmarks** use
 parts report execution cost and peak resident set size (RSS), preserve matched
 comparisons, and treat Type Isolation as a UniAlloc variant.
 
+The two lead comparisons answer separate deployment questions. The
+microbenchmark figure compares default UniAlloc with ptmalloc, jemalloc,
+mimalloc, TCMalloc, snmalloc, and Scudo. The macrobenchmark figure compares
+UniAlloc with Type Isolation against default UniAlloc. `typed_plain` remains an
+internal ablation for attributing compiler-route and typed-reuse-policy cost.
+
 ## Presentation figures
 
 | Part | Slide-ready figure | Presentation unit |
@@ -347,26 +353,28 @@ allocator peak RSS.
 
 ### Target results
 
-| Target | Route pass | Compiler route | Policy increment | End to end | Policy RSS | RSS interpretation |
+| Target | Route pass | Compiler route | Policy increment | End to end | End-to-end RSS | RSS interpretation |
 |---|---:|---:|---:|---:|---:|---|
-| Oxipng | 5/5 | `1.0354x` | `1.0058x` | `1.0374x` | `0.9998x` | Fixed work |
+| Oxipng | 5/5 | `1.0354x` | `1.0058x` | `1.0374x` | `1.0015x` | Fixed work |
 | redb | 3/4 | `1.1156x` | `1.0058x` | `1.1232x` | `1.0033x` | Fixed work |
-| Polars | 1/5 | `1.2940x` | `1.0001x` | `1.2975x` | `0.9987x` | Fixed work |
-| SWC | 0/5 | `23.84x` | `1.0060x` | `23.93x` | `1.0147x` | Adaptive diagnostic |
-| RustPython | 1/5 | `2.585x` | `1.0048x` | `2.595x` | `1.0000x` | Adaptive diagnostic |
-| Actix Web | 1/5 | `3.093x` | `1.0100x` | `3.121x` | `1.0108x` | Adaptive diagnostic |
+| Polars | 1/5 | `1.2940x` | `1.0001x` | `1.2975x` | `1.0055x` | Fixed work |
+| SWC | 0/5 | `23.84x` | `1.0060x` | `23.93x` | `1.0237x` | Adaptive diagnostic |
+| RustPython | 1/5 | `2.585x` | `1.0048x` | `2.595x` | `0.9788x` | Adaptive diagnostic |
+| Actix Web | 1/5 | `3.093x` | `1.0100x` | `3.121x` | `0.6553x` | Adaptive diagnostic |
 
 | Suite comparison | Execution cost | Route-equivalent execution cost | Fixed-work peak RSS |
 |---|---:|---:|---:|
 | Compiler route | `2.5652x` (29 workloads) | `1.0435x` (11 workloads, 5 targets) | `1.0329x` (14 workloads, 3 targets) |
-| Policy increment | **`1.0054x` (+0.54%)** | **`0.9968x` (-0.32%)** | **`1.0006x` (+0.057%)** |
-| End to end | `2.5770x` (29 workloads) | `1.0421x` (11 workloads, 5 targets) | `1.0034x` (14 workloads, 3 targets) |
+| Policy increment | `1.0054x` (+0.54%) | `0.9968x` (-0.32%) | `1.0006x` (+0.057%) |
+| End to end | **`2.5770x` (29 workloads)** | **`1.0421x` (11 workloads, 5 targets)** | **`1.0034x` (+0.342%; 14 workloads, 3 targets)** |
 
-The policy increment is the principal Type Isolation result. The typed compiler
-route dominates end-to-end cost where route equivalence fails, especially SWC,
-RustPython parsing, and Actix Web microbenchmarks. The lead macro figure shows
-policy increment only. Compiler-route and end-to-end observations remain in the
-CSV, JSON, and table above.
+The end-to-end comparison is the principal deployment result because default
+UniAlloc is the feature-off baseline. The lead macro figure therefore shows
+`typeiso_perf / unialloc`. The typed compiler route dominates observed
+end-to-end execution cost where route equivalence fails, especially SWC,
+RustPython parsing, and Actix Web microbenchmarks. Compiler-route and policy-
+increment comparisons remain in the CSV, JSON, and table as attribution
+ablations.
 
 ### RSS amendment and audit boundary
 

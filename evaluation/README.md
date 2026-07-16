@@ -51,8 +51,11 @@ The primary committee-facing evaluation follows one stable two-tier rule:
 2. **Macrobenchmarks** use pinned real-world Rust programs and report
    performance plus peak RSS. Harnesses are reduced within each target before
    targets receive equal headline weight.
-3. Type Isolation is a UniAlloc variant. `typed_plain` remains the matched
-   compiler-route control, and `typeiso_perf` is UniAlloc + Type Isolation.
+3. The lead macro endpoint is `typeiso_perf / unialloc`: UniAlloc + Type
+   Isolation relative to default UniAlloc. `typed_plain` remains the matched
+   compiler-route control used for attribution ablations.
+4. The lead micro cohort compares default UniAlloc with ptmalloc, jemalloc,
+   mimalloc, TCMalloc, snmalloc, and Scudo on its matched benchmark population.
 
 The canonical method, results, and source boundaries are in
 `../docs/allocator-evaluation.md`. Regenerate the title-free presentation

@@ -1630,6 +1630,7 @@ def headline_marker(
     marker: str,
     gid: str,
     ratio_bounds: tuple[float, float] | None = None,
+    annotate_clipped: bool = False,
 ) -> None:
     displayed, clipped = clamp_log2(
         ratio,
@@ -1647,6 +1648,20 @@ def headline_marker(
         zorder=5,
     )
     collection.set_gid(gid)
+    if clipped and annotate_clipped:
+        annotation = ax.annotate(
+            f"{ratio:.3g}x",
+            (displayed, y),
+            xytext=(-7 if displayed > 0.0 else 7, 0),
+            textcoords="offset points",
+            ha="right" if displayed > 0.0 else "left",
+            va="center",
+            fontsize=8.0,
+            color=INK,
+            clip_on=False,
+            zorder=6,
+        )
+        annotation.set_gid(f"{gid}-clipped-value")
 
 
 def render_micro_figure(
@@ -1847,22 +1862,22 @@ def render_macro_figure(
     y_positions = {
         key: index + (0.35 if index else 0.0) for index, key in enumerate(row_keys)
     }
-    policy = macro["comparison_families"]["policy_increment"]
+    end_to_end = macro["comparison_families"]["end_to_end"]
 
     for ax, metric, label in (
         (
             axes[0],
             "performance",
-            "Type Isolation / typed control execution cost  |  lower is better",
+            "Type Isolation / default UniAlloc execution cost  |  lower is better",
         ),
         (
             axes[1],
             "peak_rss",
-            "Type Isolation / typed control peak RSS  |  lower is better",
+            "Type Isolation / default UniAlloc peak RSS  |  lower is better",
         ),
     ):
         style_macro_ratio_axis(ax, label)
-        suite_ratio = float(policy[metric]["across_target_geometric_mean_ratio"])
+        suite_ratio = float(end_to_end[metric]["across_target_geometric_mean_ratio"])
         headline_marker(
             ax,
             suite_ratio,
@@ -1870,15 +1885,16 @@ def render_macro_figure(
             color=BLUE,
             hollow=False,
             marker="D",
-            gid=f"headline-macro-policy-{metric}",
+            gid=f"headline-macro-end-to-end-{metric}",
             ratio_bounds=MACRO_RATIO_BOUNDS,
+            annotate_clipped=True,
         )
         for target_id in MACRO_TARGET_ORDER:
             target = macro["targets"][target_id]
             diagnostic = (
                 metric == "peak_rss" and target["rss_eligibility"] == "diagnostic_only"
             )
-            metric_data = target["comparison_families"]["policy_increment"][metric]
+            metric_data = target["comparison_families"]["end_to_end"][metric]
             y = y_positions[target_id]
             scatter_ratios(
                 ax,
@@ -1888,7 +1904,7 @@ def render_macro_figure(
                 hollow=diagnostic,
                 size=25,
                 alpha=0.42,
-                gid=f"macro-policy-harnesses-{metric}-{target_id}",
+                gid=f"macro-end-to-end-harnesses-{metric}-{target_id}",
                 ratio_bounds=MACRO_RATIO_BOUNDS,
             )
             headline_marker(
@@ -1898,8 +1914,9 @@ def render_macro_figure(
                 color=BLUE,
                 hollow=diagnostic,
                 marker="s",
-                gid=f"target-policy-summary-{metric}-{target_id}",
+                gid=f"target-end-to-end-summary-{metric}-{target_id}",
                 ratio_bounds=MACRO_RATIO_BOUNDS,
+                annotate_clipped=True,
             )
         separator = ax.axhline(0.8, color=AXIS, linewidth=0.8, zorder=1)
         separator.set_gid("suite-separator")

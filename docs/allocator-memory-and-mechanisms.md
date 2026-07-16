@@ -183,11 +183,19 @@ Canonical SHA-256: cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9ea
 Canonical scope:  131 files, 4,426,670 bytes
 ```
 
-The fixed-work RSS result is:
+The fixed-work end-to-end RSS result is:
 
-> Across 14 workloads in Oxipng, redb, and Polars, Type Isolation relative to the same typed compiler/runtime route with policy disabled has an across-target geometric mean peak-RSS ratio of **`1.000570x` (`+0.057%`)**.
+> Across 14 workloads in Oxipng, redb, and Polars, UniAlloc with Type Isolation relative to default UniAlloc has an across-target geometric mean peak-RSS ratio of **`1.003422x` (`+0.342%`)**.
 
-This is the current committee-facing Type Isolation memory claim. The all-process adaptive RSS rows remain visible diagnostics. Compiler-route equivalence passes for 13 of 34 workloads and fails for 21, so compiler-route, policy-increment, and end-to-end effects remain separate. The current result status is `complete_with_attribution_limits`.
+This is the current committee-facing total Type Isolation memory claim. The
+`typeiso_perf / typed_plain` policy ablation is `1.000570x` (`+0.057%`), and the
+`typed_plain / unialloc` compiler-route contrast is `1.032856x` (`+3.286%`).
+Each value is independently aggregated from matched ratios, so the direct
+`typeiso_perf / unialloc` endpoint is authoritative for total overhead. The
+all-process adaptive RSS rows remain visible diagnostics. Compiler-route
+equivalence passes for 13 of 34 workloads and fails for 21, so compiler-route,
+policy-increment, and end-to-end effects remain separate. The current result
+status is `complete_with_attribution_limits`.
 
 Provenance is dual-recorded:
 
@@ -310,7 +318,7 @@ These results support confidence abstention, runtime truth, and epoch isolation 
 
 The historical ripgrep/fd/Oxipng matrix used implementation-bundle SHA-256 `7e98e63ce2fbeccc361ea57bd26773ccdb02664b83d772f0475161c980c55929`. Type Isolation relative to the same typed policy-off route changed peak RSS by 0%, 0%, and `+0.036%`, respectively. The Type Isolation rows were 37.449% to 67.444% lower than default mimalloc in those three pinned workloads.
 
-An exploratory sensitivity run with `MIMALLOC_PURGE_DELAY=0 MIMALLOC_ALLOW_THP=0` brought mimalloc to parity on ripgrep and fd and within 0.62% of Type Isolation on Oxipng. This establishes allocator purge/THP policy as the main explanation for the large default gap. The current primary suite supplies the policy-memory claim; the older matrix supplies allocator-policy diagnosis.
+An exploratory sensitivity run with `MIMALLOC_PURGE_DELAY=0 MIMALLOC_ALLOW_THP=0` brought mimalloc to parity on ripgrep and fd and within 0.62% of Type Isolation on Oxipng. This establishes allocator purge/THP policy as the main explanation for the large default gap. The current primary suite supplies the Type Isolation/default endpoint and typed-route ablations; the older matrix supplies allocator-policy diagnosis.
 
 The tracked historical result preserves every build, allocator identity, source commit, command, measurement, and direct comparison. Its SHA-256 is listed in the machine-artifact table below.
 
@@ -330,7 +338,8 @@ UniAlloc's defensible mechanism contribution is the combination of exact Rust pr
 
 ### Defended current statements
 
-- Type Isolation adds `+0.057%` to the across-target geometric mean peak RSS across 14 fixed-work workloads relative to the same typed compiler/runtime route with policy disabled.
+- UniAlloc with Type Isolation adds `+0.342%` to the across-target geometric mean peak RSS across 14 fixed-work workloads relative to default UniAlloc.
+- The matched policy ablation adds `+0.057%` relative to the same typed compiler/runtime route with policy disabled.
 - The full lifetime-aware feature improves dependent touch by 16.90%, improves allocate/fault/free lifecycle by 16.55%, and reduces steady effective resident memory by 8.09% on the formal synthetic trace.
 - Selective THP adds a 10.37% dependent-touch improvement relative to the same lifetime layout with THP forced off, with a 95% interval fully above zero.
 - Semantic selection uses 258 MiB of THP on the 50/50 trace, half the 516 MiB used by the measured global mimalloc and jemalloc THP controls.

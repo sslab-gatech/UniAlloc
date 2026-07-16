@@ -370,8 +370,19 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
         )
         self.assertNotIn("collections", self.data["macrobenchmarks"]["target_order"])
 
-    def test_macro_target_hierarchy_policy_family_and_rss_split(self) -> None:
+    def test_macro_target_hierarchy_comparison_families_and_rss_split(self) -> None:
         macro = self.data["macrobenchmarks"]
+        end_to_end = macro["comparison_families"]["end_to_end"]
+        self.assertEqual(
+            ("unialloc", "typeiso_perf"),
+            (end_to_end["reference"], end_to_end["subject"]),
+        )
+        self.assertEqual(
+            "end_to_end", macro["suite"]["typeiso_perf"]["comparison_family"]
+        )
+        self.assertEqual(
+            "compiler_route", macro["suite"]["typed_plain"]["comparison_family"]
+        )
         policy = macro["comparison_families"]["policy_increment"]
         self.assertEqual(
             ("typed_plain", "typeiso_perf"), (policy["reference"], policy["subject"])
@@ -441,8 +452,12 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
         self.assertNotIn("headline-micro-performance-typed_plain", micro_svg)
         self.assertNotIn("headline-micro-performance-typeiso_perf", micro_svg)
         macro_svg = (self.output_a / "macrobenchmarks.svg").read_text(encoding="utf-8")
-        self.assertIn("Type Isolation / typed control execution cost", macro_svg)
-        self.assertIn("target-policy-summary-performance", macro_svg)
+        self.assertIn("Type Isolation / default UniAlloc execution cost", macro_svg)
+        self.assertIn("target-end-to-end-summary-performance", macro_svg)
+        self.assertIn(
+            "headline-macro-end-to-end-performance-clipped-value", macro_svg
+        )
+        self.assertNotIn("target-policy-summary-performance", macro_svg)
         self.assertIn("Median paired-run ratio (workload, n=5)", macro_svg)
         self.assertIn("Within-target geometric mean", macro_svg)
         self.assertIn("Across-target geometric mean", macro_svg)

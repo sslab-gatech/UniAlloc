@@ -6,7 +6,7 @@
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
-> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-case Rust `std_bench` inventory: 466 cases have complete seven-way comparisons and 236 pass the timing robustness gate. Macrobenchmarks cover 29 workloads across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. Policy-only macro execution cost is `1.0054x` (`+0.54%`); fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`). Compiler-route-equivalent policy cost is `0.9968x` (`-0.32%`). The five-case Collections Type Isolation diagnostic remains in the CSV/JSON appendix. The detailed seven-target figure and full heatmap remain audit-only backup evidence.
+> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-case Rust `std_bench` inventory: 466 cases have complete seven-way comparisons between default UniAlloc and six external allocators, and 236 pass the timing robustness gate. Macrobenchmarks cover 29 workloads across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. The primary macro comparison is Type Isolation versus default UniAlloc: total execution cost is `2.5770x`, compiler-route-equivalent execution cost is `1.0421x`, and fixed-work peak RSS is `1.0034x` (`+0.342%`). The matched typed-route ablation reports `1.0054x` policy execution cost and `1.0006x` (`+0.057%`) policy RSS. The five-case Collections Type Isolation diagnostic remains in the CSV/JSON appendix. The detailed seven-target figure and full heatmap remain audit-only backup evidence.
 
 ## 1. One-Sentence Conclusion
 
@@ -363,8 +363,9 @@ coverage, external-platform runtime, or publication-grade performance claim.
 
 Use the canonical figures from `docs/figures/allocator-evaluation-20260714/`.
 The micro figure uses Rust `std_bench`; the macro figure uses real-world Rust
-programs. Type Isolation appears as the matched policy variant in the macro
-figure. Its five-case Collections microdiagnostic remains in the appendix data.
+programs. Type Isolation appears relative to default UniAlloc in the macro
+figure. Its five-case Collections microdiagnostic and the typed-route policy
+ablation remain in the appendix data.
 
 > **Evidence badge:** current source-bound diagnostic; post-measurement
 > presentation-analysis amendment. The amendment changes taxonomy and
@@ -382,13 +383,12 @@ never pooled with the 468-case external-allocator matrix.
 The macro figure contains 29 workloads across Oxipng, redb, Polars, SWC,
 RustPython, and Actix Web. It takes the median of five paired-run ratios per
 workload, a geometric mean within each target, and an unweighted geometric mean
-across target summaries. Policy-only execution cost is `1.0054x` (`+0.54%`);
-the 11 route-equivalent workloads give `0.9968x` (`-0.32%`). Equal-work
-policy-only RSS is `1.0006x` (`+0.057%`) across 14 workloads in three targets.
-Adaptive RSS for SWC, RustPython, and Actix Web remains a hollow diagnostic
-outside the across-target RSS aggregate. The `2.577x` end-to-end execution ratio
-includes compiler-route cost because 18 of 29 macro workloads fall outside the
-preregistered route-equivalence interval.
+across target summaries. Type Isolation relative to default UniAlloc has a
+`2.5770x` observed execution-cost ratio; the 11 route-equivalent workloads give
+`1.0421x`. Equal-work peak RSS is `1.0034x` (`+0.342%`) across 14 workloads in
+three targets. Adaptive RSS for SWC, RustPython, and Actix Web remains a hollow
+diagnostic outside the across-target RSS aggregate. The typed-route policy
+ablation is `1.0054x` execution cost and `1.0006x` (`+0.057%`) equal-work RSS.
 
 The older ripgrep/fd/Oxipng matrix uses a different implementation digest and
 cohort. Its compact historical ledger and machine artifact are linked from
@@ -397,7 +397,7 @@ presentation-grade performance aggregation.
 
 Use this safe wording in the main talk:
 
-> **Current measurements bound Type Isolation policy cost on six real-world Rust programs. Compiler-route cost, adaptive-work RSS, and historical competitor campaigns remain separate evidence classes.**
+> **Current measurements bound the total cost of Type Isolation relative to default UniAlloc on six real-world Rust programs. Typed-route ablations explain attribution; the external-allocator cohort establishes competitiveness on its matched microbenchmark population.**
 
 Main Slide 28 should show only this stable conclusion and the four-tier ladder.
 Put live HEAD, probe artifacts, the freeze digest, and the stop record in
