@@ -444,24 +444,28 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             matrix.parse_args(["--oxipng-threads", "0"])
 
-    def test_runtime_keeps_libc_rseq_by_default_and_disables_it_only_on_request(
-        self,
-    ) -> None:
+    def test_runtime_is_clean_and_always_uses_libc_default_rseq(self) -> None:
         default_args = matrix.parse_args([])
-        disabled_args = matrix.parse_args(["--disable-glibc-rseq"])
-        self.assertFalse(default_args.disable_glibc_rseq)
-        self.assertTrue(disabled_args.disable_glibc_rseq)
+        self.assertEqual("libc_default", default_args.rseq_policy)
+        with self.assertRaises(SystemExit):
+            matrix.parse_args(["--disable-glibc-rseq"])
 
-        inherited = {"GLIBC_TUNABLES": "glibc.malloc.tcache_count=16"}
+        with tempfile.TemporaryDirectory() as temporary:
+            inherited = {
+                "PATH": "/usr/bin",
+                "GLIBC_TUNABLES": "glibc.pthread.rseq=0",
+                "LD_PRELOAD": "/tmp/wrong.so",
+                "MALLOC_CONF": "dirty_decay_ms:0",
+                "UNIALLOC_LOWERING_POLICY_FLAGS": "99",
+            }
+            environment = matrix.runtime_environment(
+                inherited, temporary_dir=pathlib.Path(temporary)
+            )
         self.assertEqual(
-            matrix.runtime_environment(inherited, disable_glibc_rseq=False),
-            inherited,
+            {"PATH", "LANG", "LC_ALL", "TMPDIR"}, set(environment)
         )
-        disabled = matrix.runtime_environment(inherited, disable_glibc_rseq=True)
-        self.assertEqual(
-            disabled["GLIBC_TUNABLES"],
-            "glibc.malloc.tcache_count=16:glibc.pthread.rseq=0",
-        )
+        self.assertNotIn("GLIBC_TUNABLES", environment)
+        self.assertEqual("C", environment["LANG"])
 
     def test_typeiso_environment_enables_actual_rewrite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -996,6 +1000,19 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         self.assertGreaterEqual(result["system_cpu_seconds"], 0)
         self.assertGreaterEqual(result["minor_page_faults"], 0)
         self.assertGreaterEqual(result["voluntary_context_switches"], 0)
+
+    def test_execute_cleans_process_group_on_keyboard_interrupt(self) -> None:
+        process = mock.Mock()
+        process.communicate.side_effect = KeyboardInterrupt()
+        process.poll.return_value = None
+        with mock.patch.object(matrix.subprocess, "Popen", return_value=process), mock.patch.object(
+            matrix, "terminate_process_group"
+        ) as terminate:
+            with self.assertRaises(KeyboardInterrupt):
+                matrix.execute(
+                    ["ignored"], cwd=ROOT, env=os.environ.copy(), timeout=30
+                )
+        terminate.assert_called_with(process)
 
     def test_gnu_time_parser_requires_complete_prefixed_record(self) -> None:
         text = (

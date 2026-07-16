@@ -29,6 +29,10 @@ from typing import Any, Iterable, Sequence
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from evaluation.scripts import type_isolation_suite_contract as suite_contract  # noqa: E402
 
 
 def _load_google_tcmalloc_support() -> Any:
@@ -422,15 +426,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="retain hashes and metrics without persisting per-run stdout/stderr",
     )
-    parser.add_argument(
-        "--disable-glibc-rseq",
-        action="store_true",
-        help=(
-            "set glibc.pthread.rseq=0 for measured processes; the default "
-            "keeps libc-managed rseq registration"
-        ),
-    )
     args = parser.parse_args(argv)
+    args.rseq_policy = suite_contract.PRODUCTION_RSEQ_POLICY
     try:
         args.apps = parse_csv(args.apps, APP_SPECS, "app")
         args.variants = parse_csv(args.variants, VARIANTS, "variant")
@@ -483,6 +480,23 @@ def rotated_order(values: tuple[str, ...], offset: int) -> tuple[str, ...]:
     return values[pivot:] + values[:pivot]
 
 
+def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.communicate(timeout=2)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate()
+
+
 def execute(
     argv: Sequence[str | os.PathLike[str]],
     *,
@@ -501,12 +515,33 @@ def execute(
         start_new_session=True,
     )
     timed_out = False
+    previous_sigterm: Any = None
+    sigterm_installed = False
+
+    def interrupt_on_sigterm(signum: int, frame: Any) -> None:
+        del signum, frame
+        raise KeyboardInterrupt("received SIGTERM while a child process was active")
+
     try:
+        try:
+            previous_sigterm = signal.getsignal(signal.SIGTERM)
+            signal.signal(signal.SIGTERM, interrupt_on_sigterm)
+            sigterm_installed = True
+        except ValueError:
+            pass
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
         os.killpg(process.pid, signal.SIGKILL)
         stdout, stderr = process.communicate()
+    except BaseException:
+        terminate_process_group(process)
+        raise
+    finally:
+        if process.poll() is None:
+            terminate_process_group(process)
+        if sigterm_installed:
+            signal.signal(signal.SIGTERM, previous_sigterm)
     elapsed = (time.perf_counter_ns() - started) / 1_000_000_000
     return {
         "command": command,
@@ -957,23 +992,10 @@ def inject_allocator_main(main_source: pathlib.Path, variant: str) -> None:
     main_source.write_text(text.rstrip() + allocator_source(variant), encoding="utf-8")
 
 
-def merge_glibc_tunable(current: str) -> str:
-    values = [
-        value
-        for value in current.split(":")
-        if value and not value.startswith("glibc.pthread.rseq=")
-    ]
-    values.append("glibc.pthread.rseq=0")
-    return ":".join(values)
-
-
 def runtime_environment(
-    base: dict[str, str], *, disable_glibc_rseq: bool
+    base: dict[str, str], *, temporary_dir: pathlib.Path
 ) -> dict[str, str]:
-    env = dict(base)
-    if disable_glibc_rseq:
-        env["GLIBC_TUNABLES"] = merge_glibc_tunable(env.get("GLIBC_TUNABLES", ""))
-    return env
+    return suite_contract.clean_runtime_environment(temporary_dir, source=base)
 
 
 def allocator_runtime_environment_overrides(variant: str) -> dict[str, str]:
@@ -1165,20 +1187,23 @@ def prove_tcmalloc_preload(
     tcmalloc_runtime: dict[str, Any],
     *,
     timeout: int,
+    temporary_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     binary = binary.expanduser().resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise MatrixError(f"TCMalloc target binary is not executable: {binary}")
     library = pathlib.Path(str(tcmalloc_runtime["library"])).resolve()
-    env = os.environ.copy()
-    for name in ("HEAPPROFILE", "CPUPROFILE", "MALLOCSTATS"):
-        env.pop(name, None)
-    env["LD_PRELOAD"] = str(library)
+    runtime_tmp = temporary_dir or (
+        pathlib.Path(tempfile.gettempdir()) / "unialloc-tcmalloc-runtime-proof"
+    )
+    runtime_overrides = {"LD_PRELOAD": str(library)}
     modern = tcmalloc_runtime.get("variant") == "tcmalloc"
     compile_record: dict[str, Any] | None = None
     if modern:
-        env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"] = str(library)
-        env["UNIALLOC_GOOGLE_TCMALLOC_REVISION"] = GOOGLE_TCMALLOC.UPSTREAM_REVISION
+        runtime_overrides["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"] = str(library)
+        runtime_overrides["UNIALLOC_GOOGLE_TCMALLOC_REVISION"] = (
+            GOOGLE_TCMALLOC.UPSTREAM_REVISION
+        )
         compiler = shutil.which("cc")
         if compiler is None:
             raise MatrixError("cc is required for the google/tcmalloc runtime proof")
@@ -1218,6 +1243,9 @@ int main(void) {
             probe_source = pathlib.Path(tmp) / "probe.c"
             probe_binary = pathlib.Path(tmp) / "probe"
             probe_source.write_text(runtime_probe, encoding="utf-8")
+            env = suite_contract.clean_runtime_environment(
+                runtime_tmp, overrides=runtime_overrides
+            )
             compile_env = dict(env)
             compile_env.pop("LD_PRELOAD", None)
             compiled = execute(
@@ -1244,6 +1272,9 @@ int main(void) {
                 timeout=timeout,
             )
     else:
+        env = suite_contract.clean_runtime_environment(
+            runtime_tmp, overrides=runtime_overrides
+        )
         dynamic_linker = pathlib.Path("/lib64/ld-linux-x86-64.so.2")
         if not dynamic_linker.is_file():
             raise MatrixError(
@@ -1290,6 +1321,8 @@ int main(void) {
         "artifact_preflight_only": modern,
         "runtime_identity": runtime_identity,
         "runtime_probe_compile": compile_record,
+        "runtime_environment": suite_contract.runtime_environment_record(env),
+        "rseq_policy": suite_contract.PRODUCTION_RSEQ_POLICY,
     }
     if not success:
         raise MatrixError(f"TCMalloc preload proof failed for {binary}: {proof}")
@@ -2585,11 +2618,11 @@ def host_snapshot() -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    runtime_env = runtime_environment(
-        os.environ.copy(), disable_glibc_rseq=args.disable_glibc_rseq
-    )
     raw_dir = args.raw_dir.resolve()
     raw_dir.mkdir(parents=True, exist_ok=True)
+    runtime_env = runtime_environment(
+        os.environ.copy(), temporary_dir=raw_dir / "tmp" / "runtime"
+    )
     wrapper = ensure_wrapper(
         (args.wrapper or (raw_dir / "tools" / "unialloc-rustc-wrapper")).resolve(),
         args.toolchain,
@@ -2640,12 +2673,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
             for variant in args.variants
         },
-        "glibc_rseq_mode": (
-            "disabled_for_self_registration_testing"
-            if args.disable_glibc_rseq
-            else "libc_default"
-        ),
-        "glibc_tunable": runtime_env.get("GLIBC_TUNABLES"),
+        "runtime_environment": suite_contract.runtime_environment_record(runtime_env),
+        "glibc_rseq_mode": suite_contract.PRODUCTION_RSEQ_POLICY,
+        "glibc_tunable": None,
         "performance_stats_enabled": False,
         "coverage_variant_performance_eligible": False,
         "run_output_retained": not args.discard_run_output,
@@ -2701,6 +2731,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pathlib.Path(build["binary"]),
                     runtime,
                     timeout=args.run_timeout,
+                    temporary_dir=raw_dir / "tmp" / "tcmalloc-preload-proof",
                 )
                 persist_result(
                     raw_dir / "binaries" / app / variant / "build.json", build
@@ -2723,114 +2754,127 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     total_rounds = warmups + repetitions
     expected_outputs: dict[str, str] = {}
-    for round_index in range(total_rounds):
-        warmup = round_index < warmups
-        measured_index = None if warmup else round_index - warmups
-        for app_offset, app in enumerate(args.apps):
-            spec = APP_SPECS[app]
-            for variant in rotated_order(args.variants, round_index + app_offset):
-                build = builds[(app, variant)]
-                run_dir = raw_dir / "runs" / app / f"round-{round_index:02d}" / variant
-                if run_dir.exists():
-                    shutil.rmtree(run_dir)
-                run_dir.mkdir(parents=True)
-                command, cwd, output_file = workload_command(
-                    spec,
-                    pathlib.Path(build["binary"]),
-                    corpus=(
-                        fd_tree_path
-                        if spec.name == "fd" and fd_tree_path is not None
-                        else corpus_path
-                    ),
-                    source_checkout=checkouts[app],
-                    run_dir=run_dir,
-                    quick=args.quick,
-                    path_repetitions=path_repetitions_for_app(spec, args),
-                    oxipng_threads=args.oxipng_threads,
-                )
-                command_prefix = [
-                    *affinity_prefix,
-                    *allocator_runtime_prefix(
-                        variant, preload_runtimes.get(variant)
-                    ),
-                ]
-                measured = run_measured(
-                    command,
-                    cwd=cwd,
-                    env=allocator_runtime_environment(runtime_env, variant),
-                    time_binary=args.time_binary,
-                    rss_path=run_dir / "peak-rss-kib.txt",
-                    timeout=args.run_timeout,
-                    command_prefix=command_prefix,
-                )
-                stdout = measured.pop("stdout")
-                stderr = measured.pop("stderr")
-                if not args.discard_run_output:
-                    (run_dir / "stdout.bin").write_bytes(stdout)
-                    (run_dir / "stderr.bin").write_bytes(stderr)
-                if measured["exit_code"] != 0 or measured["timed_out"]:
-                    raise MatrixError(
-                        f"workload failed for {app}/{variant}: {measured}"
+    with suite_contract.primary_measurement_lock(
+        runner=pathlib.Path(__file__).name,
+        raw_root=raw_dir,
+        phase="warmup-and-measured",
+    ) as measurement_lock:
+        for round_index in range(total_rounds):
+            warmup = round_index < warmups
+            measured_index = None if warmup else round_index - warmups
+            for app_offset, app in enumerate(args.apps):
+                spec = APP_SPECS[app]
+                for variant in rotated_order(args.variants, round_index + app_offset):
+                    build = builds[(app, variant)]
+                    run_dir = raw_dir / "runs" / app / f"round-{round_index:02d}" / variant
+                    if run_dir.exists():
+                        shutil.rmtree(run_dir)
+                    run_dir.mkdir(parents=True)
+                    command, cwd, output_file = workload_command(
+                        spec,
+                        pathlib.Path(build["binary"]),
+                        corpus=(
+                            fd_tree_path
+                            if spec.name == "fd" and fd_tree_path is not None
+                            else corpus_path
+                        ),
+                        source_checkout=checkouts[app],
+                        run_dir=run_dir,
+                        quick=args.quick,
+                        path_repetitions=path_repetitions_for_app(spec, args),
+                        oxipng_threads=args.oxipng_threads,
                     )
-                target_identity = google_tcmalloc_target_identity_evidence(
-                    variant, stderr
-                )
-                measured.update(target_identity)
-                if target_identity["google_tcmalloc_target_identity_verified"] is not True:
-                    raise MatrixError(
-                        f"workload {app}/{variant} emitted "
-                        f"{target_identity['google_tcmalloc_identity_marker_count']} "
-                        "modern google/tcmalloc identity markers; expected "
-                        f"{target_identity['google_tcmalloc_expected_identity_marker_count']}"
+                    command_prefix = [
+                        *affinity_prefix,
+                        *allocator_runtime_prefix(
+                            variant, preload_runtimes.get(variant)
+                        ),
+                    ]
+                    child_environment = allocator_runtime_environment(
+                        runtime_env, variant
                     )
-                output_sha = (
-                    sha256_file(output_file)
-                    if output_file is not None
-                    else measured["stdout_sha256"]
-                )
-                stats = parse_stats_json(stderr.decode("utf-8", errors="replace"))
-                depot_stats = parse_depot_stats_json(
-                    stderr.decode("utf-8", errors="replace")
-                )
-                if variant == "typeiso_coverage":
-                    validate_depot_stats(depot_stats, f"{app}/{variant}")
-                if stats is not None and depot_stats is not None:
-                    stats.update(depot_stats)
-                type_stats = parse_type_stats_json(
-                    stderr.decode("utf-8", errors="replace")
-                )
-                if variant == "typeiso_coverage":
-                    validate_typeiso_coverage(build["audit"], stats)
-                elif stats is not None:
-                    raise MatrixError(
-                        f"performance variant unexpectedly emitted stats: {app}/{variant}"
+                    measured = run_measured(
+                        command,
+                        cwd=cwd,
+                        env=child_environment,
+                        time_binary=args.time_binary,
+                        rss_path=run_dir / "peak-rss-kib.txt",
+                        timeout=args.run_timeout,
+                        command_prefix=command_prefix,
                     )
-                expected = expected_outputs.setdefault(app, output_sha)
-                if output_sha != expected:
-                    raise MatrixError(
-                        f"output mismatch for {app}/{variant}: got {output_sha}, expected {expected}"
+                    stdout = measured.pop("stdout")
+                    stderr = measured.pop("stderr")
+                    if not args.discard_run_output:
+                        (run_dir / "stdout.bin").write_bytes(stdout)
+                        (run_dir / "stderr.bin").write_bytes(stderr)
+                    if measured["exit_code"] != 0 or measured["timed_out"]:
+                        raise MatrixError(
+                            f"workload failed for {app}/{variant}: {measured}"
+                        )
+                    target_identity = google_tcmalloc_target_identity_evidence(
+                        variant, stderr
                     )
-                row = {
-                    **measured,
-                    "app": app,
-                    "variant": variant,
-                    "round": round_index,
-                    "warmup": warmup,
-                    "measurement_index": measured_index,
-                    "output_sha256": output_sha,
-                    "stats": stats,
-                    "type_stats": type_stats,
-                    "runtime_environment_overrides": (
-                        allocator_runtime_environment_overrides(variant)
-                    ),
-                    "thp_mode": allocator_thp_mode(variant),
-                    "performance_eligible": variant != "typeiso_coverage",
-                    "work_amount": result["workloads"][app]["work_amount"],
-                    "work_unit": result["workloads"][app]["work_unit"],
-                }
-                result["measurements"].append(row)
-                persist_result(result_path, result)
+                    measured.update(target_identity)
+                    if target_identity["google_tcmalloc_target_identity_verified"] is not True:
+                        raise MatrixError(
+                            f"workload {app}/{variant} emitted "
+                            f"{target_identity['google_tcmalloc_identity_marker_count']} "
+                            "modern google/tcmalloc identity markers; expected "
+                            f"{target_identity['google_tcmalloc_expected_identity_marker_count']}"
+                        )
+                    output_sha = (
+                        sha256_file(output_file)
+                        if output_file is not None
+                        else measured["stdout_sha256"]
+                    )
+                    stats = parse_stats_json(stderr.decode("utf-8", errors="replace"))
+                    depot_stats = parse_depot_stats_json(
+                        stderr.decode("utf-8", errors="replace")
+                    )
+                    if variant == "typeiso_coverage":
+                        validate_depot_stats(depot_stats, f"{app}/{variant}")
+                    if stats is not None and depot_stats is not None:
+                        stats.update(depot_stats)
+                    type_stats = parse_type_stats_json(
+                        stderr.decode("utf-8", errors="replace")
+                    )
+                    if variant == "typeiso_coverage":
+                        validate_typeiso_coverage(build["audit"], stats)
+                    elif stats is not None:
+                        raise MatrixError(
+                            f"performance variant unexpectedly emitted stats: {app}/{variant}"
+                        )
+                    expected = expected_outputs.setdefault(app, output_sha)
+                    if output_sha != expected:
+                        raise MatrixError(
+                            f"output mismatch for {app}/{variant}: got {output_sha}, expected {expected}"
+                        )
+                    row = {
+                        **measured,
+                        "app": app,
+                        "variant": variant,
+                        "round": round_index,
+                        "warmup": warmup,
+                        "measurement_index": measured_index,
+                        "output_sha256": output_sha,
+                        "stats": stats,
+                        "type_stats": type_stats,
+                        "runtime_environment_overrides": (
+                            allocator_runtime_environment_overrides(variant)
+                        ),
+                        "runtime_environment": (
+                            suite_contract.runtime_environment_record(child_environment)
+                        ),
+                        "rseq_policy": suite_contract.PRODUCTION_RSEQ_POLICY,
+                        "thp_mode": allocator_thp_mode(variant),
+                        "performance_eligible": variant != "typeiso_coverage",
+                        "work_amount": result["workloads"][app]["work_amount"],
+                        "work_unit": result["workloads"][app]["work_unit"],
+                    }
+                    result["measurements"].append(row)
+                    persist_result(result_path, result)
 
+    result["measurement_lock"] = dict(measurement_lock)
     result["summaries"] = summarize_measurements(result["measurements"])
     result["success"] = True
     persist_result(result_path, result)

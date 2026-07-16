@@ -3,8 +3,8 @@
 
 The campaign is intentionally fail closed.  It freezes one allocator snapshot,
 builds all three variants from that snapshot, retains source/patch/compiler
-audits, runs one warmup plus three paired measured rounds, reports median point
-estimates, and only enables a gate when the corresponding evidence is present.
+audits, follows the paired measurement contract selected by ``--suite``, and
+only enables a gate when the corresponding evidence is present.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import difflib
-import fcntl
 import hashlib
 import io
 import json
@@ -30,34 +29,29 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "evaluation" / "scripts"))
 
 import realworld_type_isolation_matrix as matrix  # noqa: E402
+from evaluation.scripts import immutable_evidence  # noqa: E402
+from evaluation.scripts import type_isolation_suite_contract as suite_contract  # noqa: E402
 
 
-SUITE_PATH = ROOT / "evaluation" / "config" / "type_isolation_primary_suite.json"
+SUITE_PATH = suite_contract.CURRENT_SUITE_PATH
+_DEFAULT_SUITE_CONTRACT = suite_contract.load_suite_contract(SUITE_PATH)
 PREREGISTRATION_SUITE_MANIFEST_SHA256 = (
-    "96fa64009550d52f89549dd2124e3b1a402a42b7f1fd1750888600dd67bb8a6f"
+    _DEFAULT_SUITE_CONTRACT.preregistration_manifest_sha256
 )
-ANALYSIS_SUITE_MANIFEST_SHA256 = hashlib.sha256(SUITE_PATH.read_bytes()).hexdigest()
+ANALYSIS_SUITE_MANIFEST_SHA256 = _DEFAULT_SUITE_CONTRACT.manifest_sha256
 # Retain the historical field as an analysis-manifest alias for consumers that
 # predate the explicit preregistration/amendment split.
 SUITE_MANIFEST_SHA256 = ANALYSIS_SUITE_MANIFEST_SHA256
-_SUITE_MANIFEST = json.loads(SUITE_PATH.read_text(encoding="utf-8"))
-SUITE_IMPLEMENTATION_REVISION = str(_SUITE_MANIFEST["implementation"]["git_revision"])
-SUITE_IMPLEMENTATION_SHA256 = str(_SUITE_MANIFEST["implementation"]["canonical_sha256"])
-DEFAULT_RAW_DIR = ROOT / "evaluation" / "raw" / "polars-swc-rustpython-primary-f5d0c19"
+SUITE_IMPLEMENTATION_REVISION = _DEFAULT_SUITE_CONTRACT.implementation_revision
+SUITE_IMPLEMENTATION_SHA256 = _DEFAULT_SUITE_CONTRACT.implementation_sha256
+DEFAULT_RAW_DIR = _DEFAULT_SUITE_CONTRACT.runner_raw_dir("polars-swc-rustpython")
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation" / "external" / "_checkouts"
-ASSEMBLER_TARGET_DIR = (
-    ROOT / "evaluation" / "raw" / "type-isolation-primary-v1" / "targets"
-)
-MEASUREMENT_LOCK = (
-    ROOT
-    / "evaluation"
-    / "raw"
-    / "type-isolation-primary-v1"
-    / "primary-measurement.lock"
-)
+ASSEMBLER_TARGET_DIR = _DEFAULT_SUITE_CONTRACT.target_results_dir
+MEASUREMENT_LOCK = _DEFAULT_SUITE_CONTRACT.measurement_lock
 TOOLCHAIN = "nightly-2026-06-11"
 MEASUREMENT_CPU_LIST = "32-63"
 MEASUREMENT_NUMA_NODE = "1"
@@ -77,11 +71,7 @@ DATA_ELIGIBILITY_GATES = tuple(
 )
 ROUTE_RATIO_MIN = 0.85
 ROUTE_RATIO_MAX = 1.15
-PRIMARY_ROUNDS = 3
-# Artifact readers retain compatibility with completed five-round campaigns;
-# every scheduling path below accepts PRIMARY_ROUNDS only.
-LEGACY_PRIMARY_ROUNDS = 5
-PUBLISHABLE_ROUND_COUNTS = frozenset((PRIMARY_ROUNDS, LEGACY_PRIMARY_ROUNDS))
+PRIMARY_ROUNDS = _DEFAULT_SUITE_CONTRACT.measured_rounds
 ALLOCATOR_MARKER = "// UniAlloc Polars/SWC/RustPython primary campaign allocator."
 GNU_TIME_FORMAT = "UNIALLOC_PRIMARY_TIME\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
@@ -493,12 +483,13 @@ def parse_cpu_list(raw: str) -> set[int]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", type=pathlib.Path, default=SUITE_PATH)
     parser.add_argument(
         "--targets",
         default=",".join(TARGET_SPECS),
         help="comma-separated target ids",
     )
-    parser.add_argument("--raw-dir", type=pathlib.Path, default=DEFAULT_RAW_DIR)
+    parser.add_argument("--raw-dir", type=pathlib.Path)
     parser.add_argument(
         "--checkout-root", type=pathlib.Path, default=DEFAULT_CHECKOUT_ROOT
     )
@@ -507,8 +498,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--rounds",
         type=int,
-        default=PRIMARY_ROUNDS,
-        help="one warmup, exactly three paired rounds, and median point estimates",
+        help="must equal the measured-round count declared by --suite",
     )
     parser.add_argument("--build-timeout", type=int, default=3600)
     parser.add_argument("--run-timeout", type=int, default=600)
@@ -545,6 +535,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="build only, stop after locked warmups, or run the complete campaign",
     )
     args = parser.parse_args(argv)
+    try:
+        contract = suite_contract.load_suite_contract(args.suite)
+    except suite_contract.SuiteContractError as error:
+        parser.error(str(error))
+    args.suite = contract.path
+    args.suite_contract = contract
+    args.raw_dir = (
+        args.raw_dir or contract.runner_raw_dir("polars-swc-rustpython")
+    ).resolve()
+    args.publication_dir = contract.target_results_dir
+    args.rounds = contract.measured_rounds if args.rounds is None else args.rounds
     targets = tuple(part.strip() for part in args.targets.split(",") if part.strip())
     unknown = sorted(set(targets) - set(TARGET_SPECS))
     if not targets or unknown:
@@ -557,10 +558,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         or args.quiescence_seconds < 1
     ):
         parser.error("the campaign requires one warmup and positive resource limits")
-    if args.rounds != PRIMARY_ROUNDS:
-        parser.error("the campaign requires exactly three measured rounds")
+    if args.rounds != contract.measured_rounds:
+        parser.error(
+            f"the campaign requires exactly {contract.measured_rounds} measured rounds"
+        )
     if args.allocator_revision is None and not args.current_working_tree:
-        args.allocator_revision = SUITE_IMPLEMENTATION_REVISION
+        args.allocator_revision = contract.implementation_revision
+    if (
+        not args.current_working_tree
+        and args.allocator_revision != contract.implementation_revision
+    ):
+        parser.error(
+            "--allocator-revision must equal the revision selected by --suite: "
+            + contract.implementation_revision
+        )
     if not args.current_working_tree and (
         args.cpu_list is not None or args.numa_node is not None
     ):
@@ -681,7 +692,11 @@ def write_bytes(path: pathlib.Path, content: bytes) -> None:
 
 
 def archive_build_complete_result(
-    output: pathlib.Path, target_id: str, raw_dir: pathlib.Path
+    output: pathlib.Path,
+    target_id: str,
+    raw_dir: pathlib.Path,
+    *,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> dict[str, Any] | None:
     """Retain the preregistered build-only result before full publication."""
     if not output.is_file():
@@ -696,13 +711,13 @@ def archive_build_complete_result(
     if previous.get("status") != "build_complete":
         return None
     previous_hash = previous.get("suite_manifest_sha256")
-    if previous_hash != PREREGISTRATION_SUITE_MANIFEST_SHA256:
+    if previous_hash != contract.preregistration_manifest_sha256:
         raise CampaignError(
             f"existing build-complete result has unexpected suite hash: {previous_hash}"
         )
     archive_dir = raw_dir / "results" / "build-complete"
     archive = archive_dir / (
-        f"{target_id}-{PREREGISTRATION_SUITE_MANIFEST_SHA256[:12]}.json"
+        f"{target_id}-{contract.preregistration_manifest_sha256[:12]}.json"
     )
     if archive.is_file() and archive.read_bytes() != content:
         raise CampaignError(f"build-complete archive collision: {archive}")
@@ -716,7 +731,7 @@ def archive_build_complete_result(
         index = {
             "schema_version": 1,
             "preregistration_suite_manifest_sha256": (
-                PREREGISTRATION_SUITE_MANIFEST_SHA256
+                contract.preregistration_manifest_sha256
             ),
             "records": {},
         }
@@ -765,15 +780,29 @@ def execute(
     return matrix.execute(argv, cwd=cwd, env=dict(env), timeout=timeout)
 
 
-def suite_targets() -> dict[str, dict[str, Any]]:
-    suite = json.loads(SUITE_PATH.read_text(encoding="utf-8"))
-    return {str(target["id"]): target for target in suite["targets"]}
+def suite_targets(
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
+) -> dict[str, dict[str, Any]]:
+    return {
+        str(target["id"]): target
+        for target in contract.manifest["targets"]
+        if isinstance(target, dict)
+    }
 
 
-def validate_specs_against_suite() -> None:
-    targets = suite_targets()
+def validate_specs_against_suite(
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
+) -> None:
+    gate = contract.manifest.get("compiler_route_equivalence_gate")
+    if not isinstance(gate, dict) or (
+        gate.get("minimum_ratio"), gate.get("maximum_ratio")
+    ) != (ROUTE_RATIO_MIN, ROUTE_RATIO_MAX):
+        raise CampaignError("suite compiler-route equivalence bounds changed")
+    targets = suite_targets(contract)
     for target_id, spec in TARGET_SPECS.items():
-        target = targets[target_id]
+        target = targets.get(target_id)
+        if not isinstance(target, dict):
+            raise CampaignError(f"suite target is missing: {target_id}")
         if target["source"]["commit"] != spec.commit:
             raise CampaignError(f"{target_id} source commit drifted from suite")
         expected = [row["id"] for row in target["harnesses"]]
@@ -1451,12 +1480,18 @@ def build_variants(
         )
         record_path = raw_dir / "builds" / spec.target_id / variant / "build.json"
         if reuse and record_path.is_file():
+            try:
+                immutable_evidence.validate_committed_file(record_path)
+            except immutable_evidence.ImmutableEvidenceError as error:
+                raise CampaignError(str(error)) from error
             cached = json.loads(record_path.read_text(encoding="utf-8"))
             binary = pathlib.Path(str(cached.get("binary", "")))
-            accepted_digests = {allocator_digest, campaign_snapshot_digest}
             if (
                 cached.get("success") is True
-                and cached.get("unialloc_implementation_sha256") in accepted_digests
+                and cached.get("unialloc_implementation_sha256") == allocator_digest
+                and cached.get("implementation_sha256") == allocator_digest
+                and cached.get("implementation_revision")
+                == snapshot.get("allocator_revision")
                 and (
                     cached.get("build_wrapper_sha256")
                     or cached.get("force_load_wrapper_sha256")
@@ -1465,17 +1500,11 @@ def build_variants(
                 and binary.is_file()
                 and cached.get("binary_sha256") == sha256_file(binary)
             ):
-                if cached.get("unialloc_implementation_sha256") != allocator_digest:
-                    cached["legacy_campaign_digest_alias"] = cached[
-                        "unialloc_implementation_sha256"
-                    ]
-                    cached["unialloc_implementation_sha256"] = allocator_digest
-                    cached["campaign_snapshot_sha256"] = campaign_snapshot_digest
-                cached["build_wrapper"] = str(build_wrapper.resolve())
-                cached["build_wrapper_sha256"] = build_wrapper_digest
-                write_json(record_path, cached)
                 binaries[variant] = cached
                 continue
+            raise CampaignError(
+                f"immutable reusable build does not match {spec.target_id}/{variant}"
+            )
         audit_dir = raw_dir / "audits" / spec.target_id / variant
         pass_log_dir = raw_dir / "pass-logs" / spec.target_id / variant
         shutil.rmtree(audit_dir, ignore_errors=True)
@@ -1645,14 +1674,17 @@ def build_variants(
             "cargo_lock_sha256": sha256_file(worktree / "Cargo.lock"),
             "error": error,
         }
-        write_json(record_path, record)
+        write_json(record_path.with_name("build-attempt.json"), record)
         if not success:
             raise CampaignError(
                 f"{spec.target_id}/{variant} build failed: {error or result['stderr'].decode(errors='replace')[-8000:]}"
             )
         shutil.rmtree(target_dir, ignore_errors=True)
         record["disposable_cargo_target_removed"] = True
-        write_json(record_path, record)
+        try:
+            immutable_evidence.persist_immutable_json(record_path, record)
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
         binaries[variant] = record
     digests = {
         str(record["unialloc_implementation_sha256"]) for record in binaries.values()
@@ -1840,13 +1872,25 @@ def apply_runtime_environment(
     if runtime_dependency is None:
         raise CampaignError("RustPython runtime dependency contract is missing")
     library_directory = str(runtime_dependency["library_directory"])
-    current = result.get("LD_LIBRARY_PATH", "")
-    entries = [library_directory]
-    entries.extend(
-        entry for entry in current.split(":") if entry and entry != library_directory
-    )
-    result["LD_LIBRARY_PATH"] = ":".join(entries)
+    result["LD_LIBRARY_PATH"] = library_directory
     return result
+
+
+def measurement_runtime_environment(
+    spec: TargetSpec,
+    temporary_dir: pathlib.Path,
+    runtime_dependency: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    environment = suite_contract.clean_runtime_environment(
+        temporary_dir,
+        overrides={
+            "POLARS_MAX_THREADS": "1",
+            "RAYON_NUM_THREADS": "1",
+            "TOKIO_WORKER_THREADS": "1",
+            "PYTHON_SYS_EXECUTABLE": shutil.which("python3") or "python3",
+        },
+    )
+    return apply_runtime_environment(spec, environment, runtime_dependency)
 
 
 def prove_rustpython_runtime(
@@ -1856,8 +1900,8 @@ def prove_rustpython_runtime(
 ) -> dict[str, Any]:
     proof_dir = raw_dir / "dynamic-dependencies" / "rustpython"
     proof_dir.mkdir(parents=True, exist_ok=True)
-    environment = apply_runtime_environment(
-        TARGET_SPECS["rustpython"], os.environ.copy(), runtime_dependency
+    environment = measurement_runtime_environment(
+        TARGET_SPECS["rustpython"], proof_dir / "tmp", runtime_dependency
     )
     variants: dict[str, Any] = {}
     library_path = str(runtime_dependency["library_path"])
@@ -2041,29 +2085,60 @@ def wait_for_build_quiescence(
 
 
 @contextlib.contextmanager
-def primary_measurement_lock(target_id: str, phase: str) -> Iterable[dict[str, Any]]:
-    MEASUREMENT_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    with MEASUREMENT_LOCK.open("a+", encoding="utf-8") as handle:
-        waited_at = time.time()
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        acquired_at = time.time()
-        metadata = {
-            "lock_path": str(MEASUREMENT_LOCK.resolve()),
-            "target_id": target_id,
-            "phase": phase,
-            "pid": os.getpid(),
-            "wait_seconds": acquired_at - waited_at,
-            "acquired_unix": acquired_at,
-        }
-        handle.seek(0)
-        handle.truncate()
-        handle.write(json.dumps(metadata, sort_keys=True) + "\n")
-        handle.flush()
-        try:
-            yield metadata
-        finally:
-            metadata["released_unix"] = time.time()
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+def primary_measurement_lock(
+    target_id: str,
+    phase: str,
+    *,
+    raw_root: pathlib.Path = DEFAULT_RAW_DIR,
+    lock_path: pathlib.Path = MEASUREMENT_LOCK,
+) -> Iterable[dict[str, Any]]:
+    if lock_path.resolve() != suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK.resolve():
+        raise CampaignError("timed campaigns require the host-wide measurement lock")
+    with suite_contract.primary_measurement_lock(
+        runner=pathlib.Path(__file__).name,
+        raw_root=raw_root,
+        target_id=target_id,
+        phase=phase,
+    ) as metadata:
+        yield metadata
+
+
+def validate_committed_run_record(
+    value: Mapping[str, Any],
+    *,
+    expected_identity: Mapping[str, Any],
+    spec: TargetSpec,
+    harness_id: str,
+) -> None:
+    immutable_evidence.validate_measurement_record(
+        value, expected_identity=expected_identity
+    )
+    try:
+        artifacts = value["artifacts"]
+        stdout = pathlib.Path(str(artifacts["stdout"]["path"])).read_bytes()
+        time_metrics = parse_gnu_time(
+            pathlib.Path(str(artifacts["gnu_time"]["path"]))
+        )
+        expected_fingerprint: str | None = None
+        if spec.mode == "polars-driver":
+            expected_performance, expected_fingerprint = polars_result(
+                stdout, harness_id
+            )
+        else:
+            expected_performance = criterion_seconds(stdout)
+        metrics = value["metrics"]
+        if (
+            float(metrics["performance"]) != expected_performance
+            or metrics.get("performance_unit") != "seconds"
+            or float(metrics["peak_rss_mib"])
+            != float(time_metrics["peak_rss_kib"]) / 1024.0
+            or value.get("result_fingerprint") != expected_fingerprint
+        ):
+            raise CampaignError("measurement metrics differ from retained artifacts")
+    except (CampaignError, KeyError, OSError, TypeError, ValueError) as error:
+        raise immutable_evidence.ImmutableEvidenceError(
+            f"measurement metric provenance is invalid: {error}"
+        ) from error
 
 
 def run_one(
@@ -2081,95 +2156,144 @@ def run_one(
     runtime_dependency: Mapping[str, Any] | None,
     cpu_list: str,
     numa_node: str,
+    build: Mapping[str, Any],
+    contract: suite_contract.SuiteContract,
+    suite_binding: Mapping[str, Any],
 ) -> dict[str, Any]:
-    run_dir = raw_dir / "runs" / spec.target_id / harness_id / variant
-    run_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{phase}-{index:02d}"
-    time_path = run_dir / f"{stem}.time"
-    stdout_path = run_dir / f"{stem}.stdout"
-    stderr_path = run_dir / f"{stem}.stderr"
-    command = command_for(spec, binary, harness_id, polars_csv)
-    pinned_command = [*measurement_prefix(cpu_list, numa_node), *command]
-    env = os.environ.copy()
-    env.update(
-        {
-            "POLARS_MAX_THREADS": "1",
-            "RAYON_NUM_THREADS": "1",
-            "TOKIO_WORKER_THREADS": "1",
-            "PYTHON_SYS_EXECUTABLE": shutil.which("python3") or "python3",
-            "TMPDIR": str((raw_dir / "tmp").resolve()),
-        }
+    normalized_phase = "warmup" if phase == "warmup" else "measurement"
+    round_number = 0 if normalized_phase == "warmup" else index
+    record_path = (
+        raw_dir
+        / "runs"
+        / spec.target_id
+        / harness_id
+        / variant
+        / f"{normalized_phase}-{round_number:02d}.json"
     )
-    env = apply_runtime_environment(spec, env, runtime_dependency)
-    started = time.perf_counter_ns()
-    load_before = os.getloadavg()
-    result = execute(
-        [
-            "/usr/bin/time",
-            "-f",
-            GNU_TIME_FORMAT,
-            "-o",
-            time_path,
-            "--",
-            *pinned_command,
-        ],
-        cwd=worktree,
-        env=env,
-        timeout=timeout,
-    )
-    wall_seconds = (time.perf_counter_ns() - started) / 1_000_000_000
-    load_after = os.getloadavg()
-    stdout_path.write_bytes(result["stdout"])
-    stderr_path.write_bytes(result["stderr"])
-    metrics = parse_gnu_time(time_path)
-    fingerprint: str | None = None
-    if spec.mode == "polars-driver":
-        performance, fingerprint = polars_result(result["stdout"], harness_id)
-        performance_source = "benchmark-owned-operation-seconds"
-    else:
-        performance = criterion_seconds(result["stdout"])
-        performance_source = "criterion-median-seconds-per-iteration"
-    success = (
-        result["exit_code"] == 0
-        and not result["timed_out"]
-        and metrics["time_exit_code"] == 0
-        and performance > 0
-        and metrics["peak_rss_kib"] > 0
-    )
-    record = {
-        "success": success,
+    identity = {
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
         "target_id": spec.target_id,
         "harness_id": harness_id,
         "variant": variant,
-        "phase": phase,
-        "index": index,
-        "round": 0 if phase == "warmup" else index,
-        "command": command,
-        "measured_command": pinned_command,
-        "cpu_affinity": cpu_list,
-        "numa_memory_node": int(numa_node),
-        "load_average_before": list(load_before),
-        "load_average_after": list(load_after),
-        "performance": performance,
-        "performance_source": performance_source,
-        "peak_rss_mib": metrics["peak_rss_kib"] / 1024.0,
-        "process_wall_seconds": wall_seconds,
-        "result_fingerprint": fingerprint,
-        "stdout": str(stdout_path.resolve()),
-        "stderr": str(stderr_path.resolve()),
-        "time_record": str(time_path.resolve()),
-        "stdout_sha256": sha256_file(stdout_path),
-        "stderr_sha256": sha256_file(stderr_path),
-        **metrics,
+        "phase": normalized_phase,
+        "round": round_number,
+        "source_commit": spec.commit,
+        "implementation_revision": build.get("implementation_revision"),
+        "implementation_sha256": build.get("implementation_sha256"),
+        "binary_sha256": sha256_file(binary),
     }
-    if runtime_dependency is not None:
-        record["dynamic_runtime_dependency"] = dict(runtime_dependency)
-    record_path = run_dir / f"{stem}.json"
-    record["raw_record"] = str(record_path.resolve())
-    write_json(record_path, record)
-    if not success:
-        raise CampaignError(f"failed run: {spec.target_id}/{harness_id}/{variant}")
-    return record
+
+    def collect(attempt: pathlib.Path) -> dict[str, Any]:
+        time_path = attempt / "gnu-time.txt"
+        stdout_path = attempt / "stdout.bin"
+        stderr_path = attempt / "stderr.bin"
+        command = command_for(spec, binary, harness_id, polars_csv)
+        pinned_command = [*measurement_prefix(cpu_list, numa_node), *command]
+        env = measurement_runtime_environment(
+            spec, attempt / "tmp", runtime_dependency
+        )
+        started = time.perf_counter_ns()
+        load_before = os.getloadavg()
+        result = execute(
+            [
+                "/usr/bin/time",
+                "-f",
+                GNU_TIME_FORMAT,
+                "-o",
+                time_path,
+                "--",
+                *pinned_command,
+            ],
+            cwd=worktree,
+            env=env,
+            timeout=timeout,
+        )
+        wall_seconds = (time.perf_counter_ns() - started) / 1_000_000_000
+        load_after = os.getloadavg()
+        stdout_path.write_bytes(result["stdout"])
+        stderr_path.write_bytes(result["stderr"])
+        metrics = parse_gnu_time(time_path)
+        fingerprint: str | None = None
+        if spec.mode == "polars-driver":
+            performance, fingerprint = polars_result(result["stdout"], harness_id)
+            performance_source = "benchmark-owned-operation-seconds"
+        else:
+            performance = criterion_seconds(result["stdout"])
+            performance_source = "criterion-median-seconds-per-iteration"
+        success = (
+            result["exit_code"] == 0
+            and not result["timed_out"]
+            and metrics["time_exit_code"] == 0
+            and performance > 0
+            and metrics["peak_rss_kib"] > 0
+        )
+        peak_rss_mib = metrics["peak_rss_kib"] / 1024.0
+        record: dict[str, Any] = {
+            "evidence_schema_version": 1,
+            "identity": identity,
+            "metrics": {
+                "performance": performance,
+                "performance_unit": "seconds",
+                "peak_rss_mib": peak_rss_mib,
+            },
+            "artifacts": {
+                "binary": immutable_evidence.artifact_ref(binary),
+                "stdout": immutable_evidence.artifact_ref(stdout_path),
+                "stderr": immutable_evidence.artifact_ref(stderr_path),
+                "gnu_time": immutable_evidence.artifact_ref(time_path),
+            },
+            "suite_manifest": dict(suite_binding),
+            **identity,
+            "success": success,
+            "index": index,
+            "command": command,
+            "measured_command": pinned_command,
+            "cpu_affinity": cpu_list,
+            "numa_memory_node": int(numa_node),
+            "load_average_before": list(load_before),
+            "load_average_after": list(load_after),
+            "performance": performance,
+            "performance_unit": "seconds",
+            "performance_source": performance_source,
+            "peak_rss_mib": peak_rss_mib,
+            "process_wall_seconds": wall_seconds,
+            "result_fingerprint": fingerprint,
+            "stdout": str(stdout_path.resolve()),
+            "stderr": str(stderr_path.resolve()),
+            "time_record": str(time_path.resolve()),
+            "stdout_sha256": sha256_file(stdout_path),
+            "stderr_sha256": sha256_file(stderr_path),
+            "runtime_environment": suite_contract.runtime_environment_record(env),
+            "rseq_policy": suite_contract.PRODUCTION_RSEQ_POLICY,
+            **metrics,
+        }
+        if runtime_dependency is not None:
+            record["dynamic_runtime_dependency"] = dict(runtime_dependency)
+        if not success:
+            raise CampaignError(f"failed run: {spec.target_id}/{harness_id}/{variant}")
+        return record
+
+    try:
+        committed = immutable_evidence.run_or_reuse_json(
+            record_path,
+            collect,
+            lambda value: validate_committed_run_record(
+                value,
+                expected_identity=identity,
+                spec=spec,
+                harness_id=harness_id,
+            ),
+        )
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
+    return {
+        **committed.value,
+        "raw_record": str(committed.path),
+        "record_path": str(committed.path),
+        "record_sha256": committed.record_sha256,
+        "record_reused": committed.reused,
+    }
 
 
 def rotated(values: Sequence[str], offset: int) -> tuple[str, ...]:
@@ -2201,6 +2325,7 @@ def warmup_evidence(
         evidence[variant].append(
             {
                 "record_path": str(record_path.resolve()),
+                "record_sha256": str(row.get("record_sha256") or sha256_file(record_path)),
                 "sha256": sha256_file(record_path),
             }
         )
@@ -2261,6 +2386,9 @@ def measure_target(
     quiescence_seconds: int,
     cpu_list: str,
     numa_node: str,
+    contract: suite_contract.SuiteContract,
+    suite_binding: Mapping[str, Any],
+    measurement_lock_path: pathlib.Path = MEASUREMENT_LOCK,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     polars_input: dict[str, Any] | None = None
     polars_csv: pathlib.Path | None = None
@@ -2277,8 +2405,26 @@ def measure_target(
     preflights: dict[str, list[dict[str, Any]]] = {
         harness_id: [] for harness_id in spec.harness_filters
     }
+    measured_rows: dict[str, list[dict[str, Any]]] = {
+        harness_id: [] for harness_id in spec.harness_filters
+    }
+    quiescence: dict[str, Any] | None = None
     lock_records: list[dict[str, Any]] = []
-    with primary_measurement_lock(spec.target_id, "warmup") as lock_record:
+    with primary_measurement_lock(
+        spec.target_id,
+        "warmup-and-measured" if include_rounds else "warmup",
+        raw_root=raw_dir,
+        lock_path=measurement_lock_path,
+    ) as lock_record:
+        if include_rounds:
+            quiescence = wait_for_build_quiescence(
+                raw_dir,
+                spec.target_id,
+                timeout=quiescence_timeout,
+                quiet_seconds=quiescence_seconds,
+                cpu_list=cpu_list,
+                numa_node=numa_node,
+            )
         for harness_index, harness_id in enumerate(spec.harness_filters):
             for warmup in range(1, warmups + 1):
                 for variant in rotated(VARIANTS, harness_index + warmup - 1):
@@ -2296,8 +2442,47 @@ def measure_target(
                         runtime_dependency=runtime_dependency,
                         cpu_list=cpu_list,
                         numa_node=numa_node,
+                        build=binaries[variant],
+                        contract=contract,
+                        suite_binding=suite_binding,
                     )
                     preflights[harness_id].append(record)
+        if include_rounds:
+            for harness_index, harness_id in enumerate(spec.harness_filters):
+                rows = measured_rows[harness_id]
+                for round_number in range(1, rounds + 1):
+                    for variant in rotated(
+                        VARIANTS, harness_index + round_number - 1
+                    ):
+                        record = run_one(
+                            spec,
+                            variant,
+                            harness_id,
+                            pathlib.Path(str(binaries[variant]["binary"])),
+                            worktree,
+                            raw_dir,
+                            phase="round",
+                            index=round_number,
+                            timeout=timeout,
+                            polars_csv=polars_csv,
+                            runtime_dependency=runtime_dependency,
+                            cpu_list=cpu_list,
+                            numa_node=numa_node,
+                            build=binaries[variant],
+                            contract=contract,
+                            suite_binding=suite_binding,
+                        )
+                        rows.append(
+                            {
+                                "round": round_number,
+                                "variant": variant,
+                                "performance": record["performance"],
+                                "peak_rss_mib": record["peak_rss_mib"],
+                                "record_path": record["record_path"],
+                                "record_sha256": record["record_sha256"],
+                                "raw_record": record["record_path"],
+                            }
+                        )
     lock_records.append(dict(lock_record))
     if not include_rounds:
         harness_results = []
@@ -2334,57 +2519,6 @@ def measure_target(
                 "numa_node": int(numa_node),
             },
         }
-    measured_rows: dict[str, list[dict[str, Any]]] = {
-        harness_id: [] for harness_id in spec.harness_filters
-    }
-    quiescence: dict[str, Any] | None = None
-    with primary_measurement_lock(spec.target_id, "measured") as lock_record:
-        quiescence = wait_for_build_quiescence(
-            raw_dir,
-            spec.target_id,
-            timeout=quiescence_timeout,
-            quiet_seconds=quiescence_seconds,
-            cpu_list=cpu_list,
-            numa_node=numa_node,
-        )
-        for harness_index, harness_id in enumerate(spec.harness_filters):
-            rows = measured_rows[harness_id]
-            for round_number in range(1, rounds + 1):
-                for variant in rotated(VARIANTS, harness_index + round_number - 1):
-                    record = run_one(
-                        spec,
-                        variant,
-                        harness_id,
-                        pathlib.Path(str(binaries[variant]["binary"])),
-                        worktree,
-                        raw_dir,
-                        phase="round",
-                        index=round_number,
-                        timeout=timeout,
-                        polars_csv=polars_csv,
-                        runtime_dependency=runtime_dependency,
-                        cpu_list=cpu_list,
-                        numa_node=numa_node,
-                    )
-                    rows.append(
-                        {
-                            "round": round_number,
-                            "variant": variant,
-                            "performance": record["performance"],
-                            "peak_rss_mib": record["peak_rss_mib"],
-                            "raw_record": str(
-                                (
-                                    raw_dir
-                                    / "runs"
-                                    / spec.target_id
-                                    / harness_id
-                                    / variant
-                                    / f"round-{round_number:02d}.json"
-                                ).resolve()
-                            ),
-                        }
-                    )
-    lock_records.append(dict(lock_record))
     for harness_id in spec.harness_filters:
         rows = measured_rows[harness_id]
         fingerprints = {
@@ -2429,18 +2563,23 @@ def measure_target(
 
 
 def failed_target(
-    spec: TargetSpec, error: str, raw_dir: pathlib.Path
+    spec: TargetSpec,
+    error: str,
+    raw_dir: pathlib.Path,
+    *,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "target_id": spec.target_id,
         "source_commit": spec.commit,
         "status": "failed_closed",
-        "suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
         "preregistration_suite_manifest_sha256": (
-            PREREGISTRATION_SUITE_MANIFEST_SHA256
+            contract.preregistration_manifest_sha256
         ),
-        "analysis_suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+        "analysis_suite_manifest_sha256": contract.manifest_sha256,
         "blockers": [error],
         "harnesses": [
             {
@@ -2465,6 +2604,11 @@ def run_target(
     direct_wrapper: pathlib.Path,
     direct_load: Mapping[str, Any],
 ) -> dict[str, Any]:
+    contract = args.suite_contract
+    try:
+        suite_binding = suite_contract.bind_suite_manifest(contract)
+    except suite_contract.SuiteContractError as error:
+        raise CampaignError(str(error)) from error
     checkout = args.checkout_root.resolve() / spec.checkout
     source = verify_checkout(checkout, spec)
     worktree = args.raw_dir.resolve() / "build-work" / spec.target_id
@@ -2497,11 +2641,12 @@ def run_target(
             "implementation_revision": snapshot.get("allocator_revision"),
             "campaign_snapshot_sha256": snapshot.get("campaign_snapshot_sha256"),
             "allocator_revision": snapshot.get("allocator_revision"),
-            "suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+            "suite_id": contract.suite_id,
+            "suite_manifest_sha256": contract.manifest_sha256,
             "preregistration_suite_manifest_sha256": (
-                PREREGISTRATION_SUITE_MANIFEST_SHA256
+                contract.preregistration_manifest_sha256
             ),
-            "analysis_suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+            "analysis_suite_manifest_sha256": contract.manifest_sha256,
             "harnesses": [
                 {
                     "id": harness_id,
@@ -2539,6 +2684,9 @@ def run_target(
         quiescence_seconds=args.quiescence_seconds,
         cpu_list=args.cpu_list,
         numa_node=args.numa_node,
+        contract=contract,
+        suite_binding=suite_binding,
+        measurement_lock_path=contract.measurement_lock,
     )
     if args.phase == "warmup":
         status = "measurement_ready"
@@ -2570,11 +2718,13 @@ def run_target(
         "frozen_snapshot_record": str(
             (args.raw_dir.resolve() / "frozen-unialloc.json").resolve()
         ),
-        "suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
+        "suite_manifest_path": suite_binding["path"],
         "preregistration_suite_manifest_sha256": (
-            PREREGISTRATION_SUITE_MANIFEST_SHA256
+            contract.preregistration_manifest_sha256
         ),
-        "analysis_suite_manifest_sha256": ANALYSIS_SUITE_MANIFEST_SHA256,
+        "analysis_suite_manifest_sha256": contract.manifest_sha256,
         "harnesses": harnesses,
         "source": source,
         "build_records": {
@@ -2603,13 +2753,16 @@ def run_target(
 
 
 def primary_publication_allowed(
-    record: Mapping[str, Any], *, current_working_tree: bool
+    record: Mapping[str, Any],
+    *,
+    current_working_tree: bool,
+    measured_rounds: int = PRIMARY_ROUNDS,
 ) -> bool:
     return (
         not current_working_tree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
-        and record.get("measured_rounds") in PUBLISHABLE_ROUND_COUNTS
+        and record.get("measured_rounds") == measured_rounds
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2621,11 +2774,14 @@ def apply_diagnostic_result_metadata(
     cpu_list: str,
     numa_node: str,
     measured_rounds: int,
+    expected_rounds: int = PRIMARY_ROUNDS,
 ) -> None:
     if snapshot.get("source_kind") != "working_tree":
         raise CampaignError("diagnostic campaign did not freeze a working tree")
-    if measured_rounds != PRIMARY_ROUNDS:
-        raise CampaignError("working-tree diagnostics require three measured rounds")
+    if measured_rounds != expected_rounds:
+        raise CampaignError(
+            f"working-tree diagnostics require {expected_rounds} measured rounds"
+        )
     record.update(
         {
             "campaign_classification": "diagnostic_current_worktree",
@@ -2649,7 +2805,8 @@ def apply_diagnostic_result_metadata(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    validate_specs_against_suite()
+    contract = args.suite_contract
+    validate_specs_against_suite(contract)
     args.raw_dir = args.raw_dir.resolve()
     args.checkout_root = args.checkout_root.resolve()
     args.raw_dir.mkdir(parents=True, exist_ok=True)
@@ -2670,16 +2827,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise CampaignError(
                 "exact campaign requires a Git-revision archive snapshot"
             )
-        if snapshot.get("allocator_revision") != SUITE_IMPLEMENTATION_REVISION:
+        if snapshot.get("allocator_revision") != contract.implementation_revision:
             raise CampaignError(
                 "allocator revision differs from the primary suite implementation"
             )
         if (
             snapshot.get("unialloc_implementation_sha256")
-            != SUITE_IMPLEMENTATION_SHA256
+            != contract.implementation_sha256
         ):
             raise CampaignError(
                 "allocator implementation digest differs from the primary suite"
+            )
+        if (
+            snapshot.get("implementation_file_count"),
+            snapshot.get("implementation_total_bytes"),
+        ) != (
+            contract.implementation_file_count,
+            contract.implementation_size_bytes,
+        ):
+            raise CampaignError(
+                "allocator implementation size identity differs from the primary suite"
             )
     wrapper = build_mir_driver(args.raw_dir, snapshot, args.build_timeout)
     force_wrapper = ensure_force_load_wrapper(
@@ -2709,7 +2876,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 direct_load,
             )
         except (CampaignError, matrix.MatrixError, OSError, ValueError) as error:
-            record = failed_target(spec, str(error), args.raw_dir)
+            record = failed_target(
+                spec, str(error), args.raw_dir, contract=contract
+            )
             exit_code = 2
         record["measured_rounds"] = args.rounds
         if args.current_working_tree:
@@ -2719,19 +2888,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cpu_list=args.cpu_list,
                 numa_node=args.numa_node,
                 measured_rounds=args.rounds,
+                expected_rounds=contract.measured_rounds,
             )
         output = args.raw_dir / "results" / f"{target_id}.json"
         if args.phase != "build":
             archived = archive_build_complete_result(
-                output, target_id, args.raw_dir.resolve()
+                output,
+                target_id,
+                args.raw_dir.resolve(),
+                contract=contract,
             )
             if archived is not None:
                 record["archived_build_complete_result"] = archived
         write_json(output, record)
         if primary_publication_allowed(
-            record, current_working_tree=args.current_working_tree
+            record,
+            current_working_tree=args.current_working_tree,
+            measured_rounds=contract.measured_rounds,
         ):
-            write_json(ASSEMBLER_TARGET_DIR / f"{target_id}.json", record)
+            try:
+                immutable_evidence.persist_immutable_json(
+                    contract.target_results_dir / f"{target_id}.json", record
+                )
+            except immutable_evidence.ImmutableEvidenceError as error:
+                raise CampaignError(str(error)) from error
         print(
             json.dumps(
                 {"target": target_id, "status": record["status"], "result": str(output)}

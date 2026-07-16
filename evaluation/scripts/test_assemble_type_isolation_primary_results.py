@@ -13,10 +13,14 @@ import unittest
 from pathlib import Path
 
 from evaluation.scripts import assemble_type_isolation_primary_results as assembler
+from evaluation.scripts import immutable_evidence
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SUITE_PATH = ROOT / "evaluation/config/type_isolation_primary_suite.json"
+CURRENT_SUITE_PATH = (
+    ROOT / "evaluation/config/type_isolation_primary_suite_v2_ce8af7b.json"
+)
 SCRIPT_PATH = ROOT / "evaluation/scripts/assemble_type_isolation_primary_results.py"
 PLOT_SCRIPT_PATH = ROOT / "evaluation/scripts/plot_type_isolation_primary_suite.py"
 GATES = (
@@ -38,15 +42,111 @@ FIXED_WORK_TARGETS = {"oxipng", "redb", "polars"}
 FIXED_WORK_HARNESS_COUNT = 14
 
 
-def target_result(target: dict[str, object], evidence_root: Path) -> dict[str, object]:
+def bind_test_suite(suite_path: Path, evidence_root: Path) -> dict[str, object]:
+    payload = suite_path.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    path = evidence_root.parent / f"suite-manifest-{digest}.json"
+    path.write_bytes(payload)
+    return {
+        "path": str(path.resolve()),
+        "sha256": digest,
+        "bytes": len(payload),
+    }
+
+
+def artifact(path: Path, payload: bytes) -> dict[str, object]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    return immutable_evidence.artifact_ref(path)
+
+
+def raw_measurement_record(
+    *,
+    path: Path,
+    suite: dict[str, object],
+    suite_binding: dict[str, object],
+    target: dict[str, object],
+    harness: dict[str, object],
+    variant: str,
+    phase: str,
+    round_number: int,
+    performance: float,
+    peak_rss_mib: float,
+    implementation_revision: str,
+    implementation_sha256: str,
+    binary_path: Path,
+) -> tuple[str, str]:
+    artifact_root = path.parent / f"{path.stem}-artifacts"
+    identity = {
+        "suite_id": suite["suite_id"],
+        "suite_manifest_sha256": suite_binding["sha256"],
+        "target_id": target["id"],
+        "harness_id": harness["id"],
+        "variant": variant,
+        "phase": phase,
+        "round": round_number,
+        "source_commit": target["source"]["commit"],
+        "implementation_revision": implementation_revision,
+        "implementation_sha256": implementation_sha256,
+        "binary_sha256": hashlib.sha256(binary_path.read_bytes()).hexdigest(),
+    }
+    metrics = {
+        "performance": performance,
+        "performance_unit": harness["performance_unit"],
+        "peak_rss_mib": peak_rss_mib,
+    }
+    record = {
+        "evidence_schema_version": 1,
+        "identity": identity,
+        "metrics": metrics,
+        "artifacts": {
+            "binary": immutable_evidence.artifact_ref(binary_path),
+            "stdout": artifact(artifact_root / "stdout", b"ok\n"),
+            "stderr": artifact(artifact_root / "stderr", b""),
+            "gnu_time": artifact(artifact_root / "gnu-time.txt", b"1.0\n"),
+        },
+        "suite_manifest": suite_binding,
+        "correctness": {"oracle": "synthetic fixture"},
+        **identity,
+        **metrics,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(immutable_evidence.canonical_json_bytes(record))
+    return str(path.resolve()), hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def synchronize_summary_metric(row: dict[str, object]) -> None:
+    path = Path(str(row["record_path"]))
+    record = json.loads(path.read_text(encoding="utf-8"))
+    for field in ("performance", "peak_rss_mib"):
+        record[field] = row[field]
+        record["metrics"][field] = row[field]
+    path.write_bytes(immutable_evidence.canonical_json_bytes(record))
+    row["record_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def target_result(
+    target: dict[str, object],
+    evidence_root: Path,
+    *,
+    measured_rounds: int = 5,
+    implementation_revision: str = IMPLEMENTATION_REVISION,
+    implementation_sha256: str = IMPLEMENTATION_SHA256,
+    suite_path: Path = SUITE_PATH,
+) -> dict[str, object]:
+    suite = json.loads(suite_path.read_text(encoding="utf-8"))
+    suite_binding = bind_test_suite(suite_path, evidence_root)
     build_records: dict[str, str] = {}
     build_binary_sha256: dict[str, str] = {}
+    binary_paths: dict[str, Path] = {}
     for variant in VARIANTS:
         path = (
             evidence_root.parent / "builds" / str(target["id"]) / variant / "build.json"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        binary_sha256 = hashlib.sha256(f"{target['id']}:{variant}".encode()).hexdigest()
+        binary_path = path.parent / "benchmark-binary"
+        binary_path.write_bytes(f"{target['id']}:{variant}".encode())
+        binary_sha256 = hashlib.sha256(binary_path.read_bytes()).hexdigest()
         path.write_text(
             json.dumps(
                 {
@@ -55,8 +155,8 @@ def target_result(target: dict[str, object], evidence_root: Path) -> dict[str, o
                     "actual_mir_provenance": True,
                     "stats_feature_enabled": False,
                     "source_commit": target["source"]["commit"],
-                    "implementation_revision": IMPLEMENTATION_REVISION,
-                    "unialloc_implementation_sha256": IMPLEMENTATION_SHA256,
+                    "implementation_revision": implementation_revision,
+                    "unialloc_implementation_sha256": implementation_sha256,
                     "binary_sha256": binary_sha256,
                 },
                 sort_keys=True,
@@ -66,20 +166,46 @@ def target_result(target: dict[str, object], evidence_root: Path) -> dict[str, o
         )
         build_records[variant] = str(path.resolve())
         build_binary_sha256[variant] = binary_sha256
+        binary_paths[variant] = binary_path
 
     harnesses: list[dict[str, object]] = []
     for harness_index, harness in enumerate(target["harnesses"]):
         measurements: list[dict[str, object]] = []
-        for round_number in range(1, 6):
+        for round_number in range(1, measured_rounds + 1):
             for variant_index, variant in enumerate(VARIANTS):
+                performance = (
+                    1.0 + 0.01 * variant_index + 0.001 * harness_index
+                )
+                peak_rss_mib = 100.0 + variant_index + 0.1 * round_number
+                record_path, record_sha256 = raw_measurement_record(
+                    path=(
+                        evidence_root
+                        / str(target["id"])
+                        / str(harness["id"])
+                        / "measurements"
+                        / f"round-{round_number}-{variant}.json"
+                    ),
+                    suite=suite,
+                    suite_binding=suite_binding,
+                    target=target,
+                    harness=harness,
+                    variant=variant,
+                    phase="measurement",
+                    round_number=round_number,
+                    performance=performance,
+                    peak_rss_mib=peak_rss_mib,
+                    implementation_revision=implementation_revision,
+                    implementation_sha256=implementation_sha256,
+                    binary_path=binary_paths[variant],
+                )
                 measurements.append(
                     {
                         "round": round_number,
                         "variant": variant,
-                        "performance": 1.0
-                        + 0.01 * variant_index
-                        + 0.001 * harness_index,
-                        "peak_rss_mib": 100.0 + variant_index + 0.1 * round_number,
+                        "performance": performance,
+                        "peak_rss_mib": peak_rss_mib,
+                        "record_path": record_path,
+                        "record_sha256": record_sha256,
                     }
                 )
         warmups: dict[str, list[dict[str, str]]] = {}
@@ -91,26 +217,26 @@ def target_result(target: dict[str, object], evidence_root: Path) -> dict[str, o
                 / f"{variant}.json"
             )
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                json.dumps(
-                    {
-                        "target_id": target["id"],
-                        "harness_id": harness["id"],
-                        "variant": variant,
-                        "phase": "warmup",
-                        "round": 0,
-                        "performance": 1.0,
-                        "peak_rss_mib": 2.0,
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
+            record_path, record_sha256 = raw_measurement_record(
+                path=path,
+                suite=suite,
+                suite_binding=suite_binding,
+                target=target,
+                harness=harness,
+                variant=variant,
+                phase="warmup",
+                round_number=0,
+                performance=1.0,
+                peak_rss_mib=2.0,
+                implementation_revision=implementation_revision,
+                implementation_sha256=implementation_sha256,
+                binary_path=binary_paths[variant],
             )
             warmups[variant] = [
                 {
-                    "record_path": str(path.resolve()),
-                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "record_path": record_path,
+                    "record_sha256": record_sha256,
+                    "sha256": record_sha256,
                 }
             ]
         harnesses.append(
@@ -123,15 +249,22 @@ def target_result(target: dict[str, object], evidence_root: Path) -> dict[str, o
                 "evidence": {"raw_path": f"raw/{harness['id']}.json"},
             }
         )
+    source_audit = evidence_root.parent / "audits" / f"{target['id']}.json"
+    source_audit.parent.mkdir(parents=True, exist_ok=True)
+    source_audit.write_text('{"success":true}\n', encoding="utf-8")
     result = {
         "schema_version": 1,
         "target_id": target["id"],
         "source_commit": target["source"]["commit"],
-        "implementation_revision": IMPLEMENTATION_REVISION,
-        "implementation_sha256": IMPLEMENTATION_SHA256,
+        "implementation_revision": implementation_revision,
+        "implementation_sha256": implementation_sha256,
+        "suite_id": suite["suite_id"],
+        "suite_manifest_sha256": suite_binding["sha256"],
+        "suite_manifest_path": suite_binding["path"],
+        "measured_rounds": measured_rounds,
         "build_records": build_records,
         "harnesses": harnesses,
-        "evidence": {"source_audit": f"audit/{target['id']}.json"},
+        "evidence": {"source_audit": str(source_audit.resolve())},
     }
     if target["id"] == "rustpython":
         soname = "libpython3.13.so.1.0"
@@ -194,6 +327,9 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
     def run_assembler(
         self, *, check: bool = True, suite_path: Path = SUITE_PATH
     ) -> subprocess.CompletedProcess[str]:
+        suite_digest = hashlib.sha256(suite_path.read_bytes()).hexdigest()
+        bound_suite = self.root / f"suite-manifest-{suite_digest}.json"
+        bound_suite.write_bytes(suite_path.read_bytes())
         return subprocess.run(
             [
                 self.uv,
@@ -205,6 +341,8 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
                 str(self.targets_dir),
                 "--output",
                 str(self.output),
+                "--bound-suite-manifest",
+                str(bound_suite),
             ],
             cwd=ROOT,
             check=check,
@@ -218,8 +356,12 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
             json.dumps(value, indent=2) + "\n", encoding="utf-8"
         )
 
-    def target_result(self, target: dict[str, object]) -> dict[str, object]:
-        return target_result(target, self.root / "warmups")
+    def target_result(
+        self, target: dict[str, object], *, suite_path: Path = SUITE_PATH
+    ) -> dict[str, object]:
+        return target_result(
+            target, self.root / "warmups", suite_path=suite_path
+        )
 
     def test_complete_target_results_assemble_into_renderer_schema(self) -> None:
         completed = self.run_assembler()
@@ -311,6 +453,48 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
                 )
         serialized = self.output.read_text(encoding="utf-8")
         self.assertNotIn("/home/hanqing", serialized)
+
+    def test_current_suite_derives_exact_three_round_contract(self) -> None:
+        suite = json.loads(CURRENT_SUITE_PATH.read_text(encoding="utf-8"))
+        implementation = suite["implementation"]
+        for target in suite["targets"]:
+            self.rewrite_target(
+                str(target["id"]),
+                target_result(
+                    target,
+                    self.root / "current-warmups",
+                    measured_rounds=3,
+                    implementation_revision=implementation["git_revision"],
+                    implementation_sha256=implementation["canonical_sha256"],
+                    suite_path=CURRENT_SUITE_PATH,
+                ),
+            )
+        completed = self.run_assembler(suite_path=CURRENT_SUITE_PATH)
+        self.assertEqual(0, completed.returncode)
+        result = json.loads(self.output.read_text(encoding="utf-8"))
+        self.assertEqual(suite["suite_id"], result["suite_id"])
+        self.assertTrue(
+            all(
+                {row["round"] for row in harness["measurements"]} == {1, 2, 3}
+                for target in result["targets"]
+                for harness in target["harnesses"]
+            )
+        )
+
+        broken = json.loads(
+            (self.targets_dir / "collections.json").read_text(encoding="utf-8")
+        )
+        broken["harnesses"][0]["measurements"].extend(
+            {
+                **row,
+                "round": 4,
+            }
+            for row in broken["harnesses"][0]["measurements"][:3]
+        )
+        self.rewrite_target("collections", broken)
+        rejected = self.run_assembler(check=False, suite_path=CURRENT_SUITE_PATH)
+        self.assertEqual(2, rejected.returncode)
+        self.assertIn("exact measured rounds 1 through 3", rejected.stderr)
 
     def test_rustpython_runtime_dependency_is_compact_and_host_path_free(self) -> None:
         self.run_assembler()
@@ -531,10 +715,24 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
 
     def test_execution_cost_ratios_respect_higher_is_better_metrics(self) -> None:
         suite = json.loads(json.dumps(self.suite))
+        suite["schema_version"] = 2
+        suite["measurement_contract"] = {
+            "warmup_rounds": 1,
+            "measured_rounds": 5,
+        }
+        suite["publication"] = {
+            "namespace": "test-higher-is-better",
+            "result_namespace": "test-higher-is-better",
+        }
         suite["targets"][0]["harnesses"][0]["metric_direction"] = "higher_is_better"
         suite_path = self.root / "higher-is-better-suite.json"
         suite_path.write_text(json.dumps(suite, indent=2) + "\n", encoding="utf-8")
-        target = self.target_result(suite["targets"][0])
+        for suite_target in suite["targets"]:
+            self.rewrite_target(
+                str(suite_target["id"]),
+                self.target_result(suite_target, suite_path=suite_path),
+            )
+        target = self.target_result(suite["targets"][0], suite_path=suite_path)
         harness = target["harnesses"][0]
         harness["metric_direction"] = "higher_is_better"
         for row in harness["measurements"]:
@@ -543,6 +741,7 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
                 "typed_plain": 50.0,
                 "typeiso_perf": 25.0,
             }[row["variant"]]
+            synchronize_summary_metric(row)
         harness["gates"]["compiler_route_equivalent"] = False
         self.rewrite_target("collections", target)
 
@@ -560,6 +759,15 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
 
     def test_invalid_rss_work_model_fails_closed(self) -> None:
         suite = json.loads(json.dumps(self.suite))
+        suite["schema_version"] = 2
+        suite["measurement_contract"] = {
+            "warmup_rounds": 1,
+            "measured_rounds": 5,
+        }
+        suite["publication"] = {
+            "namespace": "test-invalid-rss",
+            "result_namespace": "test-invalid-rss",
+        }
         suite["targets"][0]["rss_work_model"] = "ambiguous"
         suite_path = self.root / "invalid-rss-work-model-suite.json"
         suite_path.write_text(json.dumps(suite, indent=2) + "\n", encoding="utf-8")
@@ -693,6 +901,7 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
                 row["performance"] = 53.9
             elif row["variant"] == "typeiso_perf":
                 row["performance"] = 53.1
+            synchronize_summary_metric(row)
         self.rewrite_target("collections", target)
 
         self.run_assembler()
@@ -913,7 +1122,7 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
                 if mutation == "missing_variant":
                     del warmups["typed_plain"]
                 else:
-                    warmups["typed_plain"][0]["sha256"] = "0" * 64
+                    warmups["typed_plain"][0]["record_sha256"] = "0" * 64
                 self.rewrite_target("collections", target)
                 completed = self.run_assembler(check=False)
                 self.assertEqual(2, completed.returncode)
@@ -929,6 +1138,7 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
         harness["warmup_evidence"]["typed_plain"].append(
             {
                 "record_path": str(duplicate.resolve()),
+                "record_sha256": hashlib.sha256(duplicate.read_bytes()).hexdigest(),
                 "sha256": hashlib.sha256(duplicate.read_bytes()).hexdigest(),
             }
         )
@@ -957,11 +1167,52 @@ class AssembleTypeIsolationPrimaryResultsTests(unittest.TestCase):
         for row in target["harnesses"][0]["measurements"]:
             if row["variant"] == "typed_plain":
                 row["performance"] = 2.0
+                synchronize_summary_metric(row)
         self.rewrite_target("collections", target)
         completed = self.run_assembler(check=False)
         self.assertEqual(2, completed.returncode)
         self.assertIn("stored compiler route classification", completed.stderr)
         self.assertFalse(self.output.exists())
+
+    def test_committed_measurement_digest_identity_metric_and_artifact_are_bound(
+        self,
+    ) -> None:
+        for mutation, expected in (
+            ("summary_metric", "metric mismatch"),
+            ("record_digest", "raw record digest mismatch"),
+            ("record_identity", "identity mismatch"),
+            ("artifact_content", "artifact stdout content differs"),
+        ):
+            with self.subTest(mutation=mutation):
+                self.output.unlink(missing_ok=True)
+                target = self.target_result(self.suite["targets"][0])
+                row = target["harnesses"][0]["measurements"][0]
+                record_path = Path(str(row["record_path"]))
+                record = json.loads(record_path.read_text(encoding="utf-8"))
+                if mutation == "summary_metric":
+                    row["performance"] = float(row["performance"]) + 1.0
+                elif mutation == "record_digest":
+                    record_path.write_text(
+                        record_path.read_text(encoding="utf-8") + " ",
+                        encoding="utf-8",
+                    )
+                elif mutation == "record_identity":
+                    record["identity"]["round"] = 99
+                    record_path.write_bytes(
+                        immutable_evidence.canonical_json_bytes(record)
+                    )
+                    row["record_sha256"] = hashlib.sha256(
+                        record_path.read_bytes()
+                    ).hexdigest()
+                else:
+                    Path(record["artifacts"]["stdout"]["path"]).write_bytes(
+                        b"tampered\n"
+                    )
+                self.rewrite_target("collections", target)
+                completed = self.run_assembler(check=False)
+                self.assertEqual(2, completed.returncode)
+                self.assertIn(expected, completed.stderr)
+                self.assertFalse(self.output.exists())
 
     def test_stored_route_failure_must_match_paired_rounds(self) -> None:
         target = self.target_result(self.suite["targets"][0])

@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,10 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (
     ROOT / "evaluation" / "scripts" / "type_isolation_primary_collections_oxipng.py"
 )
-SUITE = ROOT / "evaluation/config/type_isolation_primary_suite.json"
-IMPLEMENTATION_REVISION = "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2"
+SUITE = ROOT / "evaluation/config/type_isolation_primary_suite_v2_ce8af7b.json"
+IMPLEMENTATION_REVISION = "ce8af7b89a5cba9a9b3f57d9b02bb0c8cb5c3503"
 IMPLEMENTATION_SHA256 = (
-    "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01"
+    "9deea74eaa2580ec1a0a57b001edfe9fa714428eaf0c211ee836bb0ddb16f178"
 )
 
 
@@ -103,6 +104,42 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 "binary_heap::bench_push",
             )
 
+    def test_committed_record_metrics_are_rederived_from_artifacts(self) -> None:
+        harness = self.runner.TARGETS["collections"].harnesses[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stdout = root / "stdout"
+            gnu_time = root / "time"
+            stdout.write_text(
+                f"test {harness.selector} ... bench: 123,456 ns/iter (+/- 10)\n",
+                encoding="utf-8",
+            )
+            gnu_time.write_text(
+                "UNIALLOC_GNU_TIME\t0.1\t0.1\t100%\t2048\t0\t1\t0\t0\t0\n",
+                encoding="utf-8",
+            )
+            record = {
+                "evidence_schema_version": 1,
+                "identity": {},
+                "metrics": {
+                    "performance": 123456.0,
+                    "performance_unit": "ns_per_iter",
+                    "peak_rss_mib": 2.0,
+                },
+                "artifacts": {
+                    "stdout": self.runner.immutable_evidence.artifact_ref(stdout),
+                    "gnu_time": self.runner.immutable_evidence.artifact_ref(gnu_time),
+                },
+            }
+            self.runner.validate_committed_harness_record(
+                record, expected_identity={}, harness=harness
+            )
+            record["metrics"]["performance"] = 1.0
+            with self.assertRaises(self.runner.immutable_evidence.ImmutableEvidenceError):
+                self.runner.validate_committed_harness_record(
+                    record, expected_identity={}, harness=harness
+                )
+
     def test_compiler_route_gate_uses_paired_median_and_declared_bounds(self) -> None:
         rows = []
         for round_number, ratio in enumerate((0.86, 1.00, 1.14), 1):
@@ -159,6 +196,8 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
     def test_implementation_revision_option_is_retained(self) -> None:
         args = self.runner.parse_args(
             [
+                "--suite",
+                str(SUITE),
                 "--implementation-revision",
                 IMPLEMENTATION_REVISION,
                 "--describe",
@@ -166,8 +205,18 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
         )
         self.assertEqual(IMPLEMENTATION_REVISION, args.implementation_revision)
         self.assertEqual(3, args.rounds)
+        self.assertEqual(SUITE.resolve(), args.suite)
+        self.assertEqual(
+            ROOT
+            / "evaluation/raw/type-isolation-primary-v2-ce8af7b/campaigns/collections-oxipng",
+            args.raw_root,
+        )
+        self.assertEqual(
+            ROOT / "evaluation/raw/type-isolation-primary-v2-ce8af7b/targets",
+            args.publication_dir,
+        )
 
-    def test_primary_implementation_requires_preregistered_f5_pin(self) -> None:
+    def test_primary_implementation_requires_selected_suite_pin(self) -> None:
         self.runner.validate_primary_implementation(
             IMPLEMENTATION_REVISION, IMPLEMENTATION_SHA256
         )
@@ -182,28 +231,18 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 IMPLEMENTATION_REVISION, "0" * 64
             )
 
-        legacy = self.runner.parse_args(["--targets", "collections"])
-        self.assertTrue(legacy.diagnostic_current_worktree)
-        self.assertIsNone(legacy.implementation_revision)
-        self.assertEqual(3, legacy.rounds)
+        selected = self.runner.parse_args(["--targets", "collections"])
+        self.assertFalse(selected.diagnostic_current_worktree)
+        self.assertEqual(IMPLEMENTATION_REVISION, selected.implementation_revision)
+        self.assertEqual(3, selected.rounds)
 
-        with (
-            mock.patch.object(
-                self.runner,
-                "resolve_implementation_revision",
-                return_value="0" * 40,
-            ),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            self.assertEqual(
-                2,
-                self.runner.main(
-                    [
-                        "--implementation-revision",
-                        "HEAD",
-                        "--describe",
-                    ]
-                ),
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.runner.parse_args(
+                [
+                    "--implementation-revision",
+                    "HEAD",
+                    "--describe",
+                ]
             )
 
     def test_measure_only_diagnostic_rejects_stale_working_tree_identity(self) -> None:
@@ -634,7 +673,9 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             )
             unsupported["measured_rounds"] = 4
             first.write_text(json.dumps(unsupported), encoding="utf-8")
-            with self.assertRaisesRegex(self.runner.CampaignError, "three measured"):
+            with self.assertRaisesRegex(
+                self.runner.CampaignError, "exactly 3 measured"
+            ):
                 self.runner.publish_target_results(
                     (first, second), destination=destination
                 )
@@ -689,7 +730,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                         "oxipng",
                         eligible=True,
                         evidence_root=root / "warmups",
-                        measured_rounds=self.runner.LEGACY_PRIMARY_ROUNDS,
+                        measured_rounds=3,
                     )
                 ),
                 encoding="utf-8",
@@ -700,6 +741,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            sentinel.unlink()
             published = self.runner.publish_target_results(
                 (first, second), destination=destination
             )
@@ -730,6 +772,30 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                 build_records={variant: {} for variant in self.runner.VARIANTS},
                 raw_records={harness.id: [] for harness in spec.harnesses},
             )
+
+    def test_timed_children_use_clean_runtime_and_host_wide_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
+            os.environ,
+            {
+                "PATH": "/usr/bin",
+                "HOME": "/home/test",
+                "LD_PRELOAD": "/tmp/wrong.so",
+                "MALLOC_CONF": "dirty_decay_ms:0",
+                "GLIBC_TUNABLES": "glibc.pthread.rseq=0",
+                "UNIALLOC_TEST_LEAK": "1",
+            },
+            clear=True,
+        ):
+            raw_root = Path(temporary)
+            environment = self.runner.clean_runtime_environment(raw_root)
+        self.assertEqual(
+            {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR"}, set(environment)
+        )
+        self.assertEqual("C", environment["LANG"])
+        self.assertEqual(
+            self.runner.suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK,
+            self.runner._DEFAULT_SUITE_CONTRACT.measurement_lock,
+        )
 
 
 if __name__ == "__main__":

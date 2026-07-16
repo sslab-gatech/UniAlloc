@@ -5,13 +5,12 @@ The runner derives build trees from exact upstream commits, builds UniAlloc,
 typed-control, and Type Isolation variants, retains compiler audits and raw
 process records, and writes one assembler-compatible result per target.  It
 keeps failed eligibility gates visible instead of promoting partial evidence.
-Each campaign uses one warmup plus three paired rounds and median point estimates.
+Each campaign follows the warmup and paired-round contract selected by ``--suite``.
 """
 
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import math
@@ -23,19 +22,21 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, NamedTuple, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from evaluation.scripts import realworld_type_isolation_matrix as matrix  # noqa: E402
+from evaluation.scripts import immutable_evidence  # noqa: E402
+from evaluation.scripts import type_isolation_suite_contract as suite_contract  # noqa: E402
 
 
-SUITE_PATH = ROOT / "evaluation/config/type_isolation_primary_suite.json"
-_SUITE_MANIFEST = json.loads(SUITE_PATH.read_text(encoding="utf-8"))
-SUITE_IMPLEMENTATION_REVISION = str(_SUITE_MANIFEST["implementation"]["git_revision"])
-SUITE_IMPLEMENTATION_SHA256 = str(_SUITE_MANIFEST["implementation"]["canonical_sha256"])
-DEFAULT_RAW_ROOT = ROOT / "evaluation/raw/type-isolation-primary-v1"
+SUITE_PATH = suite_contract.CURRENT_SUITE_PATH
+_DEFAULT_SUITE_CONTRACT = suite_contract.load_suite_contract(SUITE_PATH)
+SUITE_IMPLEMENTATION_REVISION = _DEFAULT_SUITE_CONTRACT.implementation_revision
+SUITE_IMPLEMENTATION_SHA256 = _DEFAULT_SUITE_CONTRACT.implementation_sha256
+DEFAULT_RAW_ROOT = _DEFAULT_SUITE_CONTRACT.runner_raw_dir("collections-oxipng")
 DEFAULT_COLLECTIONS_CHECKOUT = (
     ROOT / "evaluation/external/_checkouts/primary-rust-1.97.0"
 )
@@ -62,11 +63,7 @@ CORE_REQUIRED_GATES = (
 )
 COMPILER_ROUTE_MIN = 0.85
 COMPILER_ROUTE_MAX = 1.15
-PRIMARY_ROUNDS = 3
-# Artifact readers retain compatibility with completed five-round campaigns;
-# every scheduling path below accepts PRIMARY_ROUNDS only.
-LEGACY_PRIMARY_ROUNDS = 5
-PUBLISHABLE_ROUND_COUNTS = frozenset((PRIMARY_ROUNDS, LEGACY_PRIMARY_ROUNDS))
+PRIMARY_ROUNDS = _DEFAULT_SUITE_CONTRACT.measured_rounds
 COMPLETED_STATUSES = frozenset(("complete", "complete_with_attribution_limits"))
 LEGACY_OXIPNG_INPUT_COMMIT = "dea23211ae6259007e068c59ab16929798d00d96"
 LEGACY_OXIPNG_INPUT_PATH = "tests/files/issue-141.png"
@@ -232,8 +229,10 @@ def command_text(
     return result.stdout.strip()
 
 
-def verify_suite_contract() -> None:
-    suite = json.loads(SUITE_PATH.read_text(encoding="utf-8"))
+def verify_suite_contract(
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
+) -> None:
+    suite = contract.manifest
     indexed = {target["id"]: target for target in suite["targets"]}
     bounds = suite.get("compiler_route_equivalence_gate")
     if not isinstance(bounds, dict):
@@ -258,16 +257,20 @@ def verify_suite_contract() -> None:
             raise CampaignError(f"suite harness contract changed for {target_id}")
 
 
-def validate_primary_implementation(revision: object, digest: object) -> None:
-    if revision != SUITE_IMPLEMENTATION_REVISION:
+def validate_primary_implementation(
+    revision: object,
+    digest: object,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
+) -> None:
+    if revision != contract.implementation_revision:
         raise CampaignError(
             "primary campaign requires the predeclared implementation revision "
-            f"{SUITE_IMPLEMENTATION_REVISION}; observed {revision}"
+            f"{contract.implementation_revision}; observed {revision}"
         )
-    if digest != SUITE_IMPLEMENTATION_SHA256:
+    if digest != contract.implementation_sha256:
         raise CampaignError(
             "primary campaign requires the predeclared implementation digest "
-            f"{SUITE_IMPLEMENTATION_SHA256}; observed {digest}"
+            f"{contract.implementation_sha256}; observed {digest}"
         )
 
 
@@ -998,7 +1001,10 @@ def build_variant(
         "pass_log_dir": str(pass_log_dir.resolve()),
         "success": bool(activation["success"] and actual_mir),
     }
-    persist_json(build_root / "build.json", record)
+    try:
+        immutable_evidence.persist_immutable_json(build_root / "build.json", record)
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
     return record
 
 
@@ -1013,48 +1019,67 @@ def parse_libtest_benchmark(stdout: str, expected: str) -> float:
 
 
 def clean_runtime_environment(raw_root: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    for key in list(env):
-        if key.startswith("UNIALLOC_") or key in {
-            "GLIBC_TUNABLES",
-            "LD_PRELOAD",
-            "MALLOC_CONF",
-            "MALLOC_ARENA_MAX",
-        }:
-            env.pop(key, None)
-    env["TMPDIR"] = str((raw_root / "tmp").resolve())
-    return env
+    return suite_contract.clean_runtime_environment(raw_root / "tmp" / "runtime")
 
 
 @contextmanager
-def primary_measurement_lock(raw_root: Path):
-    lock_path = DEFAULT_RAW_ROOT / "primary-measurement.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        handle.seek(0)
-        handle.truncate()
-        handle.write(
-            json.dumps(
-                {
-                    "pid": os.getpid(),
-                    "runner": Path(__file__).name,
-                    "raw_root": str(raw_root.resolve()),
-                },
-                sort_keys=True,
-            )
-            + "\n"
-        )
-        handle.flush()
-        try:
-            yield lock_path
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+def primary_measurement_lock(raw_root: Path, *, lock_path: Path | None = None):
+    selected = lock_path or suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK
+    if selected.resolve() != suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK.resolve():
+        raise CampaignError("timed campaigns require the host-wide measurement lock")
+    with suite_contract.primary_measurement_lock(
+        runner=Path(__file__).name,
+        raw_root=raw_root,
+        phase="warmup-and-measured",
+    ) as metadata:
+        yield Path(str(metadata["lock_path"]))
 
 
 def rotated_variants(round_index: int, harness_index: int) -> tuple[str, ...]:
     offset = (round_index + harness_index) % len(VARIANTS)
     return VARIANTS[offset:] + VARIANTS[:offset]
+
+
+def validate_committed_harness_record(
+    value: Mapping[str, Any],
+    *,
+    expected_identity: Mapping[str, Any],
+    harness: HarnessSpec,
+) -> None:
+    immutable_evidence.validate_measurement_record(
+        value, expected_identity=expected_identity
+    )
+    try:
+        artifacts = value["artifacts"]
+        stdout_path = Path(str(artifacts["stdout"]["path"]))
+        time_path = Path(str(artifacts["gnu_time"]["path"]))
+        metrics = value["metrics"]
+        time_metrics = matrix.parse_gnu_time_metrics(
+            time_path.read_text(encoding="utf-8")
+        )
+        expected_rss_mib = float(time_metrics["peak_rss_kib"]) / 1024.0
+        if harness.kind == "libtest":
+            expected_performance = parse_libtest_benchmark(
+                stdout_path.read_text(encoding="utf-8", errors="replace"),
+                harness.selector,
+            )
+            expected_unit = "ns_per_iter"
+        else:
+            measurement = value.get("measurement")
+            if not isinstance(measurement, dict):
+                raise CampaignError("CLI measurement provenance is missing")
+            expected_performance = float(measurement["wall_seconds"])
+            expected_unit = "seconds"
+        if (
+            float(metrics["performance"]) != expected_performance
+            or metrics.get("performance_unit") != expected_unit
+            or float(metrics["peak_rss_mib"]) != expected_rss_mib
+        ):
+            raise CampaignError("measurement metrics differ from retained artifacts")
+    except (CampaignError, KeyError, OSError, TypeError, ValueError, matrix.MatrixError) as error:
+        raise immutable_evidence.ImmutableEvidenceError(
+            f"measurement metric provenance is invalid: {error}"
+        ) from error
 
 
 def run_harness(
@@ -1069,112 +1094,175 @@ def run_harness(
     command_prefix: Sequence[str],
     timeout: int,
     oxipng_input: Path | None,
+    implementation_revision: str,
+    implementation_sha256: str,
+    contract: suite_contract.SuiteContract,
+    suite_binding: dict[str, Any],
 ) -> dict[str, Any]:
     run_dir = (
         raw_root
         / f"runs/{spec.id}/{harness.id}/{phase}/round-{round_number:02d}/{variant}"
     )
-    run_dir.mkdir(parents=True, exist_ok=True)
     binary = Path(build["binaries"][harness.binary]["path"])
-    output_file: Path | None = None
-    if harness.kind == "libtest":
-        command = [
-            str(binary),
-            "--bench",
-            "--exact",
-            harness.selector,
-            "--test-threads=1",
-        ]
-        cwd = Path(build["patch"]["manifest"]).parent
-    else:
-        if oxipng_input is None or harness.threads is None:
-            raise CampaignError("Oxipng CLI input or thread count is missing")
-        output_file = run_dir / "output.png"
-        command = [
-            str(binary),
-            "--opt",
-            "2",
-            "--threads",
-            str(harness.threads),
-            "--force",
-            "--quiet",
-            "--out",
-            str(output_file),
-            str(oxipng_input),
-        ]
-        cwd = run_dir
-    load_before = Path("/proc/loadavg").read_text(encoding="utf-8").strip()
-    measured = matrix.run_measured(
-        command,
-        cwd=cwd,
-        env=clean_runtime_environment(raw_root),
-        time_binary=GNU_TIME,
-        rss_path=run_dir / "gnu-time.txt",
-        timeout=timeout,
-        command_prefix=command_prefix,
-    )
-    load_after = Path("/proc/loadavg").read_text(encoding="utf-8").strip()
-    stdout = measured.pop("stdout")
-    stderr = measured.pop("stderr")
-    (run_dir / "stdout.bin").write_bytes(stdout)
-    (run_dir / "stderr.bin").write_bytes(stderr)
-    if measured["exit_code"] != 0 or measured["timed_out"]:
-        raise CampaignError(
-            f"workload failed for {spec.id}/{harness.id}/{variant}: {measured}"
-        )
-    if measured["gnu_time_exit_status"] != 0 or measured["peak_rss_kib"] <= 0:
-        raise CampaignError(
-            f"invalid GNU time result for {spec.id}/{harness.id}/{variant}"
-        )
-    if harness.kind == "libtest":
-        performance = parse_libtest_benchmark(
-            stdout.decode("utf-8", errors="replace"), harness.selector
-        )
-        correctness = {
-            "oracle": "exact libtest benchmark completed",
-            "reported_benchmark": harness.selector,
-        }
-    else:
-        if output_file is None or not output_file.is_file():
-            raise CampaignError(f"Oxipng produced no output for {harness.id}/{variant}")
-        output = output_file.read_bytes()
-        if not output.startswith(b"\x89PNG\r\n\x1a\n"):
-            raise CampaignError(
-                f"Oxipng output is not a PNG for {harness.id}/{variant}"
-            )
-        performance = float(measured["wall_seconds"])
-        correctness = {
-            "oracle": "successful PNG output with stable content digest",
-            "output_sha256": hashlib.sha256(output).hexdigest(),
-            "output_size_bytes": len(output),
-        }
-    record = {
-        "schema_version": 1,
+    binary_sha256 = sha256_file(binary)
+    normalized_phase = "warmup" if phase == "warmup" else "measurement"
+    identity = {
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
+        "suite_manifest_path": str(contract.bound_suite_manifest.resolve()),
         "target_id": spec.id,
-        "source_commit": spec.commit,
         "harness_id": harness.id,
-        "selector": harness.selector,
-        "phase": phase,
-        "round": round_number,
         "variant": variant,
-        "performance": performance,
-        "performance_unit": "ns_per_iter" if harness.kind == "libtest" else "seconds",
-        "peak_rss_mib": float(measured["peak_rss_kib"]) / 1024.0,
-        "correctness": correctness,
-        "stats_disabled": True,
-        "glibc_rseq_mode": "libc_default",
-        "affinity": {
-            "command_prefix": list(command_prefix),
-            "expected_cpu_list": "0-15",
-        },
-        "host_load": {"before": load_before, "after": load_after},
-        "measurement": measured,
-        "stdout_path": str((run_dir / "stdout.bin").resolve()),
-        "stderr_path": str((run_dir / "stderr.bin").resolve()),
-        "gnu_time_path": str((run_dir / "gnu-time.txt").resolve()),
+        "phase": normalized_phase,
+        "round": round_number,
+        "source_commit": spec.commit,
+        "implementation_revision": implementation_revision,
+        "implementation_sha256": implementation_sha256,
+        "binary_sha256": binary_sha256,
     }
-    persist_json(run_dir / "record.json", record)
-    return record
+
+    def collect(attempt: Path) -> dict[str, Any]:
+        output_file: Path | None = None
+        if harness.kind == "libtest":
+            command = [
+                str(binary),
+                "--bench",
+                "--exact",
+                harness.selector,
+                "--test-threads=1",
+            ]
+            cwd = Path(build["patch"]["manifest"]).parent
+        else:
+            if oxipng_input is None or harness.threads is None:
+                raise CampaignError("Oxipng CLI input or thread count is missing")
+            output_file = attempt / "output.png"
+            command = [
+                str(binary),
+                "--opt",
+                "2",
+                "--threads",
+                str(harness.threads),
+                "--force",
+                "--quiet",
+                "--out",
+                str(output_file),
+                str(oxipng_input),
+            ]
+            cwd = attempt
+        load_before = Path("/proc/loadavg").read_text(encoding="utf-8").strip()
+        runtime_environment = suite_contract.clean_runtime_environment(
+            attempt / "tmp"
+        )
+        time_path = attempt / "gnu-time.txt"
+        measured = matrix.run_measured(
+            command,
+            cwd=cwd,
+            env=runtime_environment,
+            time_binary=GNU_TIME,
+            rss_path=time_path,
+            timeout=timeout,
+            command_prefix=command_prefix,
+        )
+        load_after = Path("/proc/loadavg").read_text(encoding="utf-8").strip()
+        stdout = measured.pop("stdout")
+        stderr = measured.pop("stderr")
+        stdout_path = attempt / "stdout.bin"
+        stderr_path = attempt / "stderr.bin"
+        stdout_path.write_bytes(stdout)
+        stderr_path.write_bytes(stderr)
+        if measured["exit_code"] != 0 or measured["timed_out"]:
+            raise CampaignError(
+                f"workload failed for {spec.id}/{harness.id}/{variant}: {measured}"
+            )
+        if measured["gnu_time_exit_status"] != 0 or measured["peak_rss_kib"] <= 0:
+            raise CampaignError(
+                f"invalid GNU time result for {spec.id}/{harness.id}/{variant}"
+            )
+        if harness.kind == "libtest":
+            performance = parse_libtest_benchmark(
+                stdout.decode("utf-8", errors="replace"), harness.selector
+            )
+            correctness = {
+                "oracle": "exact libtest benchmark completed",
+                "reported_benchmark": harness.selector,
+            }
+        else:
+            if output_file is None or not output_file.is_file():
+                raise CampaignError(
+                    f"Oxipng produced no output for {harness.id}/{variant}"
+                )
+            output = output_file.read_bytes()
+            if not output.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise CampaignError(
+                    f"Oxipng output is not a PNG for {harness.id}/{variant}"
+                )
+            performance = float(measured["wall_seconds"])
+            correctness = {
+                "oracle": "successful PNG output with stable content digest",
+                "output_sha256": hashlib.sha256(output).hexdigest(),
+                "output_size_bytes": len(output),
+            }
+        performance_unit = (
+            "ns_per_iter" if harness.kind == "libtest" else "seconds"
+        )
+        peak_rss_mib = float(measured["peak_rss_kib"]) / 1024.0
+        artifacts = {
+            "binary": immutable_evidence.artifact_ref(binary),
+            "stdout": immutable_evidence.artifact_ref(stdout_path),
+            "stderr": immutable_evidence.artifact_ref(stderr_path),
+            "gnu_time": immutable_evidence.artifact_ref(time_path),
+        }
+        if output_file is not None:
+            artifacts["workload_output"] = immutable_evidence.artifact_ref(output_file)
+        return {
+            "schema_version": 1,
+            "evidence_schema_version": 1,
+            "identity": identity,
+            "metrics": {
+                "performance": performance,
+                "performance_unit": performance_unit,
+                "peak_rss_mib": peak_rss_mib,
+            },
+            "artifacts": artifacts,
+            "suite_manifest": dict(suite_binding),
+            **identity,
+            "selector": harness.selector,
+            "performance": performance,
+            "performance_unit": performance_unit,
+            "peak_rss_mib": peak_rss_mib,
+            "correctness": correctness,
+            "stats_disabled": True,
+            "glibc_rseq_mode": "libc_default",
+            "runtime_environment": suite_contract.runtime_environment_record(
+                runtime_environment
+            ),
+            "affinity": {
+                "command_prefix": list(command_prefix),
+                "expected_cpu_list": "0-15",
+            },
+            "host_load": {"before": load_before, "after": load_after},
+            "measurement": measured,
+            "stdout_path": str(stdout_path.resolve()),
+            "stderr_path": str(stderr_path.resolve()),
+            "gnu_time_path": str(time_path.resolve()),
+        }
+
+    try:
+        committed = immutable_evidence.run_or_reuse_json(
+            run_dir / "record.json",
+            collect,
+            lambda value: validate_committed_harness_record(
+                value, expected_identity=identity, harness=harness
+            ),
+        )
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
+    return {
+        **committed.value,
+        "record_path": str(committed.path),
+        "record_sha256": committed.record_sha256,
+        "record_reused": committed.reused,
+    }
 
 
 def validate_cli_output_digests(records: Sequence[dict[str, Any]]) -> None:
@@ -1262,7 +1350,7 @@ def validate_warmup_evidence(
                     f"{target_id}/{harness_id}/{variant} warmup entry is invalid"
                 )
             path_value = entry.get("record_path")
-            digest = entry.get("sha256")
+            digest = entry.get("record_sha256") or entry.get("sha256")
             if not isinstance(path_value, str) or not path_value:
                 raise CampaignError(
                     f"{target_id}/{harness_id}/{variant} warmup path is invalid"
@@ -1328,7 +1416,11 @@ def warmup_evidence_from_paths(
         if harness_id not in evidence or variant not in VARIANTS:
             raise CampaignError(f"warmup record identity is unexpected: {path}")
         evidence[str(harness_id)][str(variant)].append(
-            {"record_path": str(path.resolve()), "sha256": sha256_file(path)}
+            {
+                "record_path": str(path.resolve()),
+                "record_sha256": sha256_file(path),
+                "sha256": sha256_file(path),
+            }
         )
     for harness in spec.harnesses:
         validate_warmup_evidence(spec.id, harness.id, evidence[harness.id])
@@ -1342,6 +1434,10 @@ def retained_build_records_succeeded(
 ) -> bool:
     for variant in VARIANTS:
         path = raw_root / f"builds/{spec.id}/{variant}/build.json"
+        try:
+            immutable_evidence.validate_committed_file(path)
+        except immutable_evidence.ImmutableEvidenceError:
+            return False
         if not path.is_file() or builds[variant].get("success") is not True:
             return False
         try:
@@ -1366,6 +1462,7 @@ def build_target_result(
     build_records: dict[str, dict[str, Any]],
     raw_records: dict[str, list[dict[str, Any]]],
     measured_rounds: int = PRIMARY_ROUNDS,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> dict[str, Any]:
     validate_measurements(spec, measurements, measured_rounds=measured_rounds)
     harnesses: list[dict[str, Any]] = []
@@ -1415,6 +1512,9 @@ def build_target_result(
         "implementation_revision": implementation_revision,
         "implementation_sha256": implementation_sha256,
         "measured_rounds": measured_rounds,
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
+        "suite_manifest_path": str(contract.bound_suite_manifest.resolve()),
         "harnesses": harnesses,
         "evidence": {
             "raw_root": str(raw_root.resolve()),
@@ -1429,11 +1529,15 @@ def build_target_result(
     }
 
 
-def validate_core_result(result: dict[str, Any]) -> None:
+def validate_core_result(
+    result: dict[str, Any], *, measured_rounds: int = PRIMARY_ROUNDS
+) -> None:
     if result.get("schema_version") != 1:
         raise CampaignError("target result schema version must be 1")
-    if result.get("measured_rounds") not in PUBLISHABLE_ROUND_COUNTS:
-        raise CampaignError("target result must record three or five measured rounds")
+    if result.get("measured_rounds") != measured_rounds:
+        raise CampaignError(
+            f"target result must record exactly {measured_rounds} measured rounds"
+        )
     harnesses = result.get("harnesses")
     if not isinstance(harnesses, list) or not harnesses:
         raise CampaignError("target result must contain harnesses")
@@ -1453,7 +1557,9 @@ def validate_core_result(result: dict[str, Any]) -> None:
         )
 
 
-def validate_publishable_result(result: dict[str, Any]) -> None:
+def validate_publishable_result(
+    result: dict[str, Any], *, measured_rounds: int = PRIMARY_ROUNDS
+) -> None:
     if result.get("status") not in COMPLETED_STATUSES:
         raise CampaignError("target result must have a complete status")
     target_id = result.get("target_id")
@@ -1476,7 +1582,7 @@ def validate_publishable_result(result: dict[str, Any]) -> None:
         validate_measurements(
             spec,
             measurements,
-            measured_rounds=int(result["measured_rounds"]),
+            measured_rounds=measured_rounds,
         )
     except (KeyError, TypeError, ValueError) as error:
         raise CampaignError(f"measurement rows are invalid for {spec.id}") from error
@@ -1485,8 +1591,10 @@ def validate_publishable_result(result: dict[str, Any]) -> None:
 def publish_target_results(
     result_paths: Sequence[Path],
     *,
-    destination: Path = DEFAULT_RAW_ROOT / "targets",
+    destination: Path | None = None,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> tuple[Path, ...]:
+    destination = destination or contract.target_results_dir
     records: list[tuple[str, dict[str, Any]]] = []
     seen: set[str] = set()
     for result_path in result_paths:
@@ -1505,17 +1613,18 @@ def publish_target_results(
             raise CampaignError(
                 f"diagnostic result cannot enter primary publication: {result_path}"
             )
-        if result.get("measured_rounds") not in PUBLISHABLE_ROUND_COUNTS:
+        if result.get("measured_rounds") != contract.measured_rounds:
             raise CampaignError(
-                "primary publication requires three measured rounds or a retained "
-                f"legacy five-round artifact: {result_path}"
+                "primary publication requires exactly "
+                f"{contract.measured_rounds} measured rounds: {result_path}"
             )
         validate_primary_implementation(
             result.get("implementation_revision"),
             result.get("implementation_sha256"),
+            contract,
         )
-        validate_core_result(result)
-        validate_publishable_result(result)
+        validate_core_result(result, measured_rounds=contract.measured_rounds)
+        validate_publishable_result(result, measured_rounds=contract.measured_rounds)
         target_id = result.get("target_id")
         if (
             not isinstance(target_id, str)
@@ -1530,8 +1639,11 @@ def publish_target_results(
     published: list[Path] = []
     for target_id, result in records:
         output = destination / f"{target_id}.json"
-        persist_json(output, result)
-        published.append(output)
+        try:
+            committed = immutable_evidence.persist_immutable_json(output, result)
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
+        published.append(committed.path)
     return tuple(published)
 
 
@@ -1569,6 +1681,10 @@ def load_preflight(
     builds: dict[str, dict[str, Any]] = {}
     for variant in VARIANTS:
         path = raw_root / f"builds/{spec.id}/{variant}/build.json"
+        try:
+            immutable_evidence.validate_committed_file(path)
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
         record = json.loads(path.read_text(encoding="utf-8"))
         if (
             record.get("success") is not True
@@ -1676,11 +1792,16 @@ def run_target(
     diagnostic_current_worktree: bool = False,
     implementation_source: dict[str, Any] | None = None,
     measured_rounds: int = PRIMARY_ROUNDS,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> Path:
-    if diagnostic_current_worktree and measured_rounds != PRIMARY_ROUNDS:
-        raise CampaignError("diagnostic campaigns require three measured rounds")
-    if not diagnostic_current_worktree and measured_rounds != PRIMARY_ROUNDS:
-        raise CampaignError("primary campaigns require exactly three rounds")
+    if measured_rounds != contract.measured_rounds:
+        raise CampaignError(
+            f"campaign requires exactly {contract.measured_rounds} measured rounds"
+        )
+    try:
+        suite_binding = suite_contract.bind_suite_manifest(contract)
+    except suite_contract.SuiteContractError as error:
+        raise CampaignError(str(error)) from error
     if stage == "measure":
         (
             source_audit_path,
@@ -1723,7 +1844,7 @@ def run_target(
         if unialloc_implementation_sha256 is None or implementation_revision is None:
             raise CampaignError("primary implementation identity is incomplete")
         validate_primary_implementation(
-            implementation_revision, unialloc_implementation_sha256
+            implementation_revision, unialloc_implementation_sha256, contract
         )
     typed_source_hashes = {
         builds[variant]["derived_source_sha256"]
@@ -1751,7 +1872,9 @@ def run_target(
     )
     if stage == "preflight":
         round_indices = range(1)
-    with primary_measurement_lock(raw_root) as lock_path:
+    with primary_measurement_lock(
+        raw_root, lock_path=contract.measurement_lock
+    ) as lock_path:
         for round_index in round_indices:
             phase = "warmup" if round_index == 0 else "measured"
             round_number = 0 if round_index == 0 else round_index
@@ -1769,12 +1892,12 @@ def run_target(
                         command_prefix=command_prefix,
                         timeout=run_timeout,
                         oxipng_input=oxipng_input,
-                    )
-                    record["record_path"] = str(
-                        (
-                            raw_root
-                            / f"runs/{spec.id}/{harness.id}/{phase}/round-{round_number:02d}/{variant}/record.json"
-                        ).resolve()
+                        implementation_revision=str(implementation_revision),
+                        implementation_sha256=str(
+                            unialloc_implementation_sha256
+                        ),
+                        contract=contract,
+                        suite_binding=suite_binding,
                     )
                     all_records[harness.id].append(record)
                     records.append(record)
@@ -1841,9 +1964,11 @@ def run_target(
                 "variant": str(record["variant"]),
                 "performance": float(record["performance"]),
                 "peak_rss_mib": float(record["peak_rss_mib"]),
+                "record_path": str(record["record_path"]),
+                "record_sha256": str(record["record_sha256"]),
             }
             for record in all_records[harness.id]
-            if record["phase"] == "measured"
+            if record["phase"] == "measurement"
         ]
         for harness in spec.harnesses
     }
@@ -1887,6 +2012,7 @@ def run_target(
         build_records=builds,
         raw_records=all_records,
         measured_rounds=measured_rounds,
+        contract=contract,
     )
     result_path = target_result_path(
         raw_root,
@@ -1947,10 +2073,11 @@ def parse_cpu_list(raw: str) -> set[int]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", type=Path, default=SUITE_PATH)
     parser.add_argument(
         "--targets", default="collections,oxipng", help="comma-separated target ids"
     )
-    parser.add_argument("--raw-root", type=Path, default=DEFAULT_RAW_ROOT)
+    parser.add_argument("--raw-root", type=Path)
     implementation = parser.add_mutually_exclusive_group()
     implementation.add_argument(
         "--implementation-revision",
@@ -1960,8 +2087,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--current-working-tree",
         action="store_true",
         help=(
-            "explicitly select the diagnostic-only current working-tree route; "
-            "the legacy no-revision route has the same classification"
+            "explicitly select the diagnostic-only current working-tree route"
         ),
     )
     parser.add_argument("--toolchain", default="nightly-2026-06-11")
@@ -1971,8 +2097,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--rounds",
         type=int,
-        default=PRIMARY_ROUNDS,
-        help="one warmup, exactly three paired rounds, and median point estimates",
+        help="must equal the measured-round count declared by --suite",
     )
     parser.add_argument("--cpu-list", default="0-15")
     parser.add_argument("--numa-node", type=int, default=0)
@@ -1981,6 +2106,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--describe", action="store_true")
     args = parser.parse_args(argv)
+    try:
+        contract = suite_contract.load_suite_contract(args.suite)
+    except suite_contract.SuiteContractError as error:
+        parser.error(str(error))
+    args.suite = contract.path
+    args.suite_contract = contract
+    args.raw_root = (
+        args.raw_root or contract.runner_raw_dir("collections-oxipng")
+    ).resolve()
+    args.publication_dir = contract.target_results_dir
+    args.rounds = contract.measured_rounds if args.rounds is None else args.rounds
     selected = tuple(part.strip() for part in args.targets.split(",") if part.strip())
     unknown = sorted(set(selected) - set(TARGETS))
     if not selected or unknown:
@@ -1992,11 +2128,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         or args.run_timeout < 1
     ):
         parser.error("jobs and timeouts must be positive")
-    args.diagnostic_current_worktree = bool(
-        args.current_working_tree or args.implementation_revision is None
-    )
-    if args.rounds != PRIMARY_ROUNDS:
-        parser.error("campaigns require exactly three measured rounds")
+    args.diagnostic_current_worktree = bool(args.current_working_tree)
+    if args.implementation_revision is None and not args.diagnostic_current_worktree:
+        args.implementation_revision = contract.implementation_revision
+    if (
+        not args.diagnostic_current_worktree
+        and args.implementation_revision != contract.implementation_revision
+    ):
+        parser.error(
+            "--implementation-revision must equal the revision selected by --suite: "
+            + contract.implementation_revision
+        )
+    if args.rounds != contract.measured_rounds:
+        parser.error(
+            f"campaign requires exactly {contract.measured_rounds} measured rounds"
+        )
     if not args.diagnostic_current_worktree and (
         args.cpu_list != "0-15" or args.numa_node != 0
     ):
@@ -2014,7 +2160,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        verify_suite_contract()
+        contract = args.suite_contract
+        verify_suite_contract(contract)
         requested_implementation_revision = (
             resolve_implementation_revision(args.implementation_revision)
             if args.implementation_revision is not None
@@ -2022,7 +2169,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if requested_implementation_revision is not None:
             validate_primary_implementation(
-                requested_implementation_revision, SUITE_IMPLEMENTATION_SHA256
+                requested_implementation_revision,
+                contract.implementation_sha256,
+                contract,
             )
         implementation_revision = requested_implementation_revision or command_text(
             ["git", "rev-parse", "HEAD"], cwd=ROOT
@@ -2042,6 +2191,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                             for target_id in args.targets
                         },
                         "variants": list(VARIANTS),
+                        "suite": str(contract.path),
+                        "suite_id": contract.suite_id,
                         "implementation_revision": implementation_revision,
                         "campaign_classification": (
                             "diagnostic_current_worktree"
@@ -2081,7 +2232,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if not args.diagnostic_current_worktree:
                 validate_primary_implementation(
-                    implementation_revision, unialloc_implementation_sha256
+                    implementation_revision,
+                    unialloc_implementation_sha256,
+                    contract,
                 )
             wrapper = ensure_frozen_wrapper(
                 implementation,
@@ -2110,11 +2263,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 diagnostic_current_worktree=args.diagnostic_current_worktree,
                 implementation_source=implementation_source,
                 measured_rounds=args.rounds,
+                contract=contract,
             )
             for target_id in args.targets
         ]
         if args.stage != "preflight" and not args.diagnostic_current_worktree:
-            publish_target_results(paths)
+            publish_target_results(
+                paths,
+                destination=args.publication_dir,
+                contract=contract,
+            )
     except (
         CampaignError,
         matrix.MatrixError,

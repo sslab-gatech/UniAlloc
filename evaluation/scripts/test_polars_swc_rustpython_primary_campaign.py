@@ -18,6 +18,9 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "evaluation" / "scripts" / "polars_swc_rustpython_primary_campaign.py"
+CURRENT_SUITE = (
+    ROOT / "evaluation/config/type_isolation_primary_suite_v2_ce8af7b.json"
+)
 SPEC = importlib.util.spec_from_file_location("primary_campaign", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 campaign = importlib.util.module_from_spec(SPEC)
@@ -123,13 +126,32 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
     def test_current_working_tree_cli_controls_affinity_and_cannot_publish(
         self,
     ) -> None:
-        primary = campaign.parse_args(["--targets", "swc", "--phase", "build"])
+        primary = campaign.parse_args(
+            [
+                "--suite",
+                str(CURRENT_SUITE),
+                "--targets",
+                "swc",
+                "--phase",
+                "build",
+            ]
+        )
         self.assertEqual(
             campaign.SUITE_IMPLEMENTATION_REVISION, primary.allocator_revision
         )
         self.assertFalse(primary.current_working_tree)
         self.assertEqual("32-63", primary.cpu_list)
         self.assertEqual("1", primary.numa_node)
+        self.assertEqual(CURRENT_SUITE.resolve(), primary.suite)
+        self.assertEqual(
+            ROOT
+            / "evaluation/raw/type-isolation-primary-v2-ce8af7b/campaigns/polars-swc-rustpython",
+            primary.raw_dir,
+        )
+        self.assertEqual(
+            ROOT / "evaluation/raw/type-isolation-primary-v2-ce8af7b/targets",
+            primary.publication_dir,
+        )
 
         diagnostic = campaign.parse_args(
             [
@@ -169,6 +191,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             campaign.primary_publication_allowed(
                 {"status": "complete", "measured_rounds": 5},
                 current_working_tree=False,
+                measured_rounds=5,
             )
         )
         self.assertFalse(
@@ -213,7 +236,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             campaign.SUITE_IMPLEMENTATION_SHA256,
         )
         self.assertEqual(
-            "96fa64009550d52f89549dd2124e3b1a402a42b7f1fd1750888600dd67bb8a6f",
+            campaign.ANALYSIS_SUITE_MANIFEST_SHA256,
             campaign.PREREGISTRATION_SUITE_MANIFEST_SHA256,
         )
         self.assertEqual(
@@ -281,6 +304,47 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         output = "time: [900.0 µs 1.25 ms 1.5 ms]".encode()
         self.assertAlmostEqual(0.00125, campaign.criterion_seconds(output))
 
+    def test_committed_metrics_are_rederived_from_stdout_and_gnu_time(self) -> None:
+        spec = campaign.TARGET_SPECS["swc"]
+        harness_id = next(iter(spec.harness_filters))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            stdout = root / "stdout"
+            gnu_time = root / "time"
+            stdout.write_bytes(b"time: [900.0 us 1.25 ms 1.5 ms]\n")
+            gnu_time.write_text(
+                "UNIALLOC_PRIMARY_TIME\t0.1\t0.1\t100%\t4096\t0\t1\t0\t0\t0\n",
+                encoding="utf-8",
+            )
+            record = {
+                "evidence_schema_version": 1,
+                "identity": {},
+                "metrics": {
+                    "performance": 0.00125,
+                    "performance_unit": "seconds",
+                    "peak_rss_mib": 4.0,
+                },
+                "artifacts": {
+                    "stdout": campaign.immutable_evidence.artifact_ref(stdout),
+                    "gnu_time": campaign.immutable_evidence.artifact_ref(gnu_time),
+                },
+                "result_fingerprint": None,
+            }
+            campaign.validate_committed_run_record(
+                record,
+                expected_identity={},
+                spec=spec,
+                harness_id=harness_id,
+            )
+            record["metrics"]["performance"] = 0.5
+            with self.assertRaises(campaign.immutable_evidence.ImmutableEvidenceError):
+                campaign.validate_committed_run_record(
+                    record,
+                    expected_identity={},
+                    spec=spec,
+                    harness_id=harness_id,
+                )
+
     def test_compiler_route_gate_uses_three_same_round_ratios(self) -> None:
         rows = []
         for round_number in range(1, 4):
@@ -336,11 +400,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual("32-63", campaign.MEASUREMENT_CPU_LIST)
         self.assertEqual("1", campaign.MEASUREMENT_NUMA_NODE)
         self.assertEqual(
-            ROOT
-            / "evaluation"
-            / "raw"
-            / "type-isolation-primary-v1"
-            / "primary-measurement.lock",
+            campaign.suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK,
             campaign.MEASUREMENT_LOCK,
         )
         args = campaign.parse_args(["--targets", "swc", "--phase", "warmup"])
@@ -538,7 +598,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 contract,
             )
             self.assertEqual(
-                f"{library.parent.resolve()}:/existing",
+                str(library.parent.resolve()),
                 environment["LD_LIBRARY_PATH"],
             )
             binaries = {}
@@ -574,6 +634,40 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                     contract["library_soname"],
                     record["resolved_library_soname"],
                 )
+
+    def test_measurement_runtime_starts_from_allowlist(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
+            os.environ,
+            {
+                "PATH": "/usr/bin",
+                "HOME": "/home/test",
+                "LD_PRELOAD": "/tmp/wrong.so",
+                "LD_LIBRARY_PATH": "/tmp/wrong-lib",
+                "MALLOC_CONF": "dirty_decay_ms:0",
+                "GLIBC_TUNABLES": "glibc.pthread.rseq=0",
+                "RUSTFLAGS": "-Ctarget-cpu=native",
+                "UNIALLOC_TEST_LEAK": "1",
+            },
+            clear=True,
+        ):
+            environment = campaign.measurement_runtime_environment(
+                campaign.TARGET_SPECS["swc"], pathlib.Path(temporary), None
+            )
+        self.assertEqual(
+            {
+                "PATH",
+                "HOME",
+                "LANG",
+                "LC_ALL",
+                "TMPDIR",
+                "POLARS_MAX_THREADS",
+                "RAYON_NUM_THREADS",
+                "TOKIO_WORKER_THREADS",
+                "PYTHON_SYS_EXECUTABLE",
+            },
+            set(environment),
+        )
+        self.assertNotIn("GLIBC_TUNABLES", environment)
 
     def test_swc_patch_removes_upstream_mimalloc_activation(self) -> None:
         source = "extern crate swc_malloc;\nfn main() {}\n"

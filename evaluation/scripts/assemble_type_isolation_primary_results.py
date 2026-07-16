@@ -13,11 +13,17 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SUITE = ROOT / "evaluation/config/type_isolation_primary_suite.json"
-DEFAULT_TARGETS_DIR = ROOT / "evaluation/raw/type-isolation-primary-v1/targets"
-DEFAULT_OUTPUT = ROOT / "benchmark-results/type-isolation-primary-v1.json"
+sys.path.insert(0, str(ROOT))
+
+from evaluation.scripts import type_isolation_suite_contract as suite_contract  # noqa: E402
+from evaluation.scripts import immutable_evidence  # noqa: E402
+
+
+DEFAULT_SUITE = suite_contract.CURRENT_SUITE_PATH
+_DEFAULT_CONTRACT = suite_contract.load_suite_contract(DEFAULT_SUITE)
+DEFAULT_TARGETS_DIR = _DEFAULT_CONTRACT.target_results_dir
+DEFAULT_OUTPUT = _DEFAULT_CONTRACT.assembled_result
 VARIANTS = ("unialloc", "typed_plain", "typeiso_perf")
 STORED_DATA_ELIGIBILITY_GATES = (
     "correctness",
@@ -63,6 +69,84 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def validate_raw_measurement_record(
+    row: Mapping[str, Any],
+    *,
+    expected_identity: Mapping[str, Any],
+    expected_metrics: Mapping[str, Any],
+    context: str,
+) -> dict[str, Any]:
+    path_value = row.get("record_path") or row.get("raw_record")
+    expected_digest = row.get("record_sha256")
+    if not isinstance(path_value, str) or not path_value:
+        raise AssemblyError(f"{context} record_path is required")
+    if (
+        not isinstance(expected_digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected_digest) is None
+    ):
+        raise AssemblyError(f"{context} record_sha256 is required")
+    path = Path(path_value)
+    if not path.is_file() or sha256_file(path) != expected_digest:
+        raise AssemblyError(f"{context} raw record digest mismatch")
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        immutable_evidence.validate_measurement_record(
+            record,
+            expected_identity=expected_identity,
+            expected_metrics=expected_metrics,
+        )
+    except (
+        OSError,
+        json.JSONDecodeError,
+        immutable_evidence.ImmutableEvidenceError,
+    ) as error:
+        raise AssemblyError(f"{context} raw record validation failed: {error}") from error
+    identity = record["identity"]
+    artifacts = record["artifacts"]
+    binary = artifacts.get("binary")
+    if not isinstance(binary, dict) or identity.get("binary_sha256") != binary.get(
+        "sha256"
+    ):
+        raise AssemblyError(f"{context} binary identity mismatch")
+    suite_manifest = record.get("suite_manifest")
+    if not isinstance(suite_manifest, dict):
+        raise AssemblyError(f"{context} suite manifest attestation is missing")
+    try:
+        immutable_evidence.validate_artifact_ref(
+            suite_manifest, context=f"{context} suite manifest"
+        )
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise AssemblyError(str(error)) from error
+    if suite_manifest.get("sha256") != expected_identity["suite_manifest_sha256"]:
+        raise AssemblyError(f"{context} suite manifest identity mismatch")
+    for field, expected in expected_identity.items():
+        if record.get(field) != expected:
+            raise AssemblyError(f"{context} flattened identity mismatch for {field}")
+    for field, expected in expected_metrics.items():
+        actual = record.get(field)
+        if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+            if not isinstance(actual, (int, float)) or float(actual) != float(expected):
+                raise AssemblyError(f"{context} flattened metric mismatch for {field}")
+        elif actual != expected:
+            raise AssemblyError(f"{context} flattened metric mismatch for {field}")
+    correctness = (
+        isinstance(record.get("correctness"), dict)
+        and bool(record["correctness"])
+    ) or record.get("success") is True or (
+        record.get("exit_code") == 0
+        and record.get("timed_out") is False
+        and record.get("gnu_time_exit_status", record.get("time_exit_code", 0)) == 0
+    )
+    if not correctness:
+        raise AssemblyError(f"{context} raw record has no successful correctness proof")
+    return {
+        "record_path": str(path.resolve()),
+        "record_sha256": expected_digest,
+        "binary_sha256": str(identity["binary_sha256"]),
+        "correctness": True,
+    }
+
+
 def object_index(
     rows: Any, key: str, expected: list[str], context: str
 ) -> dict[str, Mapping[str, Any]]:
@@ -90,11 +174,20 @@ def object_index(
     return indexed
 
 
-def validate_measurements(rows: Any, context: str) -> None:
+def validate_measurements(
+    rows: Any,
+    context: str,
+    *,
+    measured_rounds: int,
+    identity_base: Mapping[str, Any],
+    performance_unit: str,
+    allowed_binary_sha256: Mapping[str, set[str]],
+) -> dict[tuple[int, str], dict[str, Any]]:
     if not isinstance(rows, list):
         raise AssemblyError(f"{context}.measurements must be a list")
     seen: set[tuple[int, str]] = set()
     rounds: set[int] = set()
+    attestations: dict[tuple[int, str], dict[str, Any]] = {}
     for position, row in enumerate(rows):
         if not isinstance(row, dict):
             raise AssemblyError(f"{context}.measurements[{position}] must be an object")
@@ -120,9 +213,11 @@ def validate_measurements(rows: Any, context: str) -> None:
                 or float(value) <= 0.0
             ):
                 raise AssemblyError(f"{context} {field} must be finite and positive")
-    expected_rounds = set(range(1, 6))
+    expected_rounds = set(range(1, measured_rounds + 1))
     if rounds != expected_rounds or len(seen) != len(expected_rounds) * len(VARIANTS):
-        raise AssemblyError(f"{context} must contain exact measured rounds 1 through 5")
+        raise AssemblyError(
+            f"{context} must contain exact measured rounds 1 through {measured_rounds}"
+        )
     for round_number in sorted(expected_rounds):
         missing = [
             variant for variant in VARIANTS if (round_number, variant) not in seen
@@ -131,12 +226,42 @@ def validate_measurements(rows: Any, context: str) -> None:
             raise AssemblyError(
                 f"{context} round {round_number} is missing {', '.join(missing)}"
             )
+    for position, row in enumerate(rows):
+        round_number = int(row["round"])
+        variant = str(row["variant"])
+        expected_identity = {
+            **identity_base,
+            "variant": variant,
+            "phase": "measurement",
+            "round": round_number,
+        }
+        expected_metrics = {
+            "performance": row["performance"],
+            "performance_unit": performance_unit,
+            "peak_rss_mib": row["peak_rss_mib"],
+        }
+        attestation = validate_raw_measurement_record(
+            row,
+            expected_identity=expected_identity,
+            expected_metrics=expected_metrics,
+            context=f"{context}.measurements[{position}]",
+        )
+        if attestation["binary_sha256"] not in allowed_binary_sha256[variant]:
+            raise AssemblyError(
+                f"{context} {variant} measurement binary is absent from build evidence"
+            )
+        attestations[(round_number, variant)] = attestation
+    return attestations
 
 
 def validate_warmup_evidence(
     raw_evidence: Any,
     target_id: str,
     harness_id: str,
+    *,
+    identity_base: Mapping[str, Any],
+    performance_unit: str,
+    allowed_binary_sha256: Mapping[str, set[str]],
 ) -> dict[str, Any]:
     context = f"{target_id}.{harness_id}.warmup_evidence"
     if not isinstance(raw_evidence, dict) or set(raw_evidence) != set(VARIANTS):
@@ -155,7 +280,7 @@ def validate_warmup_evidence(
                     f"{context}.{variant}[{position}] must be an object"
                 )
             path_value = entry.get("record_path")
-            expected_digest = entry.get("sha256")
+            expected_digest = entry.get("record_sha256")
             if not isinstance(path_value, str) or not path_value:
                 raise AssemblyError(f"{context}.{variant} record path is invalid")
             path = Path(path_value)
@@ -174,24 +299,32 @@ def validate_warmup_evidence(
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as error:
                 raise AssemblyError(f"{context}.{variant} record is invalid") from error
-            if (
-                not isinstance(record, dict)
-                or record.get("target_id") != target_id
-                or record.get("harness_id") != harness_id
-                or record.get("variant") != variant
-                or record.get("phase") != "warmup"
-                or record.get("round") != 0
-            ):
-                raise AssemblyError(f"{context}.{variant} record identity mismatch")
-            for field in ("performance", "peak_rss_mib"):
-                value = record.get(field)
-                if (
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(float(value))
-                    or float(value) <= 0.0
-                ):
-                    raise AssemblyError(f"{context}.{variant} {field} is invalid")
+            if not isinstance(record, dict):
+                raise AssemblyError(f"{context}.{variant} record is invalid")
+            expected_identity = {
+                **identity_base,
+                "variant": variant,
+                "phase": "warmup",
+                "round": 0,
+            }
+            expected_metrics = {
+                "performance": record.get("performance"),
+                "performance_unit": performance_unit,
+                "peak_rss_mib": record.get("peak_rss_mib"),
+            }
+            attested = validate_raw_measurement_record(
+                {
+                    "record_path": path_value,
+                    "record_sha256": expected_digest,
+                },
+                expected_identity=expected_identity,
+                expected_metrics=expected_metrics,
+                context=f"{context}.{variant}",
+            )
+            if attested["binary_sha256"] not in allowed_binary_sha256[variant]:
+                raise AssemblyError(
+                    f"{context}.{variant} binary is absent from build evidence"
+                )
             attestation = {
                 "target_id": target_id,
                 "harness_id": harness_id,
@@ -201,6 +334,7 @@ def validate_warmup_evidence(
                 "performance": float(record["performance"]),
                 "peak_rss_mib": float(record["peak_rss_mib"]),
                 "record_sha256": str(expected_digest),
+                "correctness": bool(attested["correctness"]),
             }
             try:
                 attestation["raw_record_path"] = (
@@ -537,6 +671,32 @@ def compact_target_provenance(
     return compact
 
 
+def allowed_build_binary_digests(
+    compact_provenance: Mapping[str, Any], target_id: str
+) -> dict[str, set[str]]:
+    raw_builds = compact_provenance.get("builds")
+    if not isinstance(raw_builds, dict):
+        raise AssemblyError(f"{target_id} compact build evidence is missing")
+    result: dict[str, set[str]] = {}
+    for variant in VARIANTS:
+        raw_build = raw_builds.get(variant)
+        raw_digests = (
+            raw_build.get("binary_sha256") if isinstance(raw_build, dict) else None
+        )
+        if not isinstance(raw_digests, dict):
+            raise AssemblyError(f"{target_id}.{variant} build binary evidence is missing")
+        digests = {
+            str(digest)
+            for digest in raw_digests.values()
+            if isinstance(digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+        }
+        if not digests:
+            raise AssemblyError(f"{target_id}.{variant} build binary evidence is empty")
+        result[variant] = digests
+    return result
+
+
 def normalized_measurements(result_harness: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows = result_harness["measurements"]
     normalized: list[dict[str, Any]] = []
@@ -551,6 +711,9 @@ def normalized_measurements(result_harness: Mapping[str, Any]) -> list[dict[str,
         relative = repository_relative_path(raw_path)
         if relative is not None:
             clean["raw_record_path"] = relative
+        elif isinstance(raw_path, str) and raw_path:
+            clean["raw_record_path"] = str(Path(raw_path).resolve())
+        clean["record_sha256"] = str(row["record_sha256"])
         normalized.append(clean)
     return normalized
 
@@ -764,9 +927,12 @@ def normalized_target(
     suite_target: Mapping[str, Any],
     target_result: Mapping[str, Any],
     route_gate: Mapping[str, Any],
+    suite_id: str,
+    suite_manifest_sha256: str,
     implementation_revision: str,
     implementation_sha256: str,
     families: tuple[dict[str, str], ...],
+    measured_rounds: int,
 ) -> dict[str, Any]:
     target_id = str(suite_target["id"])
     rss_work_model = suite_target.get("rss_work_model")
@@ -780,6 +946,19 @@ def normalized_target(
         raise AssemblyError(
             f"target id mismatch for {target_id}: {target_result.get('target_id')!r}"
         )
+    if target_result.get("suite_id") != suite_id:
+        raise AssemblyError(f"{target_id} suite_id mismatch")
+    if target_result.get("suite_manifest_sha256") != suite_manifest_sha256:
+        raise AssemblyError(f"{target_id} suite manifest digest mismatch")
+    target_suite_path = target_result.get("suite_manifest_path")
+    if not isinstance(target_suite_path, str) or not target_suite_path:
+        raise AssemblyError(f"{target_id} suite_manifest_path is required")
+    target_suite_manifest = Path(target_suite_path)
+    if (
+        not target_suite_manifest.is_file()
+        or sha256_file(target_suite_manifest) != suite_manifest_sha256
+    ):
+        raise AssemblyError(f"{target_id} suite manifest binding is invalid")
     expected_commit = suite_target["source"]["commit"]
     if target_result.get("source_commit") != expected_commit:
         raise AssemblyError(
@@ -798,6 +977,17 @@ def normalized_target(
             f"{implementation_sha256}, got "
             f"{target_result.get('implementation_sha256')}"
         )
+    if target_result.get("measured_rounds") != measured_rounds:
+        raise AssemblyError(
+            f"{target_id} measured_rounds mismatch: expected {measured_rounds}, "
+            f"got {target_result.get('measured_rounds')}"
+        )
+    compact_provenance = compact_target_provenance(target_result, target_id)
+    if "source_audit" not in compact_provenance:
+        raise AssemblyError(f"{target_id} source audit evidence is missing")
+    allowed_binary_sha256 = allowed_build_binary_digests(
+        compact_provenance, target_id
+    )
     suite_harnesses = suite_target["harnesses"]
     harness_ids = [str(harness["id"]) for harness in suite_harnesses]
     result_harnesses = object_index(
@@ -823,6 +1013,15 @@ def normalized_target(
             )
         if result_harness.get("metric_direction") != direction:
             raise AssemblyError(f"{target_id}.{harness_id} metric direction mismatch")
+        identity_base = {
+            "suite_id": suite_id,
+            "suite_manifest_sha256": suite_manifest_sha256,
+            "target_id": target_id,
+            "harness_id": harness_id,
+            "source_commit": expected_commit,
+            "implementation_revision": implementation_revision,
+            "implementation_sha256": implementation_sha256,
+        }
         gates = result_harness.get("gates")
         if not isinstance(gates, dict):
             raise AssemblyError(f"{target_id}.{harness_id}.gates must be an object")
@@ -842,10 +1041,20 @@ def normalized_target(
                 f"{target_id}.{harness_id}.{ATTRIBUTION_GATE} must be a boolean"
             )
         validate_measurements(
-            result_harness.get("measurements"), f"{target_id}.{harness_id}"
+            result_harness.get("measurements"),
+            f"{target_id}.{harness_id}",
+            measured_rounds=measured_rounds,
+            identity_base=identity_base,
+            performance_unit=performance_unit,
+            allowed_binary_sha256=allowed_binary_sha256,
         )
         warmup_attestations = validate_warmup_evidence(
-            result_harness.get("warmup_evidence"), target_id, harness_id
+            result_harness.get("warmup_evidence"),
+            target_id,
+            harness_id,
+            identity_base=identity_base,
+            performance_unit=performance_unit,
+            allowed_binary_sha256=allowed_binary_sha256,
         )
         measurement_rows = result_harness["measurements"]
         comparisons = {
@@ -913,16 +1122,30 @@ def normalized_target(
         ),
         "harnesses": normalized_harnesses,
     }
-    normalized["compact_provenance"] = compact_target_provenance(
-        target_result, target_id
-    )
+    normalized["compact_provenance"] = compact_provenance
     return normalized
 
 
-def assemble(suite_path: Path, targets_dir: Path, output: Path) -> Path:
+def assemble(
+    suite_path: Path,
+    targets_dir: Path,
+    output: Path,
+    *,
+    bound_suite_manifest: Path | None = None,
+) -> Path:
     suite_path = suite_path.resolve()
     targets_dir = targets_dir.resolve()
-    suite = load_object(suite_path)
+    try:
+        contract = suite_contract.load_suite_contract(suite_path)
+    except suite_contract.SuiteContractError as error:
+        raise AssemblyError(str(error)) from error
+    try:
+        suite_binding = suite_contract.verify_suite_manifest_binding(
+            contract, path=bound_suite_manifest
+        )
+    except suite_contract.SuiteContractError as error:
+        raise AssemblyError(str(error)) from error
+    suite = contract.manifest
     suite_targets = suite.get("targets")
     if not isinstance(suite_targets, list):
         raise AssemblyError("suite.targets must be a list")
@@ -958,19 +1181,12 @@ def assemble(suite_path: Path, targets_dir: Path, output: Path) -> Path:
         or re.fullmatch(r"[0-9a-f]{64}", implementation_sha256) is None
     ):
         raise AssemblyError("suite implementation digest must be SHA-256")
-    analysis_amendments = suite.get("analysis_amendments")
-    if not isinstance(analysis_amendments, list) or not analysis_amendments:
-        raise AssemblyError("suite analysis amendment record is missing")
-    if not isinstance(analysis_amendments[0], dict):
-        raise AssemblyError("suite analysis amendment record is invalid")
-    original_manifest_sha256 = analysis_amendments[0].get(
-        "original_campaign_manifest_sha256"
-    )
-    if (
-        not isinstance(original_manifest_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", original_manifest_sha256) is None
+    analysis_amendments = suite.get("analysis_amendments", [])
+    if not isinstance(analysis_amendments, list) or any(
+        not isinstance(amendment, dict) for amendment in analysis_amendments
     ):
-        raise AssemblyError("suite original campaign manifest digest is invalid")
+        raise AssemblyError("suite analysis amendment record is invalid")
+    original_manifest_sha256 = contract.preregistration_manifest_sha256
     families = comparison_contracts(suite)
     targets = []
     for suite_target in suite_targets:
@@ -983,9 +1199,12 @@ def assemble(suite_path: Path, targets_dir: Path, output: Path) -> Path:
                 suite_target,
                 target_result,
                 route_gate,
+                contract.suite_id,
+                contract.manifest_sha256,
                 implementation_revision,
                 implementation_sha256,
                 families,
+                contract.measured_rounds,
             )
         )
     pass_count = sum(
@@ -1003,6 +1222,10 @@ def assemble(suite_path: Path, targets_dir: Path, output: Path) -> Path:
         "implementation_revision": implementation_revision,
         "implementation_sha256": implementation_sha256,
         "suite_manifest_sha256": sha256_file(suite_path),
+        "suite_manifest_binding": {
+            "sha256": suite_binding["sha256"],
+            "bytes": suite_binding["bytes"],
+        },
         "analysis_amendments": analysis_amendments,
         "original_campaign_manifest_sha256": original_manifest_sha256,
         "compiler_route_attribution": attribution_counts(
@@ -1016,27 +1239,44 @@ def assemble(suite_path: Path, targets_dir: Path, output: Path) -> Path:
         "targets": targets,
     }
     output = output.resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(output.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(candidate, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    temporary.replace(output)
-    return output
+    try:
+        committed = immutable_evidence.persist_immutable_json(output, candidate)
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise AssemblyError(str(error)) from error
+    return committed.path
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
-    parser.add_argument("--targets-dir", type=Path, default=DEFAULT_TARGETS_DIR)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    return parser.parse_args()
+    parser.add_argument("--targets-dir", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--bound-suite-manifest", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        contract = suite_contract.load_suite_contract(args.suite)
+    except suite_contract.SuiteContractError as error:
+        parser.error(str(error))
+    args.suite = contract.path
+    args.targets_dir = (args.targets_dir or contract.target_results_dir).resolve()
+    args.output = (args.output or contract.assembled_result).resolve()
+    args.bound_suite_manifest = (
+        args.bound_suite_manifest.resolve()
+        if args.bound_suite_manifest is not None
+        else contract.bound_suite_manifest
+    )
+    return args
 
 
 def main() -> int:
     args = parse_args()
     try:
-        output = assemble(args.suite, args.targets_dir, args.output)
+        output = assemble(
+            args.suite,
+            args.targets_dir,
+            args.output,
+            bound_suite_manifest=args.bound_suite_manifest,
+        )
     except AssemblyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

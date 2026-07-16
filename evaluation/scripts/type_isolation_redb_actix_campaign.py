@@ -2,12 +2,11 @@
 """Run exact-pin redb and Actix Web Type Isolation campaigns.
 
 The adapter fails closed on source pins, allocator activation, actual-MIR
-compiler provenance, correctness, or incomplete primary three-round pairing. Raw build,
+compiler provenance, correctness, or incomplete suite-declared pairing. Raw build,
 audit, command, stdout, stderr, and GNU time artifacts remain under the selected
 raw directory. A compiler-route miss retains the complete target as an explicit
 attribution limit rather than discarding otherwise eligible measurements.
-Each campaign runs one warmup plus three paired measured rounds and reports
-median point estimates.
+Each campaign follows the warmup and paired-round contract selected by ``--suite``.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
-import fcntl
 import hashlib
 import json
 import math
@@ -27,7 +25,7 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 
@@ -36,30 +34,29 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import realworld_type_isolation_matrix as matrix  # noqa: E402
+import immutable_evidence  # noqa: E402
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_RAW_DIR = ROOT / "evaluation" / "raw" / "type-isolation-redb-actix-f5d0c19"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from evaluation.scripts import type_isolation_suite_contract as suite_contract  # noqa: E402
+
+
+SUITE_PATH = suite_contract.CURRENT_SUITE_PATH
+_DEFAULT_SUITE_CONTRACT = suite_contract.load_suite_contract(SUITE_PATH)
+DEFAULT_RAW_DIR = _DEFAULT_SUITE_CONTRACT.runner_raw_dir("redb-actix")
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation" / "external" / "_checkouts"
-PINNED_IMPLEMENTATION_REVISION = "f5d0c19c1cc5b56fdac3282d69333dd8c85d4cf2"
-PINNED_IMPLEMENTATION_SHA256 = (
-    "cab1e580c08e2b16308bae75501716049ba428b040fb04bf305269c9ba9eaf01"
-)
-PINNED_IMPLEMENTATION_FILE_COUNT = 131
-PINNED_IMPLEMENTATION_SIZE_BYTES = 4_426_670
+PINNED_IMPLEMENTATION_REVISION = _DEFAULT_SUITE_CONTRACT.implementation_revision
+PINNED_IMPLEMENTATION_SHA256 = _DEFAULT_SUITE_CONTRACT.implementation_sha256
+PINNED_IMPLEMENTATION_FILE_COUNT = _DEFAULT_SUITE_CONTRACT.implementation_file_count
+PINNED_IMPLEMENTATION_SIZE_BYTES = _DEFAULT_SUITE_CONTRACT.implementation_size_bytes
 PASS_RELATIVE_PATH = pathlib.PurePosixPath(
     "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 )
-ASSEMBLER_TARGET_DIR = (
-    ROOT / "evaluation" / "raw" / "type-isolation-primary-v1" / "targets"
-)
-MEASUREMENT_LOCK_PATH = (
-    ROOT
-    / "evaluation"
-    / "raw"
-    / "type-isolation-primary-v1"
-    / "primary-measurement.lock"
-)
+ASSEMBLER_TARGET_DIR = _DEFAULT_SUITE_CONTRACT.target_results_dir
+MEASUREMENT_LOCK_PATH = _DEFAULT_SUITE_CONTRACT.measurement_lock
 VARIANTS = ("unialloc", "typed_plain", "typeiso_perf")
 REQUIRED_GATES = (
     "build_success",
@@ -74,11 +71,9 @@ CORE_REQUIRED_GATES = tuple(
     gate for gate in REQUIRED_GATES if gate != "compiler_route_equivalent"
 )
 RESULT_PREFIX = "UNIALLOC_REDB_ACTIX_RESULT="
-ROUNDS = 3
-# Artifact readers retain compatibility with completed five-round campaigns;
-# every scheduling path below accepts ROUNDS only.
+ROUNDS = _DEFAULT_SUITE_CONTRACT.measured_rounds
+# Direct artifact validation retains compatibility with the historical v1 suite.
 LEGACY_ROUNDS = 5
-PUBLISHABLE_ROUND_COUNTS = frozenset((ROUNDS, LEGACY_ROUNDS))
 BASELINE_FORCE_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
 """Force-load a baseline UniAlloc rlib into selected Cargo rustc invocations."""
 
@@ -228,6 +223,38 @@ TARGETS = {
         ),
     ),
 }
+
+
+def validate_specs_against_suite(
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
+) -> None:
+    gate = contract.manifest.get("compiler_route_equivalence_gate")
+    if not isinstance(gate, dict) or (
+        gate.get("minimum_ratio"), gate.get("maximum_ratio")
+    ) != (0.85, 1.15):
+        raise CampaignError("suite compiler-route equivalence bounds changed")
+    indexed = {
+        str(target.get("id")): target
+        for target in contract.manifest["targets"]
+        if isinstance(target, dict)
+    }
+    for target_id, spec in TARGETS.items():
+        target = indexed.get(target_id)
+        if not isinstance(target, dict):
+            raise CampaignError(f"suite target is missing: {target_id}")
+        source = target.get("source")
+        if not isinstance(source, dict) or (
+            source.get("ref"), source.get("commit")
+        ) != (spec.source_ref, spec.source_commit):
+            raise CampaignError(f"suite source pin changed for {target_id}")
+        harnesses = target.get("harnesses")
+        observed = (
+            [str(row.get("id")) for row in harnesses if isinstance(row, dict)]
+            if isinstance(harnesses, list)
+            else []
+        )
+        if observed != [row.id for row in spec.harnesses]:
+            raise CampaignError(f"suite harness contract changed for {target_id}")
 
 
 REDB_RUNNER_SOURCE = r"""use redb::{
@@ -708,6 +735,7 @@ def materialize_implementation_revision(
     revision: str,
     *,
     repository: pathlib.Path = ROOT,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> ImplementationSnapshot:
     commit = git_output(repository, "rev-parse", f"{revision}^{{commit}}")
     if commit != revision:
@@ -740,9 +768,9 @@ def materialize_implementation_revision(
             staging, [str(row["path"]) for row in rows]
         )
         if (
-            digest != PINNED_IMPLEMENTATION_SHA256
-            or file_count != PINNED_IMPLEMENTATION_FILE_COUNT
-            or size_bytes != PINNED_IMPLEMENTATION_SIZE_BYTES
+            digest != contract.implementation_sha256
+            or file_count != contract.implementation_file_count
+            or size_bytes != contract.implementation_size_bytes
         ):
             raise CampaignError(
                 "pinned implementation canonical stream mismatch: "
@@ -902,7 +930,13 @@ def parse_cpu_set(raw: str) -> set[int]:
     return cpus
 
 
-def environment_record() -> dict[str, Any]:
+def clean_runtime_environment(raw_dir: pathlib.Path) -> dict[str, str]:
+    return suite_contract.clean_runtime_environment(raw_dir / "tmp" / "runtime")
+
+
+def environment_record(
+    runtime_environment: dict[str, str] | None = None,
+) -> dict[str, Any]:
     affinity = sorted(os.sched_getaffinity(0))
     load = os.getloadavg()
     uname = os.uname()
@@ -915,36 +949,32 @@ def environment_record() -> dict[str, Any]:
         "logical_cpu_count": os.cpu_count(),
         "kernel_release": uname.release,
         "machine": uname.machine,
-        "glibc_tunables": matrix.merge_glibc_tunable(
-            os.environ.get("GLIBC_TUNABLES", "")
+        "runtime_environment_policy": suite_contract.RUNTIME_ENVIRONMENT_POLICY,
+        "rseq_policy": suite_contract.PRODUCTION_RSEQ_POLICY,
+        "runtime_environment": (
+            suite_contract.runtime_environment_record(runtime_environment)
+            if runtime_environment is not None
+            else None
         ),
     }
 
 
 @contextlib.contextmanager
-def primary_measurement_lock(target_id: str):
-    MEASUREMENT_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with MEASUREMENT_LOCK_PATH.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        handle.seek(0)
-        handle.truncate()
-        handle.write(
-            json.dumps(
-                {
-                    "pid": os.getpid(),
-                    "target_id": target_id,
-                    "acquired_unix_seconds": time.time(),
-                    "cpu_affinity": sorted(os.sched_getaffinity(0)),
-                },
-                sort_keys=True,
-            )
-            + "\n"
-        )
-        handle.flush()
-        try:
-            yield str(MEASUREMENT_LOCK_PATH.resolve())
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+def primary_measurement_lock(
+    target_id: str,
+    *,
+    raw_root: pathlib.Path = DEFAULT_RAW_DIR,
+    lock_path: pathlib.Path = MEASUREMENT_LOCK_PATH,
+):
+    if lock_path.resolve() != suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK.resolve():
+        raise CampaignError("timed campaigns require the host-wide measurement lock")
+    with suite_contract.primary_measurement_lock(
+        runner=pathlib.Path(__file__).name,
+        raw_root=raw_root,
+        target_id=target_id,
+        phase="warmup-and-measured",
+    ) as metadata:
+        yield str(metadata["lock_path"])
 
 
 def materialize_source(
@@ -1455,6 +1485,7 @@ def build_snapshot_typeiso_force_load_rlib(
         "panic_strategy": "unwind",
         "implementation_revision": implementation.revision,
         "implementation_sha256": implementation.sha256,
+        "frozen_implementation_sha256": implementation.sha256,
         "implementation_snapshot": str(implementation.path),
         "implementation_manifest_path": str(implementation.manifest_path),
         "candidate_count": len(candidates),
@@ -1675,6 +1706,7 @@ def build_redb_variant(
         "cargo_lock_sha256": sha256_file(worktree / "Cargo.lock"),
         "implementation_revision": implementation.revision,
         "implementation_sha256": implementation.sha256,
+        "frozen_implementation_sha256": implementation.sha256,
         "implementation_snapshot": str(implementation.path),
         "implementation_manifest_path": str(implementation.manifest_path),
         "unialloc_dependency_path": (
@@ -1696,7 +1728,10 @@ def build_redb_variant(
         **artifacts,
     }
     path = raw_dir / "builds" / spec.id / variant / "build.json"
-    write_json(path, record)
+    try:
+        immutable_evidence.persist_immutable_json(path, record)
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
     record["build_path"] = str(path.resolve())
     return record
 
@@ -1888,6 +1923,7 @@ def build_actix_variant(
         "cargo_lock_sha256": sha256_file(worktree / "Cargo.lock"),
         "implementation_revision": implementation.revision,
         "implementation_sha256": implementation.sha256,
+        "frozen_implementation_sha256": implementation.sha256,
         "implementation_snapshot": str(implementation.path),
         "implementation_manifest_path": str(implementation.manifest_path),
         "unialloc_implementation_sha256": implementation.sha256,
@@ -1904,7 +1940,10 @@ def build_actix_variant(
         "commands": commands,
     }
     path = raw_dir / "builds" / spec.id / variant / "build.json"
-    write_json(path, record)
+    try:
+        immutable_evidence.persist_immutable_json(path, record)
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
     record["build_path"] = str(path.resolve())
     return record
 
@@ -1958,12 +1997,6 @@ def build_target_variants(
         raise CampaignError(
             f"variant implementation identities differ: {sorted(observed)}"
         )
-    for build in builds.values():
-        build["frozen_implementation_sha256"] = implementation.sha256
-        build_path = pathlib.Path(build["build_path"])
-        persisted = json.loads(build_path.read_text(encoding="utf-8"))
-        persisted["frozen_implementation_sha256"] = implementation.sha256
-        write_json(build_path, persisted)
     return builds
 
 
@@ -1979,6 +2012,10 @@ def load_exact_builds(
     builds: dict[str, dict[str, Any]] = {}
     for variant in VARIANTS:
         build_path = raw_dir / "builds" / spec.id / variant / "build.json"
+        try:
+            immutable_evidence.validate_committed_file(build_path)
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
         try:
             build = json.loads(build_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
@@ -2253,6 +2290,10 @@ def persist_measurement(
     variant: str,
     round_index: int,
     build: dict[str, Any],
+    runtime_environment: dict[str, str],
+    identity: dict[str, Any],
+    suite_binding: dict[str, Any],
+    gnu_time_path: pathlib.Path,
 ) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     stdout_path = path.with_suffix(".stdout")
@@ -2285,6 +2326,23 @@ def persist_measurement(
     if not math.isfinite(peak_rss_mib) or peak_rss_mib <= 0:
         raise CampaignError(f"invalid peak RSS: {peak_rss_mib}")
     record = {
+        "evidence_schema_version": 1,
+        "identity": identity,
+        "metrics": {
+            "performance": performance,
+            "performance_unit": "seconds",
+            "peak_rss_mib": peak_rss_mib,
+        },
+        "artifacts": {
+            "binary": immutable_evidence.artifact_ref(
+                pathlib.Path(str(build["binary"]))
+            ),
+            "stdout": immutable_evidence.artifact_ref(stdout_path),
+            "stderr": immutable_evidence.artifact_ref(stderr_path),
+            "gnu_time": immutable_evidence.artifact_ref(gnu_time_path),
+        },
+        "suite_manifest": dict(suite_binding),
+        **identity,
         "target_id": spec.id,
         "harness_id": harness.id,
         "variant": variant,
@@ -2309,18 +2367,59 @@ def persist_measurement(
             if build.get("audit") is not None
             else build["build_path"]
         ),
-        "environment": environment_record(),
+        "environment": environment_record(runtime_environment),
+        "rseq_policy": suite_contract.PRODUCTION_RSEQ_POLICY,
     }
     write_json(path, record)
-    return {
-        "round": round_index,
-        "variant": variant,
-        "performance": performance,
-        "peak_rss_mib": peak_rss_mib,
-        "raw_path": str(path.resolve()),
-        "build_path": record["build_path"],
-        "audit_path": record["audit_path"],
-    }
+    return record
+
+
+def validate_committed_measurement(
+    value: Mapping[str, Any],
+    *,
+    expected_identity: Mapping[str, Any],
+    spec: TargetSpec,
+    harness: HarnessSpec,
+) -> None:
+    immutable_evidence.validate_measurement_record(
+        value, expected_identity=expected_identity
+    )
+    try:
+        artifacts = value["artifacts"]
+        stdout = pathlib.Path(str(artifacts["stdout"]["path"])).read_text(
+            encoding="utf-8", errors="replace"
+        )
+        stderr = pathlib.Path(str(artifacts["stderr"]["path"])).read_text(
+            encoding="utf-8", errors="replace"
+        )
+        time_text = pathlib.Path(str(artifacts["gnu_time"]["path"])).read_text(
+            encoding="utf-8"
+        )
+        time_metrics = matrix.parse_gnu_time_metrics(time_text)
+        expected_performance = (
+            parse_redb_result(stdout, harness.id)
+            if spec.id == "redb"
+            else parse_criterion_estimate_seconds(stdout + "\n" + stderr)
+        )
+        metrics = value["metrics"]
+        if (
+            float(metrics["performance"]) != expected_performance
+            or metrics.get("performance_unit") != "seconds"
+            or float(metrics["peak_rss_mib"])
+            != float(time_metrics["peak_rss_kib"]) / 1024.0
+        ):
+            raise CampaignError("measurement metrics differ from retained artifacts")
+    except (
+        CampaignError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        matrix.MatrixError,
+    ) as error:
+        raise immutable_evidence.ImmutableEvidenceError(
+            f"measurement metric provenance is invalid: {error}"
+        ) from error
 
 
 def execute_one(
@@ -2333,32 +2432,79 @@ def execute_one(
     round_index: int,
     timeout: int,
     warmup: bool,
+    implementation: ImplementationSnapshot,
+    contract: suite_contract.SuiteContract,
+    suite_binding: dict[str, Any],
 ) -> dict[str, Any]:
     phase = "warmup" if warmup else f"round-{round_index:02d}"
     run_root = raw_dir / "runs" / spec.id / harness.id / phase / variant
-    command, cwd = measured_command(spec, harness, build, run_root / "work")
-    env = matrix.runtime_environment(os.environ.copy(), disable_glibc_rseq=True)
-    temp_dir = raw_dir / "tmp" / "runs" / spec.id / harness.id / phase / variant
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    env["TMPDIR"] = str(temp_dir.resolve())
-    result = matrix.run_measured(
-        command,
-        cwd=cwd,
-        env=env,
-        time_binary=pathlib.Path("/usr/bin/time"),
-        rss_path=run_root / "gnu-time.txt",
-        timeout=timeout,
-    )
     output_path = run_root / "measurement.json"
-    return persist_measurement(
-        result,
-        path=output_path,
-        spec=spec,
-        harness=harness,
-        variant=variant,
-        round_index=round_index,
-        build=build,
-    )
+    binary = pathlib.Path(str(build["binary"]))
+    identity = {
+        "suite_id": contract.suite_id,
+        "suite_manifest_sha256": contract.manifest_sha256,
+        "target_id": spec.id,
+        "harness_id": harness.id,
+        "variant": variant,
+        "phase": "warmup" if warmup else "measurement",
+        "round": round_index,
+        "source_commit": spec.source_commit,
+        "implementation_revision": implementation.revision,
+        "implementation_sha256": implementation.sha256,
+        "binary_sha256": sha256_file(binary),
+    }
+
+    def collect(attempt: pathlib.Path) -> dict[str, Any]:
+        command, cwd = measured_command(spec, harness, build, attempt / "work")
+        env = suite_contract.clean_runtime_environment(attempt / "tmp")
+        gnu_time_path = attempt / "gnu-time.txt"
+        result = matrix.run_measured(
+            command,
+            cwd=cwd,
+            env=env,
+            time_binary=pathlib.Path("/usr/bin/time"),
+            rss_path=gnu_time_path,
+            timeout=timeout,
+        )
+        return persist_measurement(
+            result,
+            path=attempt / "measurement.json",
+            spec=spec,
+            harness=harness,
+            variant=variant,
+            round_index=round_index,
+            build=build,
+            runtime_environment=env,
+            identity=identity,
+            suite_binding=suite_binding,
+            gnu_time_path=gnu_time_path,
+        )
+
+    try:
+        committed = immutable_evidence.run_or_reuse_json(
+            output_path,
+            collect,
+            lambda value: validate_committed_measurement(
+                value,
+                expected_identity=identity,
+                spec=spec,
+                harness=harness,
+            ),
+        )
+    except immutable_evidence.ImmutableEvidenceError as error:
+        raise CampaignError(str(error)) from error
+    record = committed.value
+    return {
+        "round": round_index,
+        "variant": variant,
+        "performance": float(record["performance"]),
+        "peak_rss_mib": float(record["peak_rss_mib"]),
+        "record_path": str(committed.path),
+        "record_sha256": committed.record_sha256,
+        "raw_path": str(committed.path),
+        "build_path": record["build_path"],
+        "audit_path": record["audit_path"],
+    }
 
 
 def load_retained_warmups(
@@ -2407,6 +2553,7 @@ def load_retained_warmups(
             rows[variant] = [
                 {
                     "record_path": str(path.resolve()),
+                    "record_sha256": sha256_file(path),
                     "sha256": sha256_file(path),
                 }
             ]
@@ -2498,7 +2645,10 @@ def validate_target_result(
                 )
             for evidence in evidence_rows:
                 record_path = pathlib.Path(str(evidence.get("record_path", "")))
-                if not record_path.is_file() or evidence.get("sha256") != sha256_file(
+                expected_digest = evidence.get("record_sha256") or evidence.get(
+                    "sha256"
+                )
+                if not record_path.is_file() or expected_digest != sha256_file(
                     record_path
                 ):
                     raise CampaignError(
@@ -2605,13 +2755,16 @@ def mark_diagnostic_current_worktree(
 
 
 def primary_publication_allowed(
-    record: dict[str, Any], *, diagnostic_current_worktree: bool
+    record: dict[str, Any],
+    *,
+    diagnostic_current_worktree: bool,
+    measured_rounds: int = ROUNDS,
 ) -> bool:
     return (
         not diagnostic_current_worktree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
-        and record.get("measured_rounds") in PUBLISHABLE_ROUND_COUNTS
+        and record.get("measured_rounds") == measured_rounds
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2634,11 +2787,16 @@ def run_target(
     diagnostic_current_worktree: bool = False,
     required_cpus: str | None = None,
     measured_rounds: int = ROUNDS,
+    contract: suite_contract.SuiteContract = _DEFAULT_SUITE_CONTRACT,
 ) -> dict[str, Any]:
-    if diagnostic_current_worktree and measured_rounds != ROUNDS:
-        raise CampaignError("working-tree diagnostics require three measured rounds")
-    if not diagnostic_current_worktree and measured_rounds != ROUNDS:
-        raise CampaignError("primary results require exactly three measured rounds")
+    if measured_rounds != contract.measured_rounds:
+        raise CampaignError(
+            f"campaign requires exactly {contract.measured_rounds} measured rounds"
+        )
+    try:
+        suite_binding = suite_contract.bind_suite_manifest(contract)
+    except suite_contract.SuiteContractError as error:
+        raise CampaignError(str(error)) from error
     result = empty_target_result(spec, raw_dir)
     result["source"] = source_record
     result.update(
@@ -2650,6 +2808,9 @@ def run_target(
             "implementation_file_count": implementation.file_count,
             "implementation_size_bytes": implementation.size_bytes,
             "measured_rounds": measured_rounds,
+            "suite_id": contract.suite_id,
+            "suite_manifest_sha256": contract.manifest_sha256,
+            "suite_manifest_path": suite_binding["path"],
         }
     )
     output_path = raw_dir / "results" / f"{spec.id}.json"
@@ -2684,7 +2845,9 @@ def run_target(
             raise CampaignError("build gates failed: " + ",".join(failed_build_gates))
         verify_implementation_snapshot(implementation)
         harness_results = {row["id"]: row for row in result["harnesses"]}
-        with primary_measurement_lock(spec.id) as lock_path:
+        with primary_measurement_lock(
+            spec.id, raw_root=raw_dir, lock_path=contract.measurement_lock
+        ) as lock_path:
             result["measurement_lock"] = lock_path
             for harness in spec.harnesses:
                 for variant in VARIANTS:
@@ -2697,11 +2860,15 @@ def run_target(
                         round_index=0,
                         timeout=run_timeout,
                         warmup=True,
+                        implementation=implementation,
+                        contract=contract,
+                        suite_binding=suite_binding,
                     )
                     raw_path = pathlib.Path(str(warmup["raw_path"]))
                     harness_results[harness.id]["warmup_evidence"][variant].append(
                         {
                             "record_path": str(raw_path.resolve()),
+                            "record_sha256": warmup["record_sha256"],
                             "sha256": sha256_file(raw_path),
                         }
                     )
@@ -2736,6 +2903,9 @@ def run_target(
                             round_index=round_index,
                             timeout=run_timeout,
                             warmup=False,
+                            implementation=implementation,
+                            contract=contract,
+                            suite_binding=suite_binding,
                         )
                         harness_results[harness.id]["measurements"].append(measurement)
         for harness_result in result["harnesses"]:
@@ -2778,9 +2948,16 @@ def run_target(
         )
     write_json(output_path, result)
     if primary_publication_allowed(
-        result, diagnostic_current_worktree=diagnostic_current_worktree
+        result,
+        diagnostic_current_worktree=diagnostic_current_worktree,
+        measured_rounds=contract.measured_rounds,
     ):
-        write_json(ASSEMBLER_TARGET_DIR / f"{spec.id}.json", result)
+        try:
+            immutable_evidence.persist_immutable_json(
+                contract.target_results_dir / f"{spec.id}.json", result
+            )
+        except immutable_evidence.ImmutableEvidenceError as error:
+            raise CampaignError(str(error)) from error
     return result
 
 
@@ -2798,8 +2975,9 @@ def parse_target_ids(raw: str) -> tuple[str, ...]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", type=pathlib.Path, default=SUITE_PATH)
     parser.add_argument("--targets", default="redb,actix_web")
-    parser.add_argument("--raw-dir", type=pathlib.Path, default=DEFAULT_RAW_DIR)
+    parser.add_argument("--raw-dir", type=pathlib.Path)
     parser.add_argument(
         "--checkout-root", type=pathlib.Path, default=DEFAULT_CHECKOUT_ROOT
     )
@@ -2820,8 +2998,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--rounds",
         type=int,
-        default=ROUNDS,
-        help="one warmup, exactly three paired rounds, and median point estimates",
+        help="must equal the measured-round count declared by --suite",
     )
     parser.add_argument(
         "--required-cpus",
@@ -2836,26 +3013,39 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="reuse byte-verified exact-revision builds and rerun measurements",
     )
     args = parser.parse_args(argv)
+    try:
+        contract = suite_contract.load_suite_contract(args.suite)
+    except suite_contract.SuiteContractError as error:
+        parser.error(str(error))
+    args.suite = contract.path
+    args.suite_contract = contract
+    args.raw_dir = (args.raw_dir or contract.runner_raw_dir("redb-actix")).resolve()
+    args.publication_dir = contract.target_results_dir
+    args.rounds = contract.measured_rounds if args.rounds is None else args.rounds
     args.targets = parse_target_ids(args.targets)
     if args.unialloc_revision is None and not args.current_working_tree:
-        args.unialloc_revision = PINNED_IMPLEMENTATION_REVISION
+        args.unialloc_revision = contract.implementation_revision
     if (
         not args.current_working_tree
-        and args.unialloc_revision != PINNED_IMPLEMENTATION_REVISION
+        and args.unialloc_revision != contract.implementation_revision
     ):
         parser.error(
-            "--unialloc-revision must equal the predeclared exact revision "
-            + PINNED_IMPLEMENTATION_REVISION
+            "--unialloc-revision must equal the revision selected by --suite: "
+            + contract.implementation_revision
         )
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    if args.rounds != ROUNDS:
-        parser.error("the campaign requires exactly three measured rounds")
+    if args.rounds != contract.measured_rounds:
+        parser.error(
+            f"the campaign requires exactly {contract.measured_rounds} measured rounds"
+        )
     return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    contract = args.suite_contract
+    validate_specs_against_suite(contract)
     raw_dir = args.raw_dir.resolve()
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / "tmp").mkdir(parents=True, exist_ok=True)
@@ -2872,7 +3062,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     implementation = (
         materialize_working_tree_implementation(raw_dir)
         if args.current_working_tree
-        else materialize_implementation_revision(raw_dir, args.unialloc_revision)
+        else materialize_implementation_revision(
+            raw_dir, args.unialloc_revision, contract=contract
+        )
     )
     source_rows: dict[str, tuple[pathlib.Path, dict[str, Any]]] = {}
     for target_id in args.targets:
@@ -2910,6 +3102,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 diagnostic_current_worktree=args.current_working_tree,
                 required_cpus=args.required_cpus,
                 measured_rounds=args.rounds,
+                contract=contract,
             )
         )
     summary = {
@@ -2919,6 +3112,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "implementation_sha256": implementation.sha256,
         "implementation_manifest_path": str(implementation.manifest_path),
         "measured_rounds": args.rounds,
+        "suite_id": contract.suite_id,
+        "suite_manifest": str(contract.path),
+        "suite_manifest_sha256": contract.manifest_sha256,
+        "publication_directory": str(contract.target_results_dir),
         "targets": [
             {
                 "target_id": result["target_id"],

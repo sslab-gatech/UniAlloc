@@ -5,15 +5,22 @@ from __future__ import annotations
 import importlib.util
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "evaluation" / "scripts" / "type_isolation_redb_actix_campaign.py"
-MANIFEST = ROOT / "evaluation" / "config" / "type_isolation_primary_suite.json"
+MANIFEST = (
+    ROOT
+    / "evaluation"
+    / "config"
+    / "type_isolation_primary_suite_v2_ce8af7b.json"
+)
 
 
 def load_campaign():
@@ -91,8 +98,8 @@ class RedbActixCampaignTests(unittest.TestCase):
             self.assertEqual(
                 self.campaign.PINNED_IMPLEMENTATION_SHA256, snapshot.sha256
             )
-            self.assertEqual(131, snapshot.file_count)
-            self.assertEqual(4_426_670, snapshot.size_bytes)
+            self.assertEqual(137, snapshot.file_count)
+            self.assertEqual(5_297_425, snapshot.size_bytes)
             manifest = self.campaign.verify_implementation_snapshot(snapshot)
             self.assertTrue(
                 all(
@@ -134,13 +141,25 @@ class RedbActixCampaignTests(unittest.TestCase):
                 self.assertTrue((snapshot.path / name).is_file())
 
     def test_current_working_tree_cli_is_explicit_and_never_publishable(self) -> None:
-        primary = self.campaign.parse_args(["--targets", "redb"])
+        primary = self.campaign.parse_args(
+            ["--suite", str(MANIFEST), "--targets", "redb"]
+        )
         self.assertEqual(
             self.campaign.PINNED_IMPLEMENTATION_REVISION,
             primary.unialloc_revision,
         )
         self.assertFalse(primary.current_working_tree)
         self.assertEqual(3, primary.rounds)
+        self.assertEqual(MANIFEST.resolve(), primary.suite)
+        self.assertEqual(
+            ROOT
+            / "evaluation/raw/type-isolation-primary-v2-ce8af7b/campaigns/redb-actix",
+            primary.raw_dir,
+        )
+        self.assertEqual(
+            ROOT / "evaluation/raw/type-isolation-primary-v2-ce8af7b/targets",
+            primary.publication_dir,
+        )
         diagnostic = self.campaign.parse_args(
             [
                 "--targets",
@@ -181,6 +200,7 @@ class RedbActixCampaignTests(unittest.TestCase):
             self.campaign.primary_publication_allowed(
                 {"status": "complete", "measured_rounds": 5},
                 diagnostic_current_worktree=False,
+                measured_rounds=5,
             )
         )
         self.assertFalse(
@@ -324,6 +344,53 @@ class RedbActixCampaignTests(unittest.TestCase):
         with self.assertRaises(self.campaign.CampaignError):
             parse("Benchmarking without a complete estimate")
 
+    def test_committed_metrics_are_rederived_from_stdout_and_gnu_time(self) -> None:
+        spec = self.campaign.TARGETS["actix_web"]
+        harness = spec.harnesses[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stdout = root / "stdout"
+            stderr = root / "stderr"
+            gnu_time = root / "time"
+            stdout.write_text("time:   [1.0 us 1.1 us 1.2 us]\n", encoding="utf-8")
+            stderr.write_bytes(b"")
+            gnu_time.write_text(
+                "UNIALLOC_GNU_TIME\t0.1\t0.1\t100%\t4096\t0\t1\t0\t0\t0\n",
+                encoding="utf-8",
+            )
+            record = {
+                "evidence_schema_version": 1,
+                "identity": {},
+                "metrics": {
+                    "performance": 1.1e-6,
+                    "performance_unit": "seconds",
+                    "peak_rss_mib": 4.0,
+                },
+                "artifacts": {
+                    "stdout": self.campaign.immutable_evidence.artifact_ref(stdout),
+                    "stderr": self.campaign.immutable_evidence.artifact_ref(stderr),
+                    "gnu_time": self.campaign.immutable_evidence.artifact_ref(
+                        gnu_time
+                    ),
+                },
+            }
+            self.campaign.validate_committed_measurement(
+                record,
+                expected_identity={},
+                spec=spec,
+                harness=harness,
+            )
+            record["metrics"]["peak_rss_mib"] = 5.0
+            with self.assertRaises(
+                self.campaign.immutable_evidence.ImmutableEvidenceError
+            ):
+                self.campaign.validate_committed_measurement(
+                    record,
+                    expected_identity={},
+                    spec=spec,
+                    harness=harness,
+                )
+
     def test_actix_failed_requests_are_a_correctness_failure_at_exit_zero(self) -> None:
         spec = self.campaign.TARGETS["actix_web"]
         harness = next(
@@ -348,6 +415,12 @@ class RedbActixCampaignTests(unittest.TestCase):
                     variant="typeiso_perf",
                     round_index=1,
                     build={},
+                    runtime_environment=self.campaign.clean_runtime_environment(
+                        Path(directory)
+                    ),
+                    identity={},
+                    suite_binding={},
+                    gnu_time_path=Path(directory) / "gnu-time.txt",
                 )
 
             self.assertEqual(harness.id, captured.exception.harness_id)
@@ -666,6 +739,32 @@ fn benchmark(iters: u64) {
         )
         self.assertEqual([{"round": 1}], failed["harnesses"][0]["measurements"])
         self.assertTrue(failed["harnesses"][0]["gates"]["correctness"])
+
+    def test_timed_children_use_clean_libc_default_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
+            os.environ,
+            {
+                "PATH": "/usr/bin",
+                "USER": "test",
+                "LD_PRELOAD": "/tmp/wrong.so",
+                "MALLOC_CONF": "dirty_decay_ms:0",
+                "GLIBC_TUNABLES": "glibc.pthread.rseq=0",
+                "UNIALLOC_LOWERING_POLICY_FLAGS": "99",
+            },
+            clear=True,
+        ):
+            environment = self.campaign.clean_runtime_environment(Path(directory))
+            record = self.campaign.suite_contract.runtime_environment_record(
+                environment
+            )
+        self.assertEqual(
+            {"PATH", "USER", "LANG", "LC_ALL", "TMPDIR"}, set(environment)
+        )
+        self.assertEqual("libc_default", record["rseq_policy"])
+        self.assertEqual(
+            self.campaign.suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK,
+            self.campaign.MEASUREMENT_LOCK_PATH,
+        )
 
 
 if __name__ == "__main__":
