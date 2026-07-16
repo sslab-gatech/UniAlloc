@@ -14,8 +14,11 @@ from evaluation.scripts import type_isolation_suite_contract as contract
 
 ROOT = Path(__file__).resolve().parents[2]
 HISTORICAL_SUITE = ROOT / "evaluation/config/type_isolation_primary_suite.json"
-CURRENT_SUITE = (
+PREVIOUS_SUITE = (
     ROOT / "evaluation/config/type_isolation_primary_suite_v5_ce8af7b.json"
+)
+CURRENT_SUITE = (
+    ROOT / "evaluation/config/type_isolation_primary_suite_v6_ce8af7b.json"
 )
 
 
@@ -41,15 +44,15 @@ class TypeIsolationSuiteContractTests(unittest.TestCase):
         self.assertEqual(1, suite.warmup_rounds)
         self.assertEqual(3, suite.measured_rounds)
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v5-ce8af7b",
+            ROOT / "evaluation/raw/type-isolation-primary-v6-ce8af7b",
             suite.publication_root,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v5-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v6-ce8af7b/targets",
             suite.target_results_dir,
         )
         self.assertEqual(
-            ROOT / "benchmark-results/type-isolation-primary-v5-ce8af7b.json",
+            ROOT / "benchmark-results/type-isolation-primary-v6-ce8af7b.json",
             suite.assembled_result,
         )
         self.assertEqual(
@@ -60,6 +63,52 @@ class TypeIsolationSuiteContractTests(unittest.TestCase):
         self.assertEqual(
             set(contract.TYPE_ISOLATION_PROTOCOL_FILES),
             set(contract.verify_protocol_files(suite)),
+        )
+
+    def test_current_suite_only_refreezes_actix_binary_identity(self) -> None:
+        previous_bytes = PREVIOUS_SUITE.read_bytes()
+        self.assertEqual(
+            "ece9205aaa547661895288fedb4c7e01138d29db37c573b13b6fb0d16f3e4e06",
+            hashlib.sha256(previous_bytes).hexdigest(),
+        )
+        previous = json.loads(previous_bytes)
+        current = json.loads(CURRENT_SUITE.read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "changed_contract": [
+                    "actix_per_harness_executable_identity",
+                    "protocol_file_digests",
+                    "publication_namespace",
+                ],
+                "preserved_contract": previous["lineage"]["preserved_contract"],
+                "supersedes_manifest_sha256": hashlib.sha256(
+                    previous_bytes
+                ).hexdigest(),
+                "supersedes_suite_id": previous["suite_id"],
+            },
+            current["lineage"],
+        )
+        refreeze_fields = {
+            "lineage",
+            "protocol_files",
+            "publication",
+            "status",
+            "suite_id",
+        }
+        for field in set(previous) - refreeze_fields:
+            with self.subTest(field=field):
+                self.assertEqual(previous[field], current[field])
+        changed_protocol_files = {
+            path
+            for path, digest in current["protocol_files"].items()
+            if digest != previous["protocol_files"][path]
+        }
+        self.assertEqual(
+            {
+                "evaluation/scripts/type_isolation_redb_actix_campaign.py",
+                "evaluation/scripts/type_isolation_suite_contract.py",
+            },
+            changed_protocol_files,
         )
 
     def test_runtime_environment_is_allowlisted_and_records_libc_rseq(self) -> None:

@@ -19,7 +19,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "evaluation" / "scripts" / "polars_swc_rustpython_primary_campaign.py"
 CURRENT_SUITE = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v5_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v6_ce8af7b.json"
 )
 SPEC = importlib.util.spec_from_file_location("primary_campaign", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -145,11 +145,11 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual(CURRENT_SUITE.resolve(), primary.suite)
         self.assertEqual(
             ROOT
-            / "evaluation/raw/type-isolation-primary-v5-ce8af7b/campaigns/polars-swc-rustpython",
+            / "evaluation/raw/type-isolation-primary-v6-ce8af7b/campaigns/polars-swc-rustpython",
             primary.raw_dir,
         )
         self.assertEqual(
-            ROOT / "evaluation/raw/type-isolation-primary-v5-ce8af7b/targets",
+            ROOT / "evaluation/raw/type-isolation-primary-v6-ce8af7b/targets",
             primary.publication_dir,
         )
 

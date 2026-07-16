@@ -19,7 +19,7 @@ from evaluation.scripts import immutable_evidence
 ROOT = Path(__file__).resolve().parents[2]
 SUITE_PATH = ROOT / "evaluation/config/type_isolation_primary_suite.json"
 CURRENT_SUITE_PATH = (
-    ROOT / "evaluation/config/type_isolation_primary_suite_v5_ce8af7b.json"
+    ROOT / "evaluation/config/type_isolation_primary_suite_v6_ce8af7b.json"
 )
 SCRIPT_PATH = ROOT / "evaluation/scripts/assemble_type_isolation_primary_results.py"
 PLOT_SCRIPT_PATH = ROOT / "evaluation/scripts/plot_type_isolation_primary_suite.py"
