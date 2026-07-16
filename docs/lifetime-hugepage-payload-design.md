@@ -194,6 +194,12 @@ selected that path for 940,170 of 996,240 routed allocations and made the THP
 mixed arm 8.73% slower. The compact evidence is in
 `docs/evidence/lifetime-resident-index-20260715/mixed-filler-swc-quick-summary.json`.
 
+The matched backing contrast within the same mixed layout still favored THP:
+operation time improved 1.045%, 95% CI [0.632%, 1.537%], with eight of eight
+pairs faster. Its paired peak-RSS interval crossed zero. This separates a
+positive physical-backing effect from the larger cross-layout descriptor-scan
+cost, while the quick dirty-tree boundary keeps the result diagnostic.
+
 A cache-first follow-on uses an exact hot-region key and an O(1) free-side
 ownership prefilter. In a second four-arm N=8 screen it:
 

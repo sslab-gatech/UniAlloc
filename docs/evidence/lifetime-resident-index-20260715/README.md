@@ -51,7 +51,7 @@ unwind forces compiler abstention.
 | Tantivy resident index | runtime byte precision 99.826%, recall 98.350% | diagnostic ground truth; broad static admission failed |
 | DataFusion resident tables | generated-driver prior site matched 1/1; 2,048/2,048 target outcomes Long | exact classification mechanism inside a real query process; three timing pairs are preliminary |
 | SWC N=20 matched backing | THP pipeline time improved 4.076%, 95% CI [3.567%, 4.375%] | claim-grade physical-backing contrast; RSS increased 65.477% |
-| SWC mixed prototype N=8 | extents 11 -> 3; THP peak RSS improved 34.453% | quick dirty-tree screen exposed an 8.732% scan penalty |
+| SWC mixed prototype N=8 | extents 11 -> 3; THP peak RSS improved 34.453%; mixed THP beat mixed ordinary by 1.045% | quick dirty-tree screen exposed an 8.732% scan penalty against legacy THP |
 | SWC mixed cache-first N=8 | extents 11 -> 3; THP peak RSS improved 34.185%; operation delta -0.058% | quick dirty-tree rescue screen; timing CI crosses zero |
 
 ## Bounded empty-extent retention
@@ -194,6 +194,13 @@ reduced paired peak RSS by 34.453%, 95% CI [32.191%, 36.034%], with physical
 backing in every sample. The prototype descriptor-table scan ran on 940,170
 allocations, or 94.372% of routed traffic, and caused an 8.732% operation-time
 penalty, 95% CI [8.096%, 9.411%].
+
+Inside the same mixed packing layout, physical THP improved operation time by
+1.045% over mixed ordinary backing, 95% CI [0.632%, 1.537%], with all eight
+pairs faster. The paired peak-RSS interval crossed zero: median saving -0.570%,
+95% CI [-1.377%, 4.994%]. This is a useful backing-mechanism contrast inside
+the denser layout; its N=8 dirty-tree provenance keeps it outside the formal
+performance claim.
 
 A follow-on cache-first prototype adds an exact hot-region cache and an O(1)
 free-side ownership prefilter. It preserved three extents and 6,144 KiB of
