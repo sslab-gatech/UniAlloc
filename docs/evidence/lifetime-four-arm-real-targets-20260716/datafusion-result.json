@@ -1,0 +1,142 @@
+{
+  "aggregate": [
+    {
+      "arm": "allocator-default",
+      "latency_reduction_percent_vs_default_by_order": [
+        0.0,
+        0.0
+      ],
+      "median_latency_reduction_percent_vs_default": 0.0,
+      "median_peak_rss_change_percent_vs_default": 0.0,
+      "peak_anon_hugepages_kib_by_order": [
+        0,
+        0
+      ],
+      "peak_rss_change_percent_vs_default_by_order": [
+        0.0,
+        0.0
+      ],
+      "peak_rss_kib_by_order": [
+        121436,
+        121548
+      ],
+      "query_seconds_by_order": [
+        18.790107491,
+        18.885314635
+      ],
+      "routed_allocations_by_order": [
+        0,
+        0
+      ]
+    },
+    {
+      "arm": "global-thp-first-fit-no-hint",
+      "latency_reduction_percent_vs_default_by_order": [
+        0.2250367647989904,
+        0.49534742104125296
+      ],
+      "median_latency_reduction_percent_vs_default": 0.36019209292012166,
+      "median_peak_rss_change_percent_vs_default": 4.170249967108264,
+      "peak_anon_hugepages_kib_by_order": [
+        6144,
+        4096
+      ],
+      "peak_rss_change_percent_vs_default_by_order": [
+        5.098982179913699,
+        3.2415177543028273
+      ],
+      "peak_rss_kib_by_order": [
+        127628,
+        125488
+      ],
+      "query_seconds_by_order": [
+        18.747822841,
+        18.791766716
+      ],
+      "routed_allocations_by_order": [
+        0,
+        0
+      ]
+    },
+    {
+      "arm": "adaptive-runtime-profile-thp",
+      "latency_reduction_percent_vs_default_by_order": [
+        -3.5040138664207237,
+        -3.172836860708201
+      ],
+      "median_latency_reduction_percent_vs_default": -3.338425363564462,
+      "median_peak_rss_change_percent_vs_default": 0.4065254777811698,
+      "peak_anon_hugepages_kib_by_order": [
+        0,
+        0
+      ],
+      "peak_rss_change_percent_vs_default_by_order": [
+        0.22069238117197534,
+        0.5923585743903643
+      ],
+      "peak_rss_kib_by_order": [
+        121704,
+        122268
+      ],
+      "query_seconds_by_order": [
+        19.448515463,
+        19.484514859
+      ],
+      "routed_allocations_by_order": [
+        31807,
+        31807
+      ]
+    },
+    {
+      "arm": "compiler-directed-hugepage-compiler-prior",
+      "latency_reduction_percent_vs_default_by_order": [
+        0.7176774644029661,
+        4.632423874890871
+      ],
+      "median_latency_reduction_percent_vs_default": 2.6750506696469185,
+      "median_peak_rss_change_percent_vs_default": 4.541724944738885,
+      "peak_anon_hugepages_kib_by_order": [
+        16384,
+        16384
+      ],
+      "peak_rss_change_percent_vs_default_by_order": [
+        4.2425639843209595,
+        4.84088590515681
+      ],
+      "peak_rss_kib_by_order": [
+        126588,
+        127432
+      ],
+      "query_seconds_by_order": [
+        18.655255124,
+        18.010466811
+      ],
+      "routed_allocations_by_order": [
+        917504,
+        917504
+      ]
+    }
+  ],
+  "binary_sha256": "8e405c386cc228b6ffd44afe31158e360d171b3ace520e5e8912f78ee49da615",
+  "boundary": "One forward and one reverse fixed-order sequence. Each bar is the median of per-sequence changes relative to that sequence's own default. This is balanced directional evidence without confidence intervals.",
+  "classification": "same-binary-two-order-four-arm-datafusion-directional-evidence",
+  "fixed_work_match_all_arms": true,
+  "forward_order": [
+    "allocator-default",
+    "global-thp-first-fit-no-hint",
+    "adaptive-runtime-profile-thp",
+    "compiler-directed-hugepage-compiler-prior"
+  ],
+  "reverse_order": [
+    "compiler-directed-hugepage-compiler-prior",
+    "adaptive-runtime-profile-thp",
+    "global-thp-first-fit-no-hint",
+    "allocator-default"
+  ],
+  "schema_version": 1,
+  "source_results": [
+    "datafusion-four-arm.json",
+    "datafusion-four-arm-reverse.json"
+  ],
+  "warmup_iterations": 0
+}

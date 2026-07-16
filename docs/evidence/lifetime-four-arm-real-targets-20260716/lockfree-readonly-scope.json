@@ -1,0 +1,17 @@
+{
+  "audit_scope": "Read-only comparison only.",
+  "classification": "lockfree-reference-read-only-scope-record",
+  "decision": "Preserve the existing compiler-hint placement mechanism. No lock-free mechanism was integrated.",
+  "evidence_boundary": "The four-arm chart measures the existing naive runtime profile and existing compiler-hint mechanism. It contains no lock-free ablation.",
+  "reference_branch": "exp/lifetime-short-prelock-bypass-20260716",
+  "reference_commits": {
+    "core": "5ea508c",
+    "evidence_docs": "b236cbf"
+  },
+  "schema_version": 1,
+  "working_tree_check": {
+    "lifetime_hugepage_allocator_test_sha256": "b2ba7c470bee945ed80a327c079e76d05aa26d90bf5255bec1b71bc39ae4babe",
+    "lifetime_hugepage_sha256": "7c5d70e2081684d4e67148a3baadfd6989a87fdf7a7e302ac3fbf2ab2e5f1a38",
+    "lifetime_ownership_directory_file_present": false
+  }
+}

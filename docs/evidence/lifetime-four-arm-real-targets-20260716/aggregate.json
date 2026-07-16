@@ -1,0 +1,675 @@
+{
+  "classification": "lifetime-four-arm-real-target-directional-evidence",
+  "compiler_rewrite_boundary": {
+    "actual_allocator_call_replacement": false,
+    "artifact": "compiler-audit-boundary.json",
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "mechanism": "compiler-injected semantic-scope push/pop Long hints"
+  },
+  "date": "2026-07-16",
+  "headline": {
+    "compiler_hint_fastest_target_count": 5,
+    "compiler_hint_lower_peak_rss_target_count": 2,
+    "compiler_hint_median_speedup_percent": 7.067184559268801,
+    "compiler_hint_speedup_range_percent": [
+      1.5925730804645473,
+      15.647621957317636
+    ],
+    "interpretation": "Compiler hints are the fastest arm in every target screen. Peak RSS improves on Roaring and Convex, stays within 0.5% of default on Lume and Bedrock, and costs 4.54% on DataFusion.",
+    "target_count": 5
+  },
+  "measurement_boundary": "Median of one forward + one reverse sequence per target; directional evidence, no confidence intervals.",
+  "measurement_contract": {
+    "bar_definition": "median of forward and reverse arm effects, each normalized to the default in the same order",
+    "confidence_interval_available": false,
+    "criterion_used": false,
+    "fixed_work_and_digest_match": true,
+    "fresh_process_per_arm": true,
+    "operation_sign": "positive means faster than default",
+    "orders": [
+      "forward",
+      "reverse"
+    ],
+    "rss_sign": "positive means lower peak RSS than default",
+    "same_binary_within_target": true,
+    "sequence_count_per_target": 2,
+    "warmup_iterations": 0
+  },
+  "schema_version": 1,
+  "targets": [
+    {
+      "binary_sha256": "8e405c386cc228b6ffd44afe31158e360d171b3ace520e5e8912f78ee49da615",
+      "fixed_work_match_all_arms": true,
+      "id": "datafusion",
+      "label": "DataFusion",
+      "operation_metric": "query_seconds",
+      "origin_path": "evaluation/raw/four-arm-datafusion-lume-20260716/datafusion-four-arm-two-order.json",
+      "source_result": "datafusion-result.json",
+      "source_result_sha256": "c99948ac4c6ee8b2a8e257e53e09fb6ea7020bcb5fc2883d417edbeda339c39a",
+      "variants": {
+        "compiler_hint": {
+          "anon_hugepages_mib": 16.0,
+          "anon_hugepages_mib_by_order": [
+            16.0,
+            16.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 2.6750506696469185,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.7176774644029661,
+            4.632423874890871
+          ],
+          "peak_rss_saving_percent_vs_default": -4.541724944738885,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -4.2425639843209595,
+            -4.84088590515681
+          ],
+          "routed_allocations_by_order": [
+            917504,
+            917504
+          ],
+          "source_peak_rss_change_percent_vs_default": 4.541724944738885
+        },
+        "default": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.0,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_saving_percent_vs_default": 0.0,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.0
+        },
+        "runtime_profile": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -3.338425363564462,
+          "operation_speedup_percent_vs_default_by_order": [
+            -3.5040138664207237,
+            -3.172836860708201
+          ],
+          "peak_rss_saving_percent_vs_default": -0.4065254777811698,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -0.22069238117197534,
+            -0.5923585743903643
+          ],
+          "routed_allocations_by_order": [
+            31807,
+            31807
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.4065254777811698
+        },
+        "thp_first_fit": {
+          "anon_hugepages_mib": 5.0,
+          "anon_hugepages_mib_by_order": [
+            6.0,
+            4.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.36019209292012166,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.2250367647989904,
+            0.49534742104125296
+          ],
+          "peak_rss_saving_percent_vs_default": -4.170249967108264,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -5.098982179913699,
+            -3.2415177543028273
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 4.170249967108264
+        }
+      },
+      "warmup_iterations": 0,
+      "workload": "DataFusion 54.0.0 ApproxDistinct grouped aggregation"
+    },
+    {
+      "binary_sha256": "30d709c636e497af207b161afd04d6c3db25642cbc296f7755dec6caa515d7b4",
+      "fixed_work_match_all_arms": true,
+      "id": "lume",
+      "label": "Lume",
+      "operation_metric": "operation_seconds",
+      "origin_path": "evaluation/raw/four-arm-datafusion-lume-20260716/lume-four-arm-two-order.json",
+      "source_result": "lume-result.json",
+      "source_result_sha256": "54af9e6bc2d5e6f52b68e9cd97b6f533c867d50621abc336c282e7b9a37e7c5c",
+      "variants": {
+        "compiler_hint": {
+          "anon_hugepages_mib": 16.0,
+          "anon_hugepages_mib_by_order": [
+            16.0,
+            16.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 9.706304237808101,
+          "operation_speedup_percent_vs_default_by_order": [
+            10.727229284493953,
+            8.685379191122252
+          ],
+          "peak_rss_saving_percent_vs_default": -0.44568953134711076,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -0.37112636852848396,
+            -0.5202526941657376
+          ],
+          "routed_allocations_by_order": [
+            2048,
+            2048
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.44568953134711076
+        },
+        "default": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.0,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_saving_percent_vs_default": 0.0,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.0
+        },
+        "runtime_profile": {
+          "anon_hugepages_mib": 8.0,
+          "anon_hugepages_mib_by_order": [
+            8.0,
+            8.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -2.5171599497993826,
+          "operation_speedup_percent_vs_default_by_order": [
+            -1.8354733648161283,
+            -3.1988465347826374
+          ],
+          "peak_rss_saving_percent_vs_default": -5.644837581875187,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -5.566895527927259,
+            -5.722779635823114
+          ],
+          "routed_allocations_by_order": [
+            1025,
+            1025
+          ],
+          "source_peak_rss_change_percent_vs_default": 5.644837581875187
+        },
+        "thp_first_fit": {
+          "anon_hugepages_mib": 4.0,
+          "anon_hugepages_mib_by_order": [
+            4.0,
+            4.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -4.32504128955385,
+          "operation_speedup_percent_vs_default_by_order": [
+            -2.7071037198407524,
+            -5.942978859266948
+          ],
+          "peak_rss_saving_percent_vs_default": -18.781819759051963,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -18.92744479495268,
+            -18.636194723151245
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 18.781819759051963
+        }
+      },
+      "warmup_iterations": 0,
+      "workload": "Lume MiniRoaring serde load and resident posting probes"
+    },
+    {
+      "binary_sha256": "ae0d30884028e076836bb4830b0df765b07a44a457511dbf5aca98924d37f719",
+      "cpu_affinity": [
+        126
+      ],
+      "fixed_work": {
+        "containers": 1024,
+        "correctness": true,
+        "digest": "6af6146226287e85",
+        "intersection_cardinality": 4474880,
+        "iterations": 12000,
+        "left_cardinality": 22370304,
+        "right_cardinality": 13422592
+      },
+      "fixed_work_match_all_arms": true,
+      "id": "roaring",
+      "label": "Roaring",
+      "operation_metric": "operation_seconds",
+      "origin_path": "evaluation/raw/four-arm-other-targets-20260716/roaring-result.json",
+      "source_result": "roaring-result.json",
+      "source_result_sha256": "8b695c7e8a361b97d4c0b55d02ca80b685e7c90c6b139ab8443ee6fa8dfc438e",
+      "variants": {
+        "compiler_hint": {
+          "anon_hugepages_mib": 16.0,
+          "anon_hugepages_mib_by_order": [
+            16.0,
+            16.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 1.5925730804645473,
+          "operation_speedup_percent_vs_default_by_order": [
+            1.5264224428409237,
+            1.658723718088171
+          ],
+          "peak_rss_saving_percent_vs_default": 0.10826115922718188,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.21652231845436376
+          ],
+          "routed_allocations_by_order": [
+            2048,
+            2048
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": -0.10826115922718188
+        },
+        "default": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.0,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_saving_percent_vs_default": 0.0,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.0
+        },
+        "runtime_profile": {
+          "anon_hugepages_mib": 10.0,
+          "anon_hugepages_mib_by_order": [
+            10.0,
+            10.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -0.9754948424363078,
+          "operation_speedup_percent_vs_default_by_order": [
+            -1.2099483157491773,
+            -0.7410413691234383
+          ],
+          "peak_rss_saving_percent_vs_default": -8.551514539189423,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -8.65865865865866,
+            -8.444370419720187
+          ],
+          "routed_allocations_by_order": [
+            2051,
+            2051
+          ],
+          "runtime_long_routes_by_order": [
+            2032,
+            2032
+          ],
+          "source_peak_rss_change_percent_vs_default": 8.551514539189423
+        },
+        "thp_first_fit": {
+          "anon_hugepages_mib": 4.0,
+          "anon_hugepages_mib_by_order": [
+            4.0,
+            4.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -2.7438272073266337,
+          "operation_speedup_percent_vs_default_by_order": [
+            -2.8215668145811463,
+            -2.6660876000721205
+          ],
+          "peak_rss_saving_percent_vs_default": -16.552950907825434,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -16.78345011678345,
+            -16.32245169886742
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 16.552950907825434
+        }
+      },
+      "warmup_iterations": 0,
+      "workload": "roaring 0.11.3 serialized intersection with retained 8 KiB bitmap stores"
+    },
+    {
+      "binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+      "cpu_affinity": [
+        126
+      ],
+      "fixed_work": {
+        "bitmap_bytes_per_calendar": 6000,
+        "business_hits": 107066845,
+        "calendar_count": 2731,
+        "compiler_long_cohort_bytes": 16386000,
+        "correctness": true,
+        "date_count": 47847,
+        "digest": "5b49db0f0b986115",
+        "holiday_hits": 100099,
+        "holidays_per_calendar": 32,
+        "queries": 150000000
+      },
+      "fixed_work_match_all_arms": true,
+      "id": "convex",
+      "label": "Convex",
+      "operation_metric": "operation_seconds",
+      "origin_path": "evaluation/raw/four-arm-other-targets-20260716/convex-result.json",
+      "source_result": "convex-result.json",
+      "source_result_sha256": "9e8bed4aa12721fc6c3d1b83b3ace99073030761470739990cd26238c362ffe3",
+      "variants": {
+        "compiler_hint": {
+          "anon_hugepages_mib": 16.0,
+          "anon_hugepages_mib_by_order": [
+            16.0,
+            16.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 7.067184559268801,
+          "operation_speedup_percent_vs_default_by_order": [
+            10.436440721099224,
+            3.697928397438379
+          ],
+          "peak_rss_saving_percent_vs_default": 15.980669508480787,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            16.074877432773732,
+            15.886461584187844
+          ],
+          "routed_allocations_by_order": [
+            2731,
+            2731
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": -15.980669508480787
+        },
+        "default": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.0,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_saving_percent_vs_default": 0.0,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.0
+        },
+        "runtime_profile": {
+          "anon_hugepages_mib": 10.0,
+          "anon_hugepages_mib_by_order": [
+            10.0,
+            10.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 2.6906889188738727,
+          "operation_speedup_percent_vs_default_by_order": [
+            4.891958801761695,
+            0.48941903598605074
+          ],
+          "peak_rss_saving_percent_vs_default": 4.739957139859826,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            4.828405883226861,
+            4.651508396492792
+          ],
+          "routed_allocations_by_order": [
+            1445,
+            1445
+          ],
+          "runtime_long_routes_by_order": [
+            1437,
+            1437
+          ],
+          "source_peak_rss_change_percent_vs_default": -4.739957139859826
+        },
+        "thp_first_fit": {
+          "anon_hugepages_mib": 4.0,
+          "anon_hugepages_mib_by_order": [
+            4.0,
+            4.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -2.6379521688067378,
+          "operation_speedup_percent_vs_default_by_order": [
+            -0.4612894280872432,
+            -4.814614909526233
+          ],
+          "peak_rss_saving_percent_vs_default": -14.999994811548715,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -15.034913088694102,
+            -14.965076534403329
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 14.999994811548715
+        }
+      },
+      "warmup_iterations": 0,
+      "workload": "Convex calendar HolidayBitmap query workload with retained 6,000-byte bitmaps"
+    },
+    {
+      "binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+      "cpu_affinity": [
+        126
+      ],
+      "fixed_work": {
+        "chunks": 1024,
+        "correctness": true,
+        "digest": "8ff01d6c0978f587",
+        "iterations": 3000000,
+        "lookups": 3072000000
+      },
+      "fixed_work_match_all_arms": true,
+      "id": "bedrock",
+      "label": "Bedrock",
+      "operation_metric": "operation_seconds",
+      "origin_path": "evaluation/raw/four-arm-other-targets-20260716/bedrock-result.json",
+      "source_result": "bedrock-result.json",
+      "source_result_sha256": "4c9b2639592c58747cd2a7c716bdad3458d71ff89881c43e0ec7a7d6ab3c3665",
+      "variants": {
+        "compiler_hint": {
+          "anon_hugepages_mib": 8.0,
+          "anon_hugepages_mib_by_order": [
+            8.0,
+            8.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 15.647621957317636,
+          "operation_speedup_percent_vs_default_by_order": [
+            15.81742359049422,
+            15.477820324141051
+          ],
+          "peak_rss_saving_percent_vs_default": -0.12453303743498366,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -0.18685767673621925,
+            -0.06220839813374806
+          ],
+          "routed_allocations_by_order": [
+            1024,
+            1024
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.12453303743498366
+        },
+        "default": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": 0.0,
+          "operation_speedup_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "peak_rss_saving_percent_vs_default": 0.0,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            0.0,
+            0.0
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.0
+        },
+        "runtime_profile": {
+          "anon_hugepages_mib": 0.0,
+          "anon_hugepages_mib_by_order": [
+            0.0,
+            0.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -3.8849923364151637,
+          "operation_speedup_percent_vs_default_by_order": [
+            -1.9668049683274222,
+            -5.803179704502905
+          ],
+          "peak_rss_saving_percent_vs_default": -0.3890930912546442,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -0.4671441918405481,
+            -0.3110419906687403
+          ],
+          "routed_allocations_by_order": [
+            8,
+            8
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 0.3890930912546442
+        },
+        "thp_first_fit": {
+          "anon_hugepages_mib": 5.0,
+          "anon_hugepages_mib_by_order": [
+            6.0,
+            4.0
+          ],
+          "available": true,
+          "operation_speedup_percent_vs_default": -1.6782747089442565,
+          "operation_speedup_percent_vs_default_by_order": [
+            -3.2399043388558666,
+            -0.11664507903264641
+          ],
+          "peak_rss_saving_percent_vs_default": -39.392082910950066,
+          "peak_rss_saving_percent_vs_default_by_order": [
+            -47.77327935222672,
+            -31.010886469673405
+          ],
+          "routed_allocations_by_order": [
+            0,
+            0
+          ],
+          "runtime_long_routes_by_order": [
+            0,
+            0
+          ],
+          "source_peak_rss_change_percent_vs_default": 39.392082910950066
+        }
+      },
+      "warmup_iterations": 0,
+      "workload": "Bedrock-level resident 8 KiB chunk lookup workload"
+    }
+  ],
+  "variant_contract": {
+    "compiler_hint": {
+      "label": "Compiler hint (ours)",
+      "mechanism": "UniAlloc policy 9; a compiler-injected semantic-scope Long hint routes allocations into lifetime-aware 2 MiB cohorts with zero online lifetime learning. The audited path uses semantic-scope push/pop and reports actual_allocator_call_replacement=false."
+    },
+    "default": {
+      "label": "Default",
+      "mechanism": "UniAlloc policy 0; no lifetime routing; no explicit hugepage advice."
+    },
+    "runtime_profile": {
+      "label": "Runtime profile",
+      "mechanism": "UniAlloc policy 11 with compiler lifetime hints masked to Unknown; cold online observation/classification and adaptive THP placement."
+    },
+    "thp_first_fit": {
+      "label": "THP first-fit",
+      "mechanism": "The same policy-0 allocator placement plus an LD_PRELOAD shim applying MADV_HUGEPAGE to private anonymous mmap regions >=2 MiB; no lifetime signal and zero lifetime routes. First-fit is the requested chart shorthand for allocator-default placement; this screen does not isolate a distinct internal fit algorithm."
+    }
+  }
+}
