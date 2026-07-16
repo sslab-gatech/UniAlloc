@@ -91,9 +91,10 @@ from evaluation.scripts import type_isolation_suite_contract as suite_contract  
 
 
 PROTOCOL_SCHEMA_VERSION = 1
-RAW_RECORD_SCHEMA_VERSION = 3
-PROTOCOL_REVISION = "full-std-bench-feature-process-v5"
+RAW_RECORD_SCHEMA_VERSION = 4
+PROTOCOL_REVISION = "full-std-bench-feature-process-v6"
 MEASUREMENT_SESSION_SCHEMA_VERSION = 2
+TERMINAL_ACCOUNTING_SCHEMA_VERSION = 1
 EXPECTED_CANONICAL_BENCHMARK_COUNT = full.EXPECTED_CANONICAL_BENCHMARK_COUNT
 DEFAULT_MEASURED_ROUNDS = full.MEASURED_ROUNDS
 MEASUREMENT_LOCK = suite_contract.HOST_PRIMARY_MEASUREMENT_LOCK
@@ -129,6 +130,20 @@ DERIVED_METRIC_TOKENS = (
     "geometric_mean",
     "median_",
     "confidence_interval",
+)
+GNU_TIME_METRIC_FIELDS = (
+    "user_seconds",
+    "system_seconds",
+    "peak_rss_kib",
+    "major_page_faults",
+    "minor_page_faults",
+    "voluntary_context_switches",
+    "involuntary_context_switches",
+    "time_exit_status",
+    "cpu_percent",
+    "cpu_percent_text",
+    "wall_seconds",
+    "wall_time_text",
 )
 
 
@@ -721,6 +736,8 @@ def validate_raw_record(record: Mapping[str, Any]) -> None:
         "status",
         "valid",
         "timed_out",
+        "terminal_reason",
+        "time_parse_status",
         "timeout_seconds",
         "cpu",
         "numa_node",
@@ -773,6 +790,10 @@ def validate_raw_record(record: Mapping[str, Any]) -> None:
     if valid:
         if record.get("status") != "valid":
             raise RuntimeError("valid raw record has the wrong status")
+        if record.get("terminal_reason") is not None:
+            raise RuntimeError("valid raw record has a terminal reason")
+        if record.get("time_parse_status") != "complete":
+            raise RuntimeError("valid raw record lacks complete GNU time metrics")
         for field in (
             "ns_per_iter",
             "peak_rss_kib",
@@ -788,6 +809,17 @@ def validate_raw_record(record: Mapping[str, Any]) -> None:
     elif timeout:
         if record.get("status") != "timeout_censored":
             raise RuntimeError("timeout raw record has the wrong status")
+        if record.get("terminal_reason") != "process_timeout":
+            raise RuntimeError("timeout raw record has the wrong terminal reason")
+        time_parse_status = record.get("time_parse_status")
+        if time_parse_status not in {"complete", "incomplete_after_timeout"}:
+            raise RuntimeError("timeout raw record has an invalid GNU time status")
+        if time_parse_status == "incomplete_after_timeout" and any(
+            field in record for field in GNU_TIME_METRIC_FIELDS
+        ):
+            raise RuntimeError(
+                "timeout raw record exposes incomplete GNU time metrics"
+            )
     else:
         raise RuntimeError("raw record is neither valid nor timeout-censored")
 
@@ -1566,17 +1598,32 @@ def derive_process_evidence(
 
     stdout = paths["stdout"].read_bytes()
     stderr = paths["stderr"].read_bytes()
+    timed_out = record.get("timed_out") is True
     try:
         time_metrics = base.parse_time(paths["time"])
     except Exception as error:
-        raise immutable_evidence.ImmutableEvidenceError(
-            "std_bench GNU-time artifact is invalid"
-        ) from error
+        if not timed_out:
+            raise immutable_evidence.ImmutableEvidenceError(
+                "std_bench GNU-time artifact is invalid"
+            ) from error
+        time_metrics = {}
+        time_parse_status = "incomplete_after_timeout"
+    else:
+        time_parse_status = "complete"
     matches = list(
         base.BENCH_RE.finditer(stdout.decode("utf-8", errors="replace"))
     )
-    timed_out = record.get("timed_out") is True
-    derived: dict[str, Any] = dict(time_metrics)
+    if timed_out and (
+        len(matches) > 1
+        or (len(matches) == 1 and matches[0].group("name") != record.get("benchmark"))
+    ):
+        raise immutable_evidence.ImmutableEvidenceError(
+            "timeout process output violates the exact benchmark identity"
+        )
+    derived: dict[str, Any] = {
+        **time_metrics,
+        "time_parse_status": time_parse_status,
+    }
     if len(matches) == 1:
         match = matches[0]
         derived["reported_benchmark"] = match.group("name")
@@ -1600,13 +1647,20 @@ def derive_process_evidence(
             {
                 "valid": True,
                 "status": "valid",
+                "terminal_reason": None,
                 "lifetime_runtime_activation": process_runtime_evidence(
                     VARIANT_REGISTRY[str(record["variant_id"])], stderr
                 ),
             }
         )
     elif timed_out:
-        derived.update({"valid": False, "status": "timeout_censored"})
+        derived.update(
+            {
+                "valid": False,
+                "status": "timeout_censored",
+                "terminal_reason": "process_timeout",
+            }
+        )
     else:
         raise immutable_evidence.ImmutableEvidenceError(
             "std_bench artifacts do not describe a valid or timeout-censored process"
@@ -1647,6 +1701,7 @@ def validate_committed_process_record(
         "numa_node": numa_node,
         "timeout_seconds": timeout_seconds,
         "binary_sha256": build["binary_sha256"],
+        "glibc_tunables_present": False,
     }
     for field, expected_value in expected.items():
         if record.get(field) != expected_value:
@@ -1738,6 +1793,7 @@ def execute_benchmark_process(
             "--test-threads=1",
         ]
         env = variant_runtime_environment(variant, attempt_dir / "tmp")
+        immutable_evidence.atomic_write_bytes(time_path, b"")
         started = utc_now()
         started_monotonic = time.monotonic()
         proc: subprocess.Popen[Any] | None = None
@@ -1768,7 +1824,7 @@ def execute_benchmark_process(
         immutable_evidence.atomic_write_bytes(stderr_path, stderr)
         if not time_path.is_file():
             raise CampaignError(
-                f"GNU time emitted no artifact for {variant.variant_id}/{benchmark}"
+                f"GNU time artifact disappeared for {variant.variant_id}/{benchmark}"
             )
 
         def relative(path: Path) -> str:
@@ -1793,6 +1849,7 @@ def execute_benchmark_process(
             "supervisor_elapsed_seconds": elapsed,
             "timeout_seconds": timeout_seconds,
             "timed_out": timed_out,
+            "terminal_reason": "process_timeout" if timed_out else None,
             "exit_code": proc.returncode,
             "command": command,
             "cpu": cpu,
@@ -1820,9 +1877,13 @@ def execute_benchmark_process(
         try:
             record.update(base.parse_time(time_path))
         except Exception as error:
-            raise CampaignError(
-                f"GNU time failed closed for {variant.variant_id}/{benchmark}"
-            ) from error
+            if not timed_out:
+                raise CampaignError(
+                    f"GNU time failed closed for {variant.variant_id}/{benchmark}"
+                ) from error
+            record["time_parse_status"] = "incomplete_after_timeout"
+        else:
+            record["time_parse_status"] = "complete"
         matches = list(
             base.BENCH_RE.finditer(stdout.decode("utf-8", errors="replace"))
         )
@@ -1853,6 +1914,13 @@ def execute_benchmark_process(
             record["valid"] = True
             record["status"] = "valid"
         elif timed_out:
+            if len(matches) > 1 or (
+                len(matches) == 1 and matches[0].group("name") != benchmark
+            ):
+                raise CampaignError(
+                    "timeout process output violates the exact benchmark identity for "
+                    f"{variant.variant_id}/{benchmark}/{phase}/{round_index}"
+                )
             record["valid"] = False
             record["status"] = "timeout_censored"
         else:
@@ -1960,6 +2028,159 @@ def _cell_records(
     ]
 
 
+def build_terminal_accounting(
+    *,
+    records: Iterable[Mapping[str, Any]],
+    cohort_id: str,
+    measurement_session_id: str,
+    protocol_sha256: str,
+    variant_ids: Sequence[str],
+    canonical_benchmarks: Sequence[str],
+    measured_rounds: int,
+) -> dict[str, Any]:
+    """Account for every canonical leaf without imputing censored measurements."""
+
+    selected = validate_variant_selection(variant_ids)
+    canonical = tuple(canonical_benchmarks)
+    record_list = list(records)
+    benchmark_rows: list[dict[str, Any]] = []
+    common_complete: list[str] = []
+    excluded: list[str] = []
+    cell_status_counts = {
+        "complete": 0,
+        "timeout_censored": 0,
+        "peer_timeout_blocked": 0,
+    }
+    for benchmark in canonical:
+        histories = {
+            variant_id: _cell_records(record_list, variant_id, benchmark)
+            for variant_id in selected
+        }
+        states = {
+            variant_id: full.classify_cell_history(
+                histories[variant_id], measured_rounds=measured_rounds
+            )
+            for variant_id in selected
+        }
+        timeout_variants = [
+            variant_id
+            for variant_id in selected
+            if states[variant_id].status == "censored"
+        ]
+        complete = all(
+            states[variant_id].status == "complete" for variant_id in selected
+        )
+        if not complete and not timeout_variants:
+            pending = [
+                variant_id
+                for variant_id in selected
+                if states[variant_id].status == "pending"
+            ]
+            raise CampaignError(
+                "terminal accounting found an incomplete leaf without a timeout: "
+                f"{benchmark} ({','.join(pending)})"
+            )
+        benchmark_status = (
+            "common_complete" if complete else "excluded_timeout_censored"
+        )
+        (common_complete if complete else excluded).append(benchmark)
+        cells: list[dict[str, Any]] = []
+        for variant_id in selected:
+            state = states[variant_id]
+            history = sorted(
+                histories[variant_id],
+                key=lambda record: (str(record["phase"]), int(record["round"])),
+            )
+            if state.status == "complete":
+                cell_status = "complete"
+            elif state.status == "censored":
+                cell_status = "timeout_censored"
+            elif state.status == "pending" and timeout_variants:
+                cell_status = "peer_timeout_blocked"
+            else:  # pragma: no cover - guarded by the benchmark-level check above
+                raise CampaignError(
+                    f"unsupported terminal cell state: {variant_id}/{benchmark}"
+                )
+            cell_status_counts[cell_status] += 1
+            timeout_record = state.timeout_record or {}
+            cells.append(
+                {
+                    "variant_id": variant_id,
+                    "status": cell_status,
+                    "valid_measured_rounds": list(state.valid_measured_rounds),
+                    "observed_process_slots": [
+                        {
+                            "phase": record["phase"],
+                            "round": record["round"],
+                            "status": record["status"],
+                            "record_path": record["record_path"],
+                            "record_sha256": record["record_sha256"],
+                        }
+                        for record in history
+                    ],
+                    "timeout_phase": state.timeout_phase,
+                    "timeout_round": state.timeout_round,
+                    "timeout_record_path": timeout_record.get("record_path"),
+                    "timeout_record_sha256": timeout_record.get("record_sha256"),
+                    "blocked_by_timeout_variants": (
+                        timeout_variants
+                        if cell_status == "peer_timeout_blocked"
+                        else []
+                    ),
+                }
+            )
+        benchmark_rows.append(
+            {
+                "benchmark": benchmark,
+                "family": benchmark.split("::", 1)[0],
+                "status": benchmark_status,
+                "timeout_variants": timeout_variants,
+                "cells": cells,
+            }
+        )
+    if len(benchmark_rows) != EXPECTED_CANONICAL_BENCHMARK_COUNT:
+        raise CampaignError(
+            "terminal accounting does not cover the canonical inventory"
+        )
+    return {
+        "schema_version": TERMINAL_ACCOUNTING_SCHEMA_VERSION,
+        "cohort_id": cohort_id,
+        "measurement_session_id": measurement_session_id,
+        "protocol_sha256": protocol_sha256,
+        "selected_variant_ids": list(selected),
+        "canonical_inventory_count": len(canonical),
+        "measured_rounds": measured_rounds,
+        "terminal_benchmark_count": len(benchmark_rows),
+        "terminal_accounting_complete": True,
+        "common_complete_rule": (
+            "every selected variant has one valid warmup and every measured round; "
+            "a timeout excludes the leaf symmetrically from all comparisons"
+        ),
+        "common_complete_benchmark_count": len(common_complete),
+        "excluded_benchmark_count": len(excluded),
+        "common_complete_benchmarks": common_complete,
+        "excluded_benchmarks": excluded,
+        "cell_status_counts": cell_status_counts,
+        "raw_process_record_count": len(record_list),
+        "benchmarks": benchmark_rows,
+    }
+
+
+def write_terminal_accounting(output_dir: Path, accounting: Mapping[str, Any]) -> Path:
+    """Replace only the deterministic derived view over immutable raw records."""
+
+    path = (
+        output_dir
+        / "derived"
+        / str(accounting["cohort_id"])
+        / "terminal-accounting.json"
+    )
+    atomic_write_bytes(
+        path, (json.dumps(accounting, indent=2, sort_keys=True) + "\n").encode()
+    )
+    return path
+
+
 def rebuild_absolute_index(
     output_dir: Path,
     *,
@@ -1999,6 +2220,9 @@ def rebuild_absolute_index(
             "phase": record["phase"],
             "round": record["round"],
             "status": record["status"],
+            "timed_out": record["timed_out"],
+            "terminal_reason": record["terminal_reason"],
+            "time_parse_status": record["time_parse_status"],
             "ns_per_iter": record.get("ns_per_iter"),
             "peak_rss_kib": record.get("peak_rss_kib"),
             "fixed_work_contract": record["fixed_work_contract"],
@@ -2064,6 +2288,18 @@ def build_protocol(
         "warmup_processes_per_cell": 1,
         "measured_rounds": measured_rounds,
         "timeout_seconds": timeout_seconds,
+        "timeout_censoring_contract": (
+            "a process timeout is a terminal right-censored cell; an incomplete "
+            "GNU time footer is retained and attested without metric imputation"
+        ),
+        "common_complete_selection_contract": (
+            "aggregate only canonical leaves with one valid warmup and every "
+            "measured round for every selected variant"
+        ),
+        "peer_timeout_contract": (
+            "after any variant timeout, remaining processes for that canonical "
+            "leaf are not launched and are terminally accounted as peer blocked"
+        ),
         "cpus": list(cpus),
         "variant_ids": list(selected),
         "lane_rule": "canonical benchmark index modulo cpus",
@@ -2312,6 +2548,12 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
                 history, measured_rounds=args.measured_rounds
             )
 
+        def benchmark_has_timeout(benchmark: str) -> bool:
+            return any(
+                state(variant_id, benchmark).status == "censored"
+                for variant_id in args.variants
+            )
+
         def execute(
             variant_id: str,
             benchmark: str,
@@ -2411,11 +2653,17 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
                     return
                 benchmark_index = benchmark_indexes[benchmark]
                 for variant_id in rotated(0, benchmark_index):
+                    if benchmark_has_timeout(benchmark):
+                        break
                     current = state(variant_id, benchmark)
                     if current.status == "pending" and not current.valid_measured_rounds:
                         execute(variant_id, benchmark, "warmup", 0, lane.cpu)
                 for round_index in range(1, args.measured_rounds + 1):
+                    if benchmark_has_timeout(benchmark):
+                        break
                     for variant_id in rotated(round_index, benchmark_index):
+                        if benchmark_has_timeout(benchmark):
+                            break
                         current = state(variant_id, benchmark)
                         if current.status in {"complete", "censored"}:
                             continue
@@ -2440,8 +2688,12 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
                 futures = [pool.submit(run_lane, lane) for lane in lanes]
                 await_worker_futures(futures, stop=stop)
         for benchmark in canonical:
+            timeout_present = benchmark_has_timeout(benchmark)
             for variant_id in args.variants:
-                if state(variant_id, benchmark).status == "pending":
+                if (
+                    state(variant_id, benchmark).status == "pending"
+                    and not timeout_present
+                ):
                     raise CampaignError(
                         f"full campaign ended with a pending cell: {variant_id}/{benchmark}"
                     )
@@ -2458,11 +2710,39 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             numa_node=args.numa_node,
             measurement_session_id=measurement_session_id,
         )
+        terminal_accounting = build_terminal_accounting(
+            records=records.values(),
+            cohort_id=args.cohort_id,
+            measurement_session_id=measurement_session_id,
+            protocol_sha256=str(protocol["protocol_sha256"]),
+            variant_ids=args.variants,
+            canonical_benchmarks=canonical,
+            measured_rounds=args.measured_rounds,
+        )
+        terminal_accounting_path = write_terminal_accounting(
+            output_dir, terminal_accounting
+        )
         result = {
             **build_result,
             "mode": "complete",
+            "collection_status": (
+                "complete_with_timeout_censoring"
+                if terminal_accounting["excluded_benchmark_count"]
+                else "complete"
+            ),
             "raw_process_record_count": len(records),
             "absolute_index": str(index),
+            "terminal_accounting": str(terminal_accounting_path),
+            "terminal_accounting_sha256": sha256_file(terminal_accounting_path),
+            "terminal_benchmark_count": terminal_accounting[
+                "terminal_benchmark_count"
+            ],
+            "common_complete_benchmark_count": terminal_accounting[
+                "common_complete_benchmark_count"
+            ],
+            "excluded_benchmark_count": terminal_accounting[
+                "excluded_benchmark_count"
+            ],
             "derived_ratios_written": False,
             "measurement_lock": dict(measurement_lock),
             "measurement_session_id": measurement_session_id,

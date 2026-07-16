@@ -46,6 +46,8 @@ def raw_record(
         "status": "valid",
         "valid": True,
         "timed_out": False,
+        "terminal_reason": None,
+        "time_parse_status": "complete",
         "timeout_seconds": 30,
         "cpu": 20,
         "numa_node": 0,
@@ -620,6 +622,144 @@ class FeatureCampaignTest(unittest.TestCase):
                 )
             )
             self.assertEqual(2, len(attempts))
+
+    def test_timeout_with_incomplete_gnu_time_is_committed_and_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            arguments = process_arguments(root)
+            calls = 0
+
+            class FakeProcess:
+                pid = 10004
+
+                def __init__(self, _command: list[str], **_: object) -> None:
+                    nonlocal calls
+                    calls += 1
+                    self.returncode: int | None = None
+                    self.communications = 0
+
+                def poll(self) -> int | None:
+                    return self.returncode
+
+                def wait(self, timeout: int | None = None) -> int:
+                    del timeout
+                    assert self.returncode is not None
+                    return self.returncode
+
+                def communicate(
+                    self, timeout: int | None = None
+                ) -> tuple[bytes, bytes]:
+                    self.communications += 1
+                    if timeout is not None:
+                        raise campaign.subprocess.TimeoutExpired("std-bench", timeout)
+                    return b"", b""
+
+            def terminate(process: FakeProcess) -> None:
+                process.returncode = -15
+
+            with (
+                mock.patch.object(campaign.subprocess, "Popen", FakeProcess),
+                mock.patch.object(
+                    campaign,
+                    "terminate_and_wait_process_group",
+                    side_effect=terminate,
+                ),
+            ):
+                first = campaign.execute_benchmark_process(**arguments)
+                second = campaign.execute_benchmark_process(**arguments)
+
+            self.assertEqual(1, calls)
+            self.assertEqual("timeout_censored", first["status"])
+            self.assertTrue(first["timed_out"])
+            self.assertFalse(first["valid"])
+            self.assertEqual("process_timeout", first["terminal_reason"])
+            self.assertEqual("incomplete_after_timeout", first["time_parse_status"])
+            self.assertNotIn("peak_rss_kib", first)
+            self.assertEqual(first["record_sha256"], second["record_sha256"])
+            self.assertEqual(b"", (root / str(first["time_path"])).read_bytes())
+
+    def test_terminal_accounting_uses_only_the_common_complete_leaf_set(self) -> None:
+        variants = ("unialloc", "typed_plain", "typeiso_perf")
+        benchmarks = tuple(f"family::bench_{index:03d}" for index in range(468))
+        records: list[dict[str, object]] = []
+
+        def append_record(
+            variant_id: str,
+            benchmark: str,
+            phase: str,
+            round_index: int,
+            *,
+            timed_out: bool = False,
+        ) -> None:
+            records.append(
+                {
+                    "variant_id": variant_id,
+                    "allocator": variant_id,
+                    "benchmark": benchmark,
+                    "phase": phase,
+                    "round": round_index,
+                    "status": "timeout_censored" if timed_out else "valid",
+                    "valid": not timed_out,
+                    "timed_out": timed_out,
+                    "record_path": (
+                        f"raw/{variant_id}/{benchmark}/{phase}/{round_index}.json"
+                    ),
+                    "record_sha256": "d" * 64,
+                }
+            )
+
+        for benchmark in benchmarks[:-1]:
+            for variant_id in variants:
+                append_record(variant_id, benchmark, "warmup", 0)
+                for round_index in range(1, 4):
+                    append_record(variant_id, benchmark, "measured", round_index)
+        append_record("unialloc", benchmarks[-1], "warmup", 0, timed_out=True)
+
+        accounting = campaign.build_terminal_accounting(
+            records=records,
+            cohort_id="primary",
+            measurement_session_id="11111111-1111-4111-8111-111111111111",
+            protocol_sha256="a" * 64,
+            variant_ids=variants,
+            canonical_benchmarks=benchmarks,
+            measured_rounds=3,
+        )
+
+        self.assertTrue(accounting["terminal_accounting_complete"])
+        self.assertEqual(468, accounting["terminal_benchmark_count"])
+        self.assertEqual(467, accounting["common_complete_benchmark_count"])
+        self.assertEqual(1, accounting["excluded_benchmark_count"])
+        self.assertEqual([benchmarks[-1]], accounting["excluded_benchmarks"])
+        self.assertEqual(
+            {
+                "complete": 467 * len(variants),
+                "timeout_censored": 1,
+                "peer_timeout_blocked": 2,
+            },
+            accounting["cell_status_counts"],
+        )
+        excluded = accounting["benchmarks"][-1]
+        self.assertEqual("excluded_timeout_censored", excluded["status"])
+        self.assertEqual(["unialloc"], excluded["timeout_variants"])
+        self.assertEqual(
+            ["timeout_censored", "peer_timeout_blocked", "peer_timeout_blocked"],
+            [cell["status"] for cell in excluded["cells"]],
+        )
+
+    def test_terminal_accounting_rejects_unexplained_pending_cells(self) -> None:
+        benchmarks = tuple(f"family::bench_{index:03d}" for index in range(468))
+        with self.assertRaisesRegex(
+            campaign.CampaignError, "incomplete leaf without a timeout"
+        ):
+            campaign.build_terminal_accounting(
+                records=(),
+                cohort_id="primary",
+                measurement_session_id="11111111-1111-4111-8111-111111111111",
+                protocol_sha256="a" * 64,
+                variant_ids=("unialloc", "typed_plain", "typeiso_perf"),
+                canonical_benchmarks=benchmarks,
+                measured_rounds=3,
+            )
 
     def test_committed_process_reuse_rejects_artifact_mutation_before_popen(
         self,
