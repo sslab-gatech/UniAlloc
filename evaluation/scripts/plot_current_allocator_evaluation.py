@@ -24,6 +24,7 @@ import shutil
 import statistics
 import sys
 import tempfile
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +43,12 @@ from matplotlib.ticker import FuncFormatter
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from evaluation.scripts import immutable_evidence  # noqa: E402
+from evaluation.scripts import (
+    import_macro_baseline_builds as build_importer,
+)  # noqa: E402
+from evaluation.scripts import (  # noqa: E402
+    run_primary_macro_allocator_baselines as macro_runner,
+)
 from evaluation.scripts import (
     type_isolation_suite_contract as suite_contract,
 )  # noqa: E402
@@ -66,13 +73,24 @@ ALLOCATOR_BASELINE_VARIANTS = (
 CANONICAL_STD_BENCH_COUNT = 468
 ROBUST_FLOOR_NS = 100.0
 FIXED_WORK = "fixed_work"
-PROTOCOL_REVISION = "full-std-bench-feature-process-v5"
+PROTOCOL_REVISION = "full-std-bench-feature-process-v6"
+MICRO_FEATURE_RAW_SCHEMA_VERSION = 4
 OUTPUT_SCHEMA_VERSION = 2
 PNG_DPI = 300
 FIGURE_SIZE = (16.0, 8.7)
 MAX_DISPLAY_LOG2_RATIO = 3.0
 FIXED_DATE = "2026-07-16"
 FIXED_DATETIME = dt.datetime(2026, 7, 16, tzinfo=dt.timezone.utc)
+MACRO_RUNNER_PATH = (
+    Path(__file__).with_name("run_primary_macro_allocator_baselines.py").resolve()
+)
+MACRO_IMPORTER_PATH = (
+    Path(__file__).with_name("import_macro_baseline_builds.py").resolve()
+)
+SWC_JEMALLOC_DIRECT_LOAD_ROUTE = macro_runner.SWC_JEMALLOC_DIRECT_LOAD_ROUTE
+SWC_JEMALLOC_VERSION = macro_runner.SWC_JEMALLOC_VERSION
+SWC_JEMALLOC_SYS_VERSION = macro_runner.SWC_JEMALLOC_SYS_VERSION
+SWC_UPSTREAM_JEMALLOC_VERSION = "0.5.4"
 
 LABELS = {
     "unialloc": "UniAlloc",
@@ -322,6 +340,168 @@ def validate_path_digest(path_value: Any, digest: Any, context: str) -> dict[str
         f"{context} content differs from its attestation",
     )
     return {"path": str(path), "sha256": digest, "bytes": path.stat().st_size}
+
+
+def locked_cargo_package(path: Path, name: str, context: str) -> dict[str, Any]:
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+        raise EvidenceError(
+            f"{context} Cargo.lock is invalid: {path}: {error}"
+        ) from error
+    packages = payload.get("package")
+    fail(isinstance(packages, list), f"{context} Cargo.lock has no packages")
+    matches = [
+        package
+        for package in packages
+        if isinstance(package, dict) and package.get("name") == name
+    ]
+    fail(
+        len(matches) == 1,
+        f"{context} Cargo.lock must contain one {name} package",
+    )
+    return dict(matches[0])
+
+
+def validate_swc_jemalloc_direct_load(
+    build_record: Mapping[str, Any], context: str
+) -> list[tuple[dict[str, Any], str]]:
+    route = build_record.get("jemalloc_direct_load_route")
+    runner_sha256 = sha256_file(MACRO_RUNNER_PATH)
+    fail(
+        isinstance(route, dict)
+        and route.get("id") == SWC_JEMALLOC_DIRECT_LOAD_ROUTE
+        and route.get("adapter_source_sha256") == runner_sha256
+        and route.get("target_crate") == "typescript"
+        and route.get("wrapper_package") == "tikv-jemallocator"
+        and route.get("wrapper_version") == SWC_JEMALLOC_VERSION
+        and route.get("sys_package") == "tikv-jemalloc-sys"
+        and route.get("sys_version") == SWC_JEMALLOC_SYS_VERSION,
+        f"{context} SWC jemalloc direct-load route identity mismatch",
+    )
+    worktree = Path(str(build_record.get("worktree", ""))).resolve()
+    upstream_lock = worktree / "Cargo.lock"
+    upstream_lock_identity = validate_path_digest(
+        str(upstream_lock),
+        build_record.get("derived_cargo_lock_sha256"),
+        f"{context} upstream SWC lock",
+    )
+    upstream_package = locked_cargo_package(
+        upstream_lock, "tikv-jemallocator", f"{context} upstream SWC"
+    )
+    fail(
+        upstream_package.get("version") == SWC_UPSTREAM_JEMALLOC_VERSION
+        and route.get("upstream_inactive_lock_package") == upstream_package
+        and route.get("cargo_lock_before_sha256") == upstream_lock_identity["sha256"]
+        and route.get("cargo_lock_after_sha256") == upstream_lock_identity["sha256"],
+        f"{context} upstream SWC jemalloc lock changed",
+    )
+    record_identity = validate_path_digest(
+        route.get("record"),
+        route.get("record_sha256"),
+        f"{context} SWC jemalloc direct-load record",
+    )
+    direct_record_path = Path(record_identity["path"])
+    direct_record = load_object(
+        direct_record_path, f"{context} SWC jemalloc direct-load record"
+    )
+    fail(
+        direct_record.get("schema_version") == 1
+        and direct_record.get("success") is True
+        and direct_record.get("route") == SWC_JEMALLOC_DIRECT_LOAD_ROUTE
+        and direct_record.get("wrapper_package") == "tikv-jemallocator"
+        and direct_record.get("wrapper_version") == SWC_JEMALLOC_VERSION
+        and direct_record.get("sys_package") == "tikv-jemalloc-sys"
+        and direct_record.get("sys_version") == SWC_JEMALLOC_SYS_VERSION
+        and direct_record.get("adapter_source_sha256") == runner_sha256
+        and direct_record.get("toolchain") == build_record.get("toolchain"),
+        f"{context} SWC jemalloc direct-load record identity mismatch",
+    )
+    artifacts = direct_record.get("artifacts")
+    required_artifacts = {"manifest", "source", "lockfile", "rlib", "wrapper"}
+    fail(
+        isinstance(artifacts, dict) and required_artifacts.issubset(artifacts),
+        f"{context} SWC jemalloc direct-load artifacts are incomplete",
+    )
+    retained: list[tuple[dict[str, Any], str]] = [
+        (upstream_lock_identity, "swc_upstream_lock"),
+        (record_identity, "swc_jemalloc_direct_load_record"),
+    ]
+    artifact_identities: dict[str, dict[str, Any]] = {}
+    for artifact_name in sorted(required_artifacts):
+        identity = validate_artifact_identity(
+            artifacts[artifact_name],
+            f"{context} SWC jemalloc direct-load {artifact_name}",
+        )
+        artifact_identities[artifact_name] = identity
+        retained.append((identity, "swc_jemalloc_direct_load_artifact"))
+    direct_lock = Path(artifact_identities["lockfile"]["path"])
+    try:
+        manifest_text = Path(artifact_identities["manifest"]["path"]).read_text(
+            encoding="utf-8"
+        )
+        source_text = Path(artifact_identities["source"]["path"]).read_text(
+            encoding="utf-8"
+        )
+        wrapper_text = Path(artifact_identities["wrapper"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    except (OSError, UnicodeError) as error:
+        raise EvidenceError(f"{context} SWC direct-load source is invalid") from error
+    fail(
+        manifest_text == macro_runner.SWC_JEMALLOC_DIRECT_LOAD_MANIFEST
+        and source_text == "pub use jemallocator::Jemalloc;\n"
+        and wrapper_text == macro_runner.SWC_JEMALLOC_DIRECT_LOAD_WRAPPER,
+        f"{context} SWC jemalloc direct-load source differs from the runner",
+    )
+    locked_wrapper = locked_cargo_package(
+        direct_lock, "tikv-jemallocator", f"{context} direct-load"
+    )
+    locked_sys = locked_cargo_package(
+        direct_lock, "tikv-jemalloc-sys", f"{context} direct-load"
+    )
+    fail(
+        locked_wrapper.get("version") == SWC_JEMALLOC_VERSION
+        and locked_sys.get("version") == SWC_JEMALLOC_SYS_VERSION
+        and direct_record.get("locked_wrapper_package") == locked_wrapper
+        and direct_record.get("locked_sys_package") == locked_sys,
+        f"{context} SWC jemalloc direct-load dependency pins mismatch",
+    )
+    fail(
+        validate_artifact_identity(
+            route.get("rlib"), f"{context} routed SWC jemalloc rlib"
+        )
+        == artifact_identities["rlib"]
+        and validate_artifact_identity(
+            route.get("wrapper"), f"{context} routed SWC jemalloc wrapper"
+        )
+        == artifact_identities["wrapper"],
+        f"{context} SWC jemalloc routed artifacts mismatch",
+    )
+    commands = direct_record.get("commands")
+    fail(
+        isinstance(commands, list) and len(commands) == 2,
+        f"{context} SWC jemalloc direct-load commands are incomplete",
+    )
+    for index, command in enumerate(commands):
+        fail(
+            isinstance(command, dict)
+            and command.get("exit_code") == 0
+            and command.get("timed_out") is False,
+            f"{context} SWC jemalloc direct-load command failed: {index}",
+        )
+        for stream in ("stdout", "stderr"):
+            retained.append(
+                (
+                    validate_path_digest(
+                        command.get(stream),
+                        command.get(f"{stream}_sha256"),
+                        f"{context} SWC jemalloc direct-load {stream} {index}",
+                    ),
+                    "swc_jemalloc_direct_load_command",
+                )
+            )
+    return retained
 
 
 def validate_macro_measurement_record(
@@ -748,6 +928,30 @@ def read_micro_feature(
         compatibility.get("protocol_revision") == PROTOCOL_REVISION,
         "micro feature protocol revision is not current",
     )
+    timeout_seconds = exact_int(
+        compatibility.get("timeout_seconds"), "micro feature process timeout"
+    )
+    fail(
+        compatibility.get("raw_record_schema_version")
+        == MICRO_FEATURE_RAW_SCHEMA_VERSION
+        and timeout_seconds > 0
+        and compatibility.get("timeout_censoring_contract")
+        == (
+            "a process timeout is a terminal right-censored cell; an incomplete "
+            "GNU time footer is retained and attested without metric imputation"
+        )
+        and compatibility.get("common_complete_selection_contract")
+        == (
+            "aggregate only canonical leaves with one valid warmup and every "
+            "measured round for every selected variant"
+        )
+        and compatibility.get("peer_timeout_contract")
+        == (
+            "after any variant timeout, remaining processes for that canonical "
+            "leaf are not launched and are terminally accounted as peer blocked"
+        ),
+        "micro feature timeout and common-completion contract is invalid",
+    )
     fail(
         tuple(compatibility.get("variant_ids", ())) == FEATURE_VARIANTS,
         "micro feature variants are invalid",
@@ -777,6 +981,7 @@ def read_micro_feature(
     session_path = root / "sessions" / cohort / "measurement-session.json"
     selection_path = root / "views" / cohort / "selection.json"
     index_path = root / "derived" / cohort / "absolute-process-index.jsonl"
+    terminal_path = root / "derived" / cohort / "terminal-accounting.json"
     session = load_object(session_path, "micro feature measurement session")
     selection = load_object(selection_path, "micro feature selection")
     fail(session.get("schema_version") == 2, "micro feature session schema is invalid")
@@ -808,7 +1013,7 @@ def read_micro_feature(
     )
     raw_rows = load_jsonl(index_path, "micro feature process index")
     indexed: dict[tuple[str, str, str, int], dict[str, Any]] = {}
-    benchmarks: set[str] = set()
+    indexed_benchmarks: set[str] = set()
     for row in raw_rows:
         benchmark = row.get("benchmark")
         variant = row.get("variant_id")
@@ -821,12 +1026,25 @@ def read_micro_feature(
         fail(
             variant in FEATURE_VARIANTS, f"micro feature variant is invalid: {variant}"
         )
-        fail(phase in {"warmup", "measurement"}, "micro feature phase is invalid")
-        fail(row.get("status") == "valid", "micro feature contains a non-valid process")
+        fail(phase in {"warmup", "measured"}, "micro feature phase is invalid")
+        fail(
+            (phase == "warmup" and round_number == 0)
+            or (phase == "measured" and 1 <= round_number <= suite.measured_rounds),
+            "micro feature process slot is invalid",
+        )
+        status = row.get("status")
+        fail(
+            status in {"valid", "timeout_censored"},
+            "micro feature process status is invalid",
+        )
         fail(
             row.get("cohort_id") == cohort
             and row.get("measurement_session_id") == session_id,
             "micro feature row is outside the selected session",
+        )
+        fail(
+            row.get("measurement_anchor") is (variant == REFERENCE),
+            "micro feature anchor ordering evidence is invalid",
         )
         fail(
             type(row.get("performance_claim_eligible")) is bool,
@@ -843,53 +1061,333 @@ def read_micro_feature(
             and row.get("rss_work_model") == "workload_native_adaptive_iterations",
             "micro feature claim eligibility differs from the adaptive process contract",
         )
-        positive(row.get("ns_per_iter"), "micro feature ns_per_iter")
-        positive(row.get("peak_rss_kib"), "micro feature peak_rss_kib")
-        resolve_artifact(
+        valid = status == "valid"
+        if valid:
+            fail(
+                row.get("timed_out") is False
+                and row.get("terminal_reason") is None
+                and row.get("time_parse_status") == "complete",
+                "micro feature valid process terminal identity is invalid",
+            )
+            positive(row.get("ns_per_iter"), "micro feature ns_per_iter")
+            positive(row.get("peak_rss_kib"), "micro feature peak_rss_kib")
+        else:
+            fail(
+                row.get("timed_out") is True
+                and row.get("terminal_reason") == "process_timeout"
+                and row.get("time_parse_status")
+                in {"complete", "incomplete_after_timeout"},
+                "micro feature timeout process terminal identity is invalid",
+            )
+            if row.get("time_parse_status") == "incomplete_after_timeout":
+                fail(
+                    row.get("ns_per_iter") is None and row.get("peak_rss_kib") is None,
+                    "micro feature incomplete timeout exposes imputed metrics",
+                )
+            else:
+                if row.get("ns_per_iter") is not None:
+                    positive(
+                        row.get("ns_per_iter"), "micro feature timeout ns_per_iter"
+                    )
+                if row.get("peak_rss_kib") is not None:
+                    positive(
+                        row.get("peak_rss_kib"),
+                        "micro feature timeout peak_rss_kib",
+                    )
+        record_path = resolve_artifact(
             root,
             row.get("record_path"),
             row.get("record_sha256"),
             "micro feature process",
         )
+        raw_record = load_object(record_path, "micro feature raw process")
+        fail(
+            raw_record.get("schema_version") == MICRO_FEATURE_RAW_SCHEMA_VERSION
+            and raw_record.get("protocol_sha256") == protocol_digest
+            and raw_record.get("cohort_id") == cohort
+            and raw_record.get("measurement_session_id") == session_id
+            and raw_record.get("measurement_anchor") is (variant == REFERENCE)
+            and raw_record.get("variant_id") == variant
+            and raw_record.get("allocator") == variant
+            and raw_record.get("benchmark") == benchmark
+            and raw_record.get("phase") == phase
+            and raw_record.get("round") == round_number
+            and raw_record.get("status") == status
+            and raw_record.get("valid") is valid
+            and raw_record.get("timed_out") is (not valid)
+            and raw_record.get("terminal_reason") == row.get("terminal_reason")
+            and raw_record.get("time_parse_status") == row.get("time_parse_status")
+            and raw_record.get("timeout_seconds") == timeout_seconds,
+            "micro feature raw process identity differs from its index row",
+        )
+        for claim_field in (
+            "fixed_work_contract",
+            "performance_claim_eligible",
+            "peak_rss_claim_eligible",
+            "rss_work_model",
+        ):
+            fail(
+                raw_record.get(claim_field) == row.get(claim_field),
+                f"micro feature raw process {claim_field} differs from its index row",
+            )
+        for metric_field in ("ns_per_iter", "peak_rss_kib"):
+            fail(
+                raw_record.get(metric_field) == row.get(metric_field),
+                f"micro feature raw process {metric_field} differs from its index row",
+            )
         key = (benchmark, str(variant), str(phase), round_number)
         fail(key not in indexed, f"duplicate micro feature process: {key}")
         indexed[key] = row
-        benchmarks.add(benchmark)
-    fail(len(benchmarks) == inventory_count, "micro feature inventory is incomplete")
-    expected = {
-        (benchmark, variant, phase, round_number)
-        for benchmark in benchmarks
-        for variant in FEATURE_VARIANTS
-        for phase, rounds in (
-            ("warmup", range(0, suite.warmup_rounds)),
-            ("measurement", range(1, suite.measured_rounds + 1)),
-        )
-        for round_number in rounds
-    }
+        indexed_benchmarks.add(benchmark)
+
+    terminal = load_object(terminal_path, "micro feature terminal accounting")
     fail(
-        set(indexed) == expected,
-        "micro feature process matrix is incomplete or contains extra rows",
+        set(terminal)
+        == {
+            "schema_version",
+            "cohort_id",
+            "measurement_session_id",
+            "protocol_sha256",
+            "selected_variant_ids",
+            "canonical_inventory_count",
+            "measured_rounds",
+            "terminal_benchmark_count",
+            "terminal_accounting_complete",
+            "common_complete_rule",
+            "common_complete_benchmark_count",
+            "excluded_benchmark_count",
+            "common_complete_benchmarks",
+            "excluded_benchmarks",
+            "cell_status_counts",
+            "raw_process_record_count",
+            "benchmarks",
+        },
+        "micro feature terminal accounting fields are invalid",
     )
-    for benchmark in benchmarks:
-        for phase, rounds in (
-            ("warmup", range(0, 1)),
-            ("measurement", range(1, suite.measured_rounds + 1)),
-        ):
-            for round_number in rounds:
-                for variant in FEATURE_VARIANTS:
-                    anchored = indexed[(benchmark, variant, phase, round_number)].get(
-                        "measurement_anchor"
-                    )
+    terminal_rows = terminal.get("benchmarks")
+    fail(
+        terminal.get("schema_version") == 1
+        and terminal.get("cohort_id") == cohort
+        and terminal.get("measurement_session_id") == session_id
+        and terminal.get("protocol_sha256") == protocol_digest
+        and tuple(terminal.get("selected_variant_ids", ())) == FEATURE_VARIANTS
+        and terminal.get("canonical_inventory_count") == inventory_count
+        and terminal.get("measured_rounds") == suite.measured_rounds
+        and terminal.get("terminal_benchmark_count") == inventory_count
+        and terminal.get("terminal_accounting_complete") is True
+        and terminal.get("common_complete_rule")
+        == (
+            "every selected variant has one valid warmup and every measured round; "
+            "a timeout excludes the leaf symmetrically from all comparisons"
+        )
+        and terminal.get("raw_process_record_count") == len(raw_rows)
+        and isinstance(terminal_rows, list)
+        and len(terminal_rows) == inventory_count,
+        "micro feature terminal accounting identity is invalid",
+    )
+    terminal_benchmarks: list[str] = []
+    derived_common: list[str] = []
+    derived_excluded: list[str] = []
+    derived_cell_counts = {
+        "complete": 0,
+        "timeout_censored": 0,
+        "peer_timeout_blocked": 0,
+    }
+    for benchmark_row in terminal_rows:
+        fail(
+            isinstance(benchmark_row, dict)
+            and set(benchmark_row)
+            == {"benchmark", "family", "status", "timeout_variants", "cells"},
+            "micro feature terminal benchmark row is invalid",
+        )
+        benchmark = benchmark_row.get("benchmark")
+        fail(
+            isinstance(benchmark, str)
+            and benchmark
+            and benchmark not in terminal_benchmarks,
+            "micro feature terminal benchmark identity is invalid",
+        )
+        terminal_benchmarks.append(benchmark)
+        fail(
+            benchmark_row.get("family") == benchmark.split("::", 1)[0],
+            "micro feature terminal benchmark family is invalid",
+        )
+        cells = benchmark_row.get("cells")
+        fail(
+            isinstance(cells, list)
+            and len(cells) == len(FEATURE_VARIANTS)
+            and all(isinstance(cell, dict) for cell in cells)
+            and [cell.get("variant_id") for cell in cells] == list(FEATURE_VARIANTS),
+            "micro feature terminal benchmark cells are invalid",
+        )
+        derived_timeout_variants: list[str] = []
+        cell_states: dict[str, tuple[str, list[int], dict[str, Any] | None]] = {}
+        for variant in FEATURE_VARIANTS:
+            history = sorted(
+                (
+                    row
+                    for (
+                        row_benchmark,
+                        row_variant,
+                        _phase,
+                        _round,
+                    ), row in indexed.items()
+                    if row_benchmark == benchmark and row_variant == variant
+                ),
+                key=lambda row: (str(row["phase"]), int(row["round"])),
+            )
+            by_slot = {(str(row["phase"]), int(row["round"])): row for row in history}
+            warmup = by_slot.get(("warmup", 0))
+            measured = {
+                round_number: row
+                for (phase, round_number), row in by_slot.items()
+                if phase == "measured"
+            }
+            fail(
+                warmup is not None or not measured,
+                "micro feature measured process exists before its warmup",
+            )
+            if measured:
+                observed_rounds = sorted(measured)
+                fail(
+                    observed_rounds == list(range(1, max(observed_rounds) + 1)),
+                    "micro feature measured rounds are not a contiguous prefix",
+                )
+            timeout_row: dict[str, Any] | None = None
+            valid_rounds: list[int] = []
+            if warmup is None:
+                state = "pending"
+            elif warmup.get("status") == "timeout_censored":
+                fail(
+                    not measured,
+                    "micro feature measured process exists after a warmup timeout",
+                )
+                state = "censored"
+                timeout_row = warmup
+            else:
+                for round_number in sorted(measured):
+                    measured_row = measured[round_number]
                     fail(
-                        anchored is (variant == REFERENCE),
-                        "micro feature anchor ordering evidence is invalid",
+                        timeout_row is None,
+                        "micro feature measured process exists after a timeout",
                     )
+                    if measured_row.get("status") == "timeout_censored":
+                        timeout_row = measured_row
+                    else:
+                        valid_rounds.append(round_number)
+                if timeout_row is not None:
+                    state = "censored"
+                elif valid_rounds == list(range(1, suite.measured_rounds + 1)):
+                    state = "complete"
+                else:
+                    state = "pending"
+            cell_states[variant] = (state, valid_rounds, timeout_row)
+            if state == "censored":
+                derived_timeout_variants.append(variant)
+        complete = all(
+            cell_states[variant][0] == "complete" for variant in FEATURE_VARIANTS
+        )
+        fail(
+            complete or derived_timeout_variants,
+            "micro feature terminal accounting has an unexplained pending cell",
+        )
+        expected_benchmark_status = (
+            "common_complete" if complete else "excluded_timeout_censored"
+        )
+        fail(
+            benchmark_row.get("status") == expected_benchmark_status
+            and benchmark_row.get("timeout_variants") == derived_timeout_variants,
+            "micro feature terminal benchmark status is invalid",
+        )
+        (derived_common if complete else derived_excluded).append(benchmark)
+        for variant, cell in zip(FEATURE_VARIANTS, cells, strict=True):
+            fail(
+                set(cell)
+                == {
+                    "variant_id",
+                    "status",
+                    "valid_measured_rounds",
+                    "observed_process_slots",
+                    "timeout_phase",
+                    "timeout_round",
+                    "timeout_record_path",
+                    "timeout_record_sha256",
+                    "blocked_by_timeout_variants",
+                },
+                "micro feature terminal cell fields are invalid",
+            )
+            state, valid_rounds, timeout_row = cell_states[variant]
+            if state == "complete":
+                expected_cell_status = "complete"
+            elif state == "censored":
+                expected_cell_status = "timeout_censored"
+            else:
+                expected_cell_status = "peer_timeout_blocked"
+            history = sorted(
+                (
+                    row
+                    for (
+                        row_benchmark,
+                        row_variant,
+                        _phase,
+                        _round,
+                    ), row in indexed.items()
+                    if row_benchmark == benchmark and row_variant == variant
+                ),
+                key=lambda row: (str(row["phase"]), int(row["round"])),
+            )
+            expected_slots = [
+                {
+                    "phase": row["phase"],
+                    "round": row["round"],
+                    "status": row["status"],
+                    "record_path": row["record_path"],
+                    "record_sha256": row["record_sha256"],
+                }
+                for row in history
+            ]
+            fail(
+                cell.get("status") == expected_cell_status
+                and cell.get("valid_measured_rounds") == valid_rounds
+                and cell.get("observed_process_slots") == expected_slots
+                and cell.get("timeout_phase")
+                == (timeout_row.get("phase") if timeout_row else None)
+                and cell.get("timeout_round")
+                == (timeout_row.get("round") if timeout_row else None)
+                and cell.get("timeout_record_path")
+                == (timeout_row.get("record_path") if timeout_row else None)
+                and cell.get("timeout_record_sha256")
+                == (timeout_row.get("record_sha256") if timeout_row else None)
+                and cell.get("blocked_by_timeout_variants")
+                == (
+                    derived_timeout_variants
+                    if expected_cell_status == "peer_timeout_blocked"
+                    else []
+                ),
+                "micro feature terminal cell accounting is invalid",
+            )
+            derived_cell_counts[expected_cell_status] += 1
+    fail(
+        set(indexed_benchmarks) == set(terminal_benchmarks),
+        "micro feature process index differs from the terminal inventory",
+    )
+    fail(
+        derived_common
+        and terminal.get("common_complete_benchmarks") == derived_common
+        and terminal.get("excluded_benchmarks") == derived_excluded
+        and terminal.get("common_complete_benchmark_count") == len(derived_common)
+        and terminal.get("excluded_benchmark_count") == len(derived_excluded)
+        and terminal.get("cell_status_counts") == derived_cell_counts,
+        "micro feature common-complete selection is invalid",
+    )
+    benchmarks = tuple(terminal_benchmarks)
+    common_complete_benchmarks = set(derived_common)
     rows: list[dict[str, Any]] = []
     medians: dict[tuple[str, str, str], float] = {}
-    for benchmark in benchmarks:
+    for benchmark in derived_common:
         for variant in FEATURE_VARIANTS:
             measured_rows = [
-                indexed[(benchmark, variant, "measurement", round_number)]
+                indexed[(benchmark, variant, "measured", round_number)]
                 for round_number in range(1, suite.measured_rounds + 1)
             ]
             medians[(benchmark, variant, "performance")] = statistics.median(
@@ -900,7 +1398,7 @@ def read_micro_feature(
             )
     robust_benchmarks = {
         benchmark
-        for benchmark in benchmarks
+        for benchmark in derived_common
         if min(
             medians[(benchmark, variant, "performance")] for variant in FEATURE_VARIANTS
         )
@@ -915,7 +1413,7 @@ def read_micro_feature(
         reference = comparison.reference
         performance_leaves: list[tuple[str, str, float, bool]] = []
         rss_leaves: list[tuple[str, str, float, bool]] = []
-        for benchmark in sorted(benchmarks):
+        for benchmark in sorted(common_complete_benchmarks):
             family = benchmark.split("::", 1)[0]
             reference_ns = medians[(benchmark, reference, "performance")]
             subject_ns = medians[(benchmark, variant, "performance")]
@@ -966,11 +1464,19 @@ def read_micro_feature(
         "session_sha256": sha256_file(session_path),
         "selection_sha256": sha256_file(selection_path),
         "index_sha256": sha256_file(index_path),
+        "terminal_accounting_sha256": sha256_file(terminal_path),
         "cohort_id": cohort,
         "measurement_session_id": session_id,
         "benchmark_count": len(benchmarks),
+        "terminal_benchmark_count": len(benchmarks),
+        "common_completed_benchmark_count": len(common_complete_benchmarks),
+        "common_completed_excluded_benchmark_count": len(derived_excluded),
+        "common_completed_excluded_benchmarks": derived_excluded,
+        "timeout_censored_cell_count": derived_cell_counts["timeout_censored"],
+        "peer_timeout_blocked_cell_count": derived_cell_counts["peer_timeout_blocked"],
+        "timeout_seconds": timeout_seconds,
         "common_robust_benchmark_count": len(robust_benchmarks),
-        "common_robust_excluded_benchmark_count": len(benchmarks)
+        "common_robust_excluded_benchmark_count": len(common_complete_benchmarks)
         - len(robust_benchmarks),
         "common_robust_rule": (
             "minimum three-round median ns_per_iter across every feature variant "
@@ -1013,8 +1519,8 @@ def read_micro_baseline(
         "micro baseline schema version is invalid",
     )
     fail(
-        state.get("status") == "complete",
-        "micro baseline censoring requires a separately qualified presentation",
+        state.get("status") in {"complete", "complete_with_timeout_censoring"},
+        "micro baseline terminal state is invalid",
     )
     fail(
         state.get("all_warmups_attempted") is True,
@@ -1042,6 +1548,10 @@ def read_micro_baseline(
         exact_int(config.get("warmups"), "micro baseline warmups") == 1,
         "micro baseline warmup count is invalid",
     )
+    timeout_seconds = exact_int(
+        config.get("timeout_seconds"), "micro baseline process timeout"
+    )
+    fail(timeout_seconds > 0, "micro baseline process timeout must be positive")
     raw_variants = config.get("variants")
     inventory = config.get("benchmark_inventory")
     fail(
@@ -1118,8 +1628,8 @@ def read_micro_baseline(
     )
     terminal_processes = state.get("completed_terminal_processes")
     fail(
-        type(terminal_processes) is int and terminal_processes == maximum_processes,
-        "micro baseline terminal process matrix is incomplete",
+        type(terminal_processes) is int and 0 < terminal_processes <= maximum_processes,
+        "micro baseline terminal process count is invalid",
     )
     raw_cells = summary.get("cells")
     fail(isinstance(raw_cells, list), "micro baseline summary cells are missing")
@@ -1132,8 +1642,8 @@ def read_micro_baseline(
             "micro baseline summary cell identity is invalid",
         )
         fail(
-            cell.get("status") == "complete",
-            "micro baseline censoring requires a separately qualified presentation",
+            cell.get("status") in {"complete", "censored"},
+            "micro baseline cell has a non-terminal status",
         )
         cells[(str(key[0]), str(key[1]))] = cell
     fail(
@@ -1156,30 +1666,107 @@ def read_micro_baseline(
         key = (str(benchmark), str(variant), str(phase), round_number)
         fail(key not in records, f"duplicate micro baseline record: {key}")
         records[key] = row
-    complete_benchmarks = list(inventory)
-    expected_complete = {
-        (benchmark, variant, phase, round_number)
-        for benchmark in complete_benchmarks
-        for variant in variants
-        for phase, rounds in (
-            ("warmup", range(0, 1)),
-            ("measured", range(1, suite.measured_rounds + 1)),
-        )
-        for round_number in rounds
-    }
+    expected_records: set[tuple[str, str, str, int]] = set()
+    derived_censored_cells: list[Mapping[str, Any]] = []
+    for benchmark in inventory:
+        for variant in variants:
+            cell = cells[(benchmark, variant)]
+            if cell.get("status") == "complete":
+                expected_records.add((benchmark, variant, "warmup", 0))
+                expected_records.update(
+                    (benchmark, variant, "measured", round_number)
+                    for round_number in range(1, suite.measured_rounds + 1)
+                )
+                fail(
+                    cell.get("valid_measured_rounds")
+                    in (None, list(range(1, suite.measured_rounds + 1))),
+                    f"micro baseline complete cell round accounting mismatch: {benchmark}/{variant}",
+                )
+                continue
+            censoring = cell.get("censoring")
+            fail(
+                isinstance(censoring, dict)
+                and censoring.get("benchmark") == benchmark
+                and censoring.get("allocator") == variant
+                and censoring.get("timeout_seconds") == timeout_seconds
+                and censoring.get("phase") in {"warmup", "measured"},
+                f"micro baseline censoring identity mismatch: {benchmark}/{variant}",
+            )
+            phase = str(censoring["phase"])
+            round_number = exact_int(
+                censoring.get("round"), "micro baseline censored round"
+            )
+            valid_rounds = censoring.get("valid_measured_rounds_before_timeout")
+            expected_valid_rounds = (
+                list(range(1, round_number)) if phase == "measured" else []
+            )
+            fail(
+                isinstance(valid_rounds, list)
+                and valid_rounds == expected_valid_rounds,
+                f"micro baseline censored round prefix mismatch: {benchmark}/{variant}",
+            )
+            if phase == "warmup":
+                fail(
+                    round_number == 0,
+                    f"micro baseline warmup censor round is invalid: {benchmark}/{variant}",
+                )
+            else:
+                fail(
+                    1 <= round_number <= suite.measured_rounds,
+                    f"micro baseline measured censor round is invalid: {benchmark}/{variant}",
+                )
+                expected_records.add((benchmark, variant, "warmup", 0))
+                expected_records.update(
+                    (benchmark, variant, "measured", completed_round)
+                    for completed_round in range(1, round_number)
+                )
+            expected_records.add((benchmark, variant, phase, round_number))
+            fail(
+                cell.get("valid_measured_rounds") in (None, valid_rounds),
+                f"micro baseline censored cell round accounting mismatch: {benchmark}/{variant}",
+            )
+            derived_censored_cells.append(censoring)
     fail(
-        set(records) == expected_complete,
-        "micro baseline process matrix is incomplete or contains extra rows",
+        set(records) == expected_records and terminal_processes == len(records),
+        "micro baseline terminal process accounting is incomplete or contains extra rows",
     )
-    for row in records.values():
-        fail(
-            row.get("valid") is True
-            and row.get("timed_out") is False
-            and row.get("status") == "valid",
-            "micro baseline complete matrix contains an invalid process",
+    for key, row in records.items():
+        if row.get("status") == "valid":
+            fail(
+                row.get("valid") is True
+                and row.get("timed_out") is False
+                and row.get("time_parse_error") in (None, "")
+                and row.get("exit_code", 0) == 0
+                and row.get("time_exit_status", 0) == 0,
+                f"micro baseline valid process evidence is invalid: {key}",
+            )
+            positive(row.get("ns_per_iter"), "micro baseline ns_per_iter")
+            positive(row.get("peak_rss_kib"), "micro baseline peak_rss_kib")
+        else:
+            fail(
+                row.get("status") == "timeout_censored"
+                and row.get("valid") is not True
+                and row.get("timed_out") is True
+                and row.get("timeout_seconds") == timeout_seconds,
+                f"micro baseline timeout evidence is invalid: {key}",
+            )
+    complete_benchmarks = [
+        benchmark
+        for benchmark in inventory
+        if all(
+            cells[(benchmark, variant)].get("status") == "complete"
+            for variant in variants
         )
-        positive(row.get("ns_per_iter"), "micro baseline ns_per_iter")
-        positive(row.get("peak_rss_kib"), "micro baseline peak_rss_kib")
+    ]
+    excluded_benchmarks = [
+        benchmark
+        for benchmark in inventory
+        if benchmark not in set(complete_benchmarks)
+    ]
+    fail(
+        complete_benchmarks,
+        "micro baseline has no common all-allocator completed benchmark cases",
+    )
     medians: dict[tuple[str, str, str], float] = {}
     for benchmark in complete_benchmarks:
         for variant in variants:
@@ -1209,18 +1796,48 @@ def read_micro_baseline(
     coverage = summary.get("coverage")
     comparison_selection = summary.get("comparison_selection")
     robustness_selection = summary.get("robustness_selection")
+    record_counts = summary.get("record_counts")
+    stored_censored_cells = summary.get("censored_cells")
+    complete_cell_count = sum(
+        cell.get("status") == "complete" for cell in cells.values()
+    )
+    censored_cell_count = len(derived_censored_cells)
     fail(
         isinstance(methodology, dict)
         and methodology.get("allocators") == variants
+        and methodology.get("timeout_seconds_per_process") == timeout_seconds
+        and methodology.get("timeout_censoring")
+        == (
+            "a warmup timeout terminates the cell; a measured timeout retains "
+            "prior raw observations and suppresses the cell median"
+        )
         and config.get("ratio_floor_ns_per_iter") == ROBUST_FLOOR_NS
         and isinstance(coverage, dict)
         and coverage.get("canonical_inventory_count") == len(inventory)
         and coverage.get("allocator_cells") == len(inventory) * len(variants)
-        and coverage.get("complete_cells") == len(inventory) * len(variants)
-        and coverage.get("censored_cells") == 0
+        and coverage.get("complete_cells") == complete_cell_count
+        and coverage.get("censored_cells") == censored_cell_count
+        and coverage.get("pending_cells", 0) == 0
+        and coverage.get("all_allocator_complete_benchmarks")
+        in (None, len(complete_benchmarks))
+        and isinstance(record_counts, dict)
+        and record_counts.get("all") == len(records)
+        and record_counts.get("valid")
+        == sum(row.get("status") == "valid" for row in records.values())
+        and record_counts.get("timeout_censored") == censored_cell_count
+        and record_counts.get("all_warmups_attempted") is True
+        and stored_censored_cells == derived_censored_cells
+        and state.get("censored_cells", censored_cell_count) == censored_cell_count
+        and state.get("status")
+        == ("complete_with_timeout_censoring" if censored_cell_count else "complete")
         and isinstance(comparison_selection, dict)
-        and comparison_selection.get("complete_all_allocator_benchmarks") == inventory
-        and comparison_selection.get("comparable_benchmarks") == inventory
+        and comparison_selection.get("complete_all_allocator_benchmarks")
+        == complete_benchmarks
+        and comparison_selection.get("comparable_benchmarks") == complete_benchmarks
+        and comparison_selection.get("comparable_count", len(complete_benchmarks))
+        == len(complete_benchmarks)
+        and comparison_selection.get("excluded_count", len(excluded_benchmarks))
+        == len(excluded_benchmarks)
         and isinstance(robustness_selection, dict)
         and robustness_selection.get("threshold_ns_per_iter") == ROBUST_FLOOR_NS
         and robustness_selection.get("selected_benchmarks")
@@ -1285,10 +1902,16 @@ def read_micro_baseline(
         "variant_ids": variants,
         "benchmark_count": len(inventory),
         "complete_comparable_benchmark_count": len(complete_benchmarks),
+        "terminal_benchmark_count": len(inventory),
+        "common_completed_benchmark_count": len(complete_benchmarks),
+        "common_completed_excluded_benchmark_count": len(excluded_benchmarks),
+        "common_completed_excluded_benchmarks": excluded_benchmarks,
         "common_robust_benchmark_count": len(robust_benchmarks),
         "common_robust_excluded_benchmark_count": len(complete_benchmarks)
         - len(robust_benchmarks),
-        "censored_benchmark_count": 0,
+        "censored_cell_count": censored_cell_count,
+        "censored_benchmark_count": len(excluded_benchmarks),
+        "timeout_seconds_per_process": timeout_seconds,
     }
     return rows, identity
 
@@ -1909,6 +2532,12 @@ def macro_build_contract_fingerprint(
             **pins,
             "injection_route": "rustc-workspace-wrapper-direct-load-rlib-v1",
         }
+    if target_id == "swc" and build_variant == "jemalloc":
+        pins = {
+            **pins,
+            "injection_route": SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+            "tikv-jemalloc-sys": SWC_JEMALLOC_SYS_VERSION,
+        }
     return canonical_sha256(
         {
             "schema_version": 1,
@@ -1988,6 +2617,403 @@ def macro_variant_contract_fingerprint(
             ),
         }
     )
+
+
+def validate_macro_build_import(
+    root: Path,
+    *,
+    protocol_payload: Mapping[str, Any],
+    protocol_fingerprint: str,
+    suite: SuiteContract,
+) -> tuple[
+    dict[str, Any] | None,
+    dict[str, Mapping[str, Any]],
+    list[tuple[dict[str, Any], str]],
+]:
+    pointer_path = root / "latest-compatibility-import.json"
+    if not pointer_path.exists():
+        return None, {}, []
+    pointer = load_object(pointer_path, "macro baseline compatibility import pointer")
+    fail(
+        set(pointer) == {"import_id", "manifest", "manifest_payload_sha256"},
+        "macro baseline compatibility import pointer is invalid",
+    )
+    import_id = pointer.get("import_id")
+    payload_sha256 = pointer.get("manifest_payload_sha256")
+    fail(
+        isinstance(import_id, str)
+        and len(import_id) == 64
+        and isinstance(payload_sha256, str)
+        and len(payload_sha256) == 64,
+        "macro baseline compatibility import identity is invalid",
+    )
+    manifest_identity = validate_artifact_identity(
+        pointer.get("manifest"), "macro baseline compatibility import manifest"
+    )
+    manifest_path = Path(manifest_identity["path"])
+    expected_manifest_path = (
+        root / "compatibility-imports" / payload_sha256 / "manifest.json"
+    ).resolve()
+    fail(
+        manifest_path == expected_manifest_path,
+        "macro baseline compatibility import manifest path is invalid",
+    )
+    manifest = load_object(
+        manifest_path, "macro baseline compatibility import manifest"
+    )
+    fail(
+        canonical_sha256(manifest) == payload_sha256,
+        "macro baseline compatibility import payload digest mismatch",
+    )
+    base_mutations = tuple(sorted(build_importer.BASE_MUTATIONS))
+    alias_mutations = tuple(sorted(build_importer.ALIAS_MUTATIONS))
+    base_variants = tuple(build_importer.BASE_VARIANTS)
+    alias_variants = tuple(build_importer.ALIAS_VARIANTS)
+    all_variants = (*base_variants, *alias_variants)
+    destination_protocol = manifest.get("destination_protocol")
+    source_protocol = manifest.get("source_protocol")
+    current_runner = {
+        "path": str(MACRO_RUNNER_PATH.relative_to(REPOSITORY_ROOT)),
+        "sha256": sha256_file(MACRO_RUNNER_PATH),
+    }
+    fail(
+        manifest.get("schema_version") == build_importer.SCHEMA_VERSION
+        and manifest.get("import_id") == import_id
+        and manifest.get("suite_manifest_sha256") == suite.digest
+        and Path(str(manifest.get("destination_raw", ""))).resolve() == root.resolve()
+        and isinstance(destination_protocol, dict)
+        and destination_protocol
+        == {"fingerprint": protocol_fingerprint, "runner": current_runner}
+        and isinstance(source_protocol, dict)
+        and source_protocol.get("fingerprint") != protocol_fingerprint
+        and manifest.get("permitted_base_mutations") == list(base_mutations)
+        and manifest.get("permitted_alias_mutations") == list(alias_mutations)
+        and manifest.get("import_execution")
+        == {
+            "processes_started": 0,
+            "policy": "pure-python-file-derivation-with-no-build-or-command-execution",
+        }
+        and manifest.get("artifact_path_policy")
+        == (
+            "compiled artifacts, source worktrees, and command logs retain their "
+            "absolute immutable v3 paths"
+        ),
+        "macro baseline compatibility import contract mismatch",
+    )
+    importer_identity = validate_artifact_identity(
+        manifest.get("importer"), "macro baseline compatibility importer"
+    )
+    fail(
+        Path(importer_identity["path"]) == MACRO_IMPORTER_PATH
+        and importer_identity["sha256"] == sha256_file(MACRO_IMPORTER_PATH),
+        "macro baseline compatibility importer differs from the current importer",
+    )
+    source_raw = Path(str(manifest.get("source_raw", ""))).resolve()
+    fail(
+        source_raw.is_dir() and source_raw != root.resolve(),
+        "macro baseline compatibility source root is invalid",
+    )
+    source_manifest_identity = validate_artifact_identity(
+        source_protocol.get("manifest"),
+        "macro baseline source protocol manifest",
+    )
+    source_manifest = load_object(
+        Path(source_manifest_identity["path"]),
+        "macro baseline source protocol manifest",
+    )
+    source_payload = source_manifest.get("protocol")
+    source_fingerprint = source_protocol.get("fingerprint")
+    fail(
+        isinstance(source_payload, dict)
+        and source_manifest.get("protocol_id") == "primary-macro-allocator-baselines-v1"
+        and source_manifest.get("protocol_fingerprint") == source_fingerprint
+        and canonical_sha256(source_payload) == source_fingerprint
+        and source_protocol.get("runner") == source_payload.get("runner"),
+        "macro baseline source protocol identity mismatch",
+    )
+    snapshot = manifest.get("implementation_snapshot_copy")
+    fail(
+        isinstance(snapshot, dict),
+        "macro baseline imported implementation snapshot is missing",
+    )
+    source_snapshot_manifest = validate_artifact_identity(
+        snapshot.get("source_manifest"),
+        "macro baseline source implementation snapshot manifest",
+    )
+    destination_snapshot_manifest = validate_artifact_identity(
+        snapshot.get("destination_manifest"),
+        "macro baseline destination implementation snapshot manifest",
+    )
+    source_snapshot_path = Path(str(snapshot.get("source", ""))).resolve()
+    destination_snapshot_path = Path(str(snapshot.get("destination", ""))).resolve()
+    fail(
+        source_snapshot_path.is_dir()
+        and destination_snapshot_path.is_dir()
+        and not destination_snapshot_path.is_symlink()
+        and destination_snapshot_path.is_relative_to(root.resolve())
+        and Path(source_snapshot_manifest["path"]).parent == source_snapshot_path
+        and Path(destination_snapshot_manifest["path"]).parent
+        == destination_snapshot_path
+        and source_snapshot_manifest["sha256"]
+        == destination_snapshot_manifest["sha256"]
+        and snapshot.get("canonical_sha256") == suite.implementation_sha256
+        and snapshot.get("canonical_sha256")
+        == protocol_payload.get("implementation", {}).get("canonical_sha256")
+        and snapshot.get("canonical_file_count")
+        == protocol_payload.get("implementation", {}).get("canonical_file_count")
+        and snapshot.get("canonical_size_bytes")
+        == protocol_payload.get("implementation", {}).get("canonical_size_bytes"),
+        "macro baseline imported implementation snapshot identity mismatch",
+    )
+    import_index_identity = validate_artifact_identity(
+        manifest.get("import_build_index"),
+        "macro baseline compatibility import build index",
+    )
+    import_index = load_object(
+        Path(import_index_identity["path"]),
+        "macro baseline compatibility import build index",
+    )
+    manifest_rows = manifest.get("records")
+    expected_pairs = {
+        (target_id, variant)
+        for target_id in suite.target_ids
+        for variant in all_variants
+    }
+    fail(
+        isinstance(manifest_rows, list)
+        and manifest.get("record_count") == 42
+        and len(manifest_rows) == 42
+        and len(expected_pairs) == 42,
+        "macro baseline compatibility import must contain exactly 42 records",
+    )
+    retained: list[tuple[dict[str, Any], str]] = [
+        (manifest_identity, "compatibility_import_manifest"),
+        (importer_identity, "compatibility_importer"),
+        (source_manifest_identity, "source_protocol_manifest"),
+        (source_snapshot_manifest, "source_implementation_snapshot_manifest"),
+        (
+            destination_snapshot_manifest,
+            "destination_implementation_snapshot_manifest",
+        ),
+        (import_index_identity, "compatibility_import_build_index"),
+    ]
+    destination_records: dict[str, Mapping[str, Any]] = {}
+    source_records: dict[tuple[str, str], Mapping[str, Any]] = {}
+    destination_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
+    seen_pairs: set[tuple[str, str]] = set()
+    source_refs: list[Mapping[str, Any]] = []
+    destination_refs: list[Mapping[str, Any]] = []
+    for row in manifest_rows:
+        fail(isinstance(row, dict), "macro baseline import record row is invalid")
+        pair = (str(row.get("target_id")), str(row.get("variant")))
+        fail(
+            pair in expected_pairs and pair not in seen_pairs,
+            f"macro baseline import record identity is invalid: {pair}",
+        )
+        seen_pairs.add(pair)
+        expected_mutations = (
+            alias_mutations if pair[1] in alias_variants else base_mutations
+        )
+        fail(
+            row.get("mutated_fields") == list(expected_mutations),
+            f"macro baseline import mutation declaration mismatch: {pair}",
+        )
+        source_identity = validate_artifact_identity(
+            row.get("source"), f"macro baseline imported source record {pair}"
+        )
+        destination_identity = validate_artifact_identity(
+            row.get("destination"),
+            f"macro baseline imported destination record {pair}",
+        )
+        source_path = Path(source_identity["path"])
+        destination_path = Path(destination_identity["path"])
+        fail(
+            source_path.is_relative_to(source_raw)
+            and destination_path.is_relative_to(root.resolve()),
+            f"macro baseline imported record path escapes its campaign: {pair}",
+        )
+        source_record = load_object(
+            source_path, f"macro baseline imported source record {pair}"
+        )
+        destination_record = load_object(
+            destination_path, f"macro baseline imported destination record {pair}"
+        )
+        changed_fields = tuple(
+            sorted(
+                field
+                for field in source_record.keys() | destination_record.keys()
+                if source_record.get(field) != destination_record.get(field)
+            )
+        )
+        compatibility_import = destination_record.get("compatibility_import")
+        expected_compatibility_import = {
+            "schema_version": build_importer.SCHEMA_VERSION,
+            "import_id": import_id,
+            "source_protocol_fingerprint": source_fingerprint,
+            "destination_protocol_fingerprint": protocol_fingerprint,
+            "source_record": row.get("source"),
+            "permitted_mutations": list(expected_mutations),
+        }
+        fail(
+            changed_fields == expected_mutations
+            and source_record.get("target_id") == pair[0]
+            and source_record.get("variant") == pair[1]
+            and destination_record.get("target_id") == pair[0]
+            and destination_record.get("variant") == pair[1]
+            and source_record.get("protocol_fingerprint") == source_fingerprint
+            and destination_record.get("protocol_fingerprint") == protocol_fingerprint
+            and destination_record.get("target_fingerprint")
+            == macro_target_fingerprint(protocol_payload, pair[0])
+            and destination_record.get("implementation_snapshot")
+            == str(destination_snapshot_path)
+            and destination_record.get("build_path") == str(destination_path)
+            and compatibility_import == expected_compatibility_import
+            and row.get("source_build_id") == source_record.get("build_id")
+            and row.get("destination_build_id") == destination_record.get("build_id"),
+            f"macro baseline imported record identity mismatch: {pair}",
+        )
+        source_build_id = canonical_sha256(
+            {
+                "build_fingerprint": source_record.get("build_fingerprint"),
+                "target_id": pair[0],
+                "variant": pair[1],
+                "source_commit": source_record.get("source_commit"),
+                "harness_binaries": source_record.get("harness_binaries"),
+            }
+        )
+        destination_build_id = canonical_sha256(
+            {
+                "build_fingerprint": destination_record.get("build_fingerprint"),
+                "target_id": pair[0],
+                "variant": pair[1],
+                "source_commit": destination_record.get("source_commit"),
+                "harness_binaries": destination_record.get("harness_binaries"),
+            }
+        )
+        if pair[1] in alias_variants:
+            source_expected_fingerprint = macro_variant_contract_fingerprint(
+                source_payload,
+                pair[0],
+                pair[1],
+                (
+                    source_record.get("tcmalloc_identity")
+                    if pair[1] == "google_tcmalloc"
+                    else None
+                ),
+            )
+            destination_expected_fingerprint = macro_variant_contract_fingerprint(
+                protocol_payload,
+                pair[0],
+                pair[1],
+                (
+                    destination_record.get("tcmalloc_identity")
+                    if pair[1] == "google_tcmalloc"
+                    else None
+                ),
+            )
+        else:
+            source_expected_fingerprint = macro_build_contract_fingerprint(
+                source_payload, pair[0], pair[1]
+            )
+            destination_expected_fingerprint = macro_build_contract_fingerprint(
+                protocol_payload, pair[0], pair[1]
+            )
+        fail(
+            source_record.get("target_fingerprint")
+            == macro_target_fingerprint(source_payload, pair[0])
+            and source_record.get("build_fingerprint") == source_expected_fingerprint
+            and destination_record.get("build_fingerprint")
+            == destination_expected_fingerprint
+            and source_record.get("build_id") == source_build_id
+            and destination_record.get("build_id") == destination_build_id,
+            f"macro baseline imported build fingerprint mismatch: {pair}",
+        )
+        retained.extend(
+            [
+                (source_identity, "compatibility_import_source_record"),
+                (destination_identity, "compatibility_import_destination_record"),
+            ]
+        )
+        source_refs.append(row["source"])
+        destination_refs.append(row["destination"])
+        source_records[pair] = source_record
+        destination_by_pair[pair] = destination_record
+        destination_records[str(destination_path)] = destination_record
+    fail(
+        seen_pairs == expected_pairs
+        and manifest.get("source_record_set_sha256") == canonical_sha256(source_refs)
+        and manifest.get("destination_record_set_sha256")
+        == canonical_sha256(destination_refs),
+        "macro baseline compatibility import record set mismatch",
+    )
+    for target_id in suite.target_ids:
+        for alias, base in (
+            ("mimalloc_no_thp", "mimalloc"),
+            ("google_tcmalloc", "system"),
+        ):
+            source_alias = source_records[(target_id, alias)]
+            source_base = source_records[(target_id, base)]
+            destination_alias = destination_by_pair[(target_id, alias)]
+            destination_base = destination_by_pair[(target_id, base)]
+            fail(
+                source_alias.get("base_build_path") == source_base.get("build_path")
+                and source_alias.get("base_build_id") == source_base.get("build_id")
+                and destination_alias.get("base_build_path")
+                == destination_base.get("build_path")
+                and destination_alias.get("base_build_id")
+                == destination_base.get("build_id"),
+                f"macro baseline imported alias base mismatch: {target_id}/{alias}",
+            )
+    index_rows = import_index.get("builds")
+    expected_public_pairs = {
+        (target_id, variant)
+        for target_id in suite.target_ids
+        for variant in build_importer.PUBLIC_VARIANTS
+    }
+    fail(
+        import_index.get("schema_version") == 1
+        and isinstance(index_rows, list)
+        and len(index_rows) == len(expected_public_pairs),
+        "macro baseline compatibility import build index is invalid",
+    )
+    indexed_pairs: set[tuple[str, str]] = set()
+    for row in index_rows:
+        fail(
+            isinstance(row, dict), "macro baseline imported build index row is invalid"
+        )
+        pair = (str(row.get("target_id")), str(row.get("variant")))
+        destination_record = destination_by_pair.get(pair)
+        fail(
+            pair in expected_public_pairs
+            and pair not in indexed_pairs
+            and destination_record is not None
+            and row.get("build_id") == destination_record.get("build_id")
+            and row.get("build_path") == destination_record.get("build_path")
+            and row.get("harness_binaries")
+            == destination_record.get("harness_binaries")
+            and row.get("compatibility_import")
+            == destination_record.get("compatibility_import"),
+            f"macro baseline compatibility import build index mismatch: {pair}",
+        )
+        indexed_pairs.add(pair)
+    fail(
+        indexed_pairs == expected_public_pairs,
+        "macro baseline compatibility import public build set is incomplete",
+    )
+    identity = {
+        "pointer_path": str(pointer_path.resolve()),
+        "pointer_sha256": sha256_file(pointer_path),
+        "manifest": manifest_identity,
+        "manifest_payload_sha256": payload_sha256,
+        "import_id": import_id,
+        "source_protocol_fingerprint": source_fingerprint,
+        "destination_protocol_fingerprint": protocol_fingerprint,
+        "record_count": len(manifest_rows),
+        "source_record_set_sha256": manifest.get("source_record_set_sha256"),
+        "destination_record_set_sha256": manifest.get("destination_record_set_sha256"),
+        "import_build_index": import_index_identity,
+    }
+    return identity, destination_records, retained
 
 
 def read_macro_baseline(
@@ -2077,8 +3103,16 @@ def read_macro_baseline(
     protocol_implementation = protocol_payload.get("implementation")
     protocol_measurement = protocol_payload.get("measurement")
     protocol_targets = protocol_payload.get("targets")
+    protocol_runner = protocol_payload.get("runner")
     fail(
-        isinstance(protocol_suite, dict)
+        protocol_payload.get("build_adapter_version")
+        == macro_runner.BUILD_ADAPTER_VERSION
+        and protocol_runner
+        == {
+            "path": str(MACRO_RUNNER_PATH.relative_to(REPOSITORY_ROOT)),
+            "sha256": sha256_file(MACRO_RUNNER_PATH),
+        }
+        and isinstance(protocol_suite, dict)
         and protocol_suite.get("id") == suite.suite_id
         and protocol_suite.get("manifest_sha256") == suite.digest
         and isinstance(protocol_implementation, dict)
@@ -2132,6 +3166,18 @@ def read_macro_baseline(
         "suite_manifest",
         "macro baseline campaign suite manifest",
     )
+    (
+        compatibility_import_identity,
+        imported_build_records,
+        imported_artifacts,
+    ) = validate_macro_build_import(
+        root,
+        protocol_payload=protocol_payload,
+        protocol_fingerprint=str(plan.get("protocol_fingerprint")),
+        suite=suite,
+    )
+    for artifact_identity, role in imported_artifacts:
+        retain_identity(artifact_identity, role)
     raw_cells = plan.get("cells")
     fail(
         isinstance(raw_cells, list) and plan.get("cell_count") == len(raw_cells),
@@ -2362,6 +3408,16 @@ def read_macro_baseline(
             f"macro baseline build record is missing or outside the campaign: {key}",
         )
         build_record = load_object(build_path, f"macro baseline build record {key}")
+        if compatibility_import_identity is None:
+            fail(
+                build_record.get("compatibility_import") is None,
+                f"macro baseline build has an unbound compatibility import: {key}",
+            )
+        else:
+            fail(
+                imported_build_records.get(str(build_path)) == build_record,
+                f"macro baseline build is absent from the compatibility import: {key}",
+            )
         target_id, variant = str(key[0]), str(key[1])
         target_protocol = target_protocol_by_id[target_id]
         expected_target_fingerprint = macro_target_fingerprint(
@@ -2438,6 +3494,16 @@ def read_macro_baseline(
             base_record = load_object(
                 base_path, f"macro baseline alias base build record {key}"
             )
+            if compatibility_import_identity is None:
+                fail(
+                    base_record.get("compatibility_import") is None,
+                    f"macro baseline alias base has an unbound import: {key}",
+                )
+            else:
+                fail(
+                    imported_build_records.get(str(base_path)) == base_record,
+                    f"macro baseline alias base is absent from the import: {key}",
+                )
             base_binaries = base_record.get("harness_binaries")
             expected_base_id = canonical_sha256(
                 {
@@ -2553,6 +3619,16 @@ def read_macro_baseline(
                     "build_support",
                     f"macro baseline direct-load {artifact_name} {key}",
                 )
+        if target_id == "swc" and variant == "jemalloc":
+            for artifact_identity, role in validate_swc_jemalloc_direct_load(
+                build_record, f"macro baseline build {key}"
+            ):
+                retain_identity(artifact_identity, role)
+        else:
+            fail(
+                build_record.get("jemalloc_direct_load_route") is None,
+                f"macro baseline build has an unexpected SWC jemalloc route: {key}",
+            )
         allocator_provenance = build_record.get("allocator_provenance")
         if allocator_provenance is not None:
             fail(
@@ -2895,6 +3971,7 @@ def read_macro_baseline(
             selected_build_records,
             key=lambda row: (row["target_id"], row["variant"]),
         ),
+        "compatibility_import": compatibility_import_identity,
         "referenced_artifacts": [
             {
                 "path": retained["path"],

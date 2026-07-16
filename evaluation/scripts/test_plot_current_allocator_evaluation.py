@@ -226,12 +226,28 @@ class Fixture:
             "schema_version": 1,
             "provenance": {"runner_sha256": "5" * 64},
             "compatibility": {
-                "protocol_revision": "full-std-bench-feature-process-v5",
+                "protocol_revision": "full-std-bench-feature-process-v6",
+                "raw_record_schema_version": 4,
                 "variant_ids": list(self.variants),
                 "source_head": self.revision,
                 "source_git_objects": {"unialloc": "6" * 40},
                 "measured_rounds": 3,
                 "canonical_inventory_count": len(self.benchmarks),
+                "timeout_seconds": 30,
+                "timeout_censoring_contract": (
+                    "a process timeout is a terminal right-censored cell; an "
+                    "incomplete GNU time footer is retained and attested without "
+                    "metric imputation"
+                ),
+                "common_complete_selection_contract": (
+                    "aggregate only canonical leaves with one valid warmup and "
+                    "every measured round for every selected variant"
+                ),
+                "peer_timeout_contract": (
+                    "after any variant timeout, remaining processes for that "
+                    "canonical leaf are not launched and are terminally accounted "
+                    "as peer blocked"
+                ),
             },
         }
         protocol["protocol_sha256"] = MODULE.canonical_sha256(
@@ -273,7 +289,7 @@ class Fixture:
         reference_ns = (120.0, 220.0, 420.0, 820.0)
         lines = []
         for benchmark_index, benchmark in enumerate(self.benchmarks):
-            for phase, rounds in (("warmup", (0,)), ("measurement", (1, 2, 3))):
+            for phase, rounds in (("warmup", (0,)), ("measured", (1, 2, 3))):
                 for round_number in rounds:
                     for variant in self.variants:
                         ns_ratio = (
@@ -286,6 +302,30 @@ class Fixture:
                             if variant == "unialloc"
                             else rss_ratios[variant][benchmark_index]
                         )
+                        raw_record = {
+                            "schema_version": 4,
+                            "protocol_sha256": protocol["protocol_sha256"],
+                            "cohort_id": cohort,
+                            "measurement_session_id": session_id,
+                            "measurement_anchor": variant == "unialloc",
+                            "variant_id": variant,
+                            "allocator": variant,
+                            "benchmark": benchmark,
+                            "phase": phase,
+                            "round": round_number,
+                            "status": "valid",
+                            "valid": True,
+                            "timed_out": False,
+                            "terminal_reason": None,
+                            "time_parse_status": "complete",
+                            "timeout_seconds": 30,
+                            "fixed_work_contract": False,
+                            "performance_claim_eligible": True,
+                            "peak_rss_claim_eligible": False,
+                            "rss_work_model": "workload_native_adaptive_iterations",
+                            "ns_per_iter": reference_ns[benchmark_index] * ns_ratio,
+                            "peak_rss_kib": 1000.0 * rss_ratio,
+                        }
                         record = write_json(
                             root
                             / "raw"
@@ -293,12 +333,7 @@ class Fixture:
                             / benchmark.replace("::", "-")
                             / phase
                             / f"{round_number}.json",
-                            {
-                                "benchmark": benchmark,
-                                "variant": variant,
-                                "phase": phase,
-                                "round": round_number,
-                            },
+                            raw_record,
                         )
                         lines.append(
                             {
@@ -307,9 +342,9 @@ class Fixture:
                                 "fixed_work_contract": False,
                                 "measurement_anchor": variant == "unialloc",
                                 "measurement_session_id": session_id,
-                                "ns_per_iter": reference_ns[benchmark_index] * ns_ratio,
+                                "ns_per_iter": raw_record["ns_per_iter"],
                                 "peak_rss_claim_eligible": False,
-                                "peak_rss_kib": 1000.0 * rss_ratio,
+                                "peak_rss_kib": raw_record["peak_rss_kib"],
                                 "performance_claim_eligible": True,
                                 "phase": phase,
                                 "record_path": str(record.relative_to(root)),
@@ -317,6 +352,9 @@ class Fixture:
                                 "round": round_number,
                                 "rss_work_model": "workload_native_adaptive_iterations",
                                 "status": "valid",
+                                "timed_out": False,
+                                "terminal_reason": None,
+                                "time_parse_status": "complete",
                                 "variant_id": variant,
                             }
                         )
@@ -326,7 +364,187 @@ class Fixture:
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in lines),
             encoding="utf-8",
         )
+        grouped = {
+            (benchmark, variant): [
+                row
+                for row in lines
+                if row["benchmark"] == benchmark and row["variant_id"] == variant
+            ]
+            for benchmark in self.benchmarks
+            for variant in self.variants
+        }
+        terminal_rows = []
+        for benchmark in self.benchmarks:
+            cells = []
+            for variant in self.variants:
+                history = sorted(
+                    grouped[(benchmark, variant)],
+                    key=lambda row: (str(row["phase"]), int(row["round"])),
+                )
+                cells.append(
+                    {
+                        "variant_id": variant,
+                        "status": "complete",
+                        "valid_measured_rounds": [1, 2, 3],
+                        "observed_process_slots": [
+                            {
+                                "phase": row["phase"],
+                                "round": row["round"],
+                                "status": row["status"],
+                                "record_path": row["record_path"],
+                                "record_sha256": row["record_sha256"],
+                            }
+                            for row in history
+                        ],
+                        "timeout_phase": None,
+                        "timeout_round": None,
+                        "timeout_record_path": None,
+                        "timeout_record_sha256": None,
+                        "blocked_by_timeout_variants": [],
+                    }
+                )
+            terminal_rows.append(
+                {
+                    "benchmark": benchmark,
+                    "family": benchmark.split("::", 1)[0],
+                    "status": "common_complete",
+                    "timeout_variants": [],
+                    "cells": cells,
+                }
+            )
+        write_json(
+            root / "derived" / cohort / "terminal-accounting.json",
+            {
+                "schema_version": 1,
+                "cohort_id": cohort,
+                "measurement_session_id": session_id,
+                "protocol_sha256": protocol["protocol_sha256"],
+                "selected_variant_ids": list(self.variants),
+                "canonical_inventory_count": len(self.benchmarks),
+                "measured_rounds": 3,
+                "terminal_benchmark_count": len(self.benchmarks),
+                "terminal_accounting_complete": True,
+                "common_complete_rule": (
+                    "every selected variant has one valid warmup and every measured "
+                    "round; a timeout excludes the leaf symmetrically from all "
+                    "comparisons"
+                ),
+                "common_complete_benchmark_count": len(self.benchmarks),
+                "excluded_benchmark_count": 0,
+                "common_complete_benchmarks": list(self.benchmarks),
+                "excluded_benchmarks": [],
+                "cell_status_counts": {
+                    "complete": len(self.benchmarks) * len(self.variants),
+                    "timeout_censored": 0,
+                    "peer_timeout_blocked": 0,
+                },
+                "raw_process_record_count": len(lines),
+                "benchmarks": terminal_rows,
+            },
+        )
         return root
+
+    def censor_micro_feature(
+        self, benchmark: str = "alpha::one", variant: str = "unialloc"
+    ) -> None:
+        root = self.micro_feature
+        cohort = "fixture-cohort"
+        index_path = root / "derived" / cohort / "absolute-process-index.jsonl"
+        rows = [json.loads(line) for line in index_path.read_text().splitlines()]
+        retained = []
+        timeout_row = None
+        for row in rows:
+            if row["benchmark"] != benchmark:
+                retained.append(row)
+                continue
+            if row["variant_id"] == variant and row["phase"] == "warmup":
+                record_path = root / row["record_path"]
+                raw_record = json.loads(record_path.read_text())
+                raw_record.update(
+                    {
+                        "status": "timeout_censored",
+                        "valid": False,
+                        "timed_out": True,
+                        "terminal_reason": "process_timeout",
+                        "time_parse_status": "incomplete_after_timeout",
+                    }
+                )
+                raw_record.pop("ns_per_iter", None)
+                raw_record.pop("peak_rss_kib", None)
+                write_json(record_path, raw_record)
+                row.update(
+                    {
+                        "status": "timeout_censored",
+                        "timed_out": True,
+                        "terminal_reason": "process_timeout",
+                        "time_parse_status": "incomplete_after_timeout",
+                        "ns_per_iter": None,
+                        "peak_rss_kib": None,
+                        "record_sha256": sha256(record_path),
+                    }
+                )
+                timeout_row = row
+                retained.append(row)
+        assert timeout_row is not None
+        index_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in retained),
+            encoding="utf-8",
+        )
+        terminal_path = root / "derived" / cohort / "terminal-accounting.json"
+        terminal = json.loads(terminal_path.read_text())
+        benchmark_row = next(
+            row for row in terminal["benchmarks"] if row["benchmark"] == benchmark
+        )
+        benchmark_row.update(
+            {
+                "status": "excluded_timeout_censored",
+                "timeout_variants": [variant],
+            }
+        )
+        for cell in benchmark_row["cells"]:
+            if cell["variant_id"] == variant:
+                cell.update(
+                    {
+                        "status": "timeout_censored",
+                        "valid_measured_rounds": [],
+                        "observed_process_slots": [
+                            {
+                                "phase": timeout_row["phase"],
+                                "round": timeout_row["round"],
+                                "status": timeout_row["status"],
+                                "record_path": timeout_row["record_path"],
+                                "record_sha256": timeout_row["record_sha256"],
+                            }
+                        ],
+                        "timeout_phase": "warmup",
+                        "timeout_round": 0,
+                        "timeout_record_path": timeout_row["record_path"],
+                        "timeout_record_sha256": timeout_row["record_sha256"],
+                        "blocked_by_timeout_variants": [],
+                    }
+                )
+            else:
+                cell.update(
+                    {
+                        "status": "peer_timeout_blocked",
+                        "valid_measured_rounds": [],
+                        "observed_process_slots": [],
+                        "timeout_phase": None,
+                        "timeout_round": None,
+                        "timeout_record_path": None,
+                        "timeout_record_sha256": None,
+                        "blocked_by_timeout_variants": [variant],
+                    }
+                )
+        terminal["common_complete_benchmarks"].remove(benchmark)
+        terminal["excluded_benchmarks"] = [benchmark]
+        terminal["common_complete_benchmark_count"] -= 1
+        terminal["excluded_benchmark_count"] = 1
+        terminal["cell_status_counts"]["complete"] -= len(self.variants)
+        terminal["cell_status_counts"]["timeout_censored"] = 1
+        terminal["cell_status_counts"]["peer_timeout_blocked"] = len(self.variants) - 1
+        terminal["raw_process_record_count"] = len(retained)
+        write_json(terminal_path, terminal)
 
     def _micro_baseline(self) -> Path:
         root = self.root / "micro-baseline"
@@ -362,6 +580,7 @@ class Fixture:
                 "variants": variant_rows,
                 "selection_sha256": selection["selection_sha256"],
                 "ratio_floor_ns_per_iter": 100.0,
+                "timeout_seconds": 30,
             },
         )
         write_json(
@@ -423,22 +642,40 @@ class Fixture:
             root / "summary.json",
             {
                 "schema_version": 2,
-                "methodology": {"allocators": list(variants)},
+                "methodology": {
+                    "allocators": list(variants),
+                    "timeout_seconds_per_process": 30,
+                    "timeout_censoring": (
+                        "a warmup timeout terminates the cell; a measured timeout "
+                        "retains prior raw observations and suppresses the cell median"
+                    ),
+                },
+                "record_counts": {
+                    "all": len(records),
+                    "valid": len(records),
+                    "timeout_censored": 0,
+                    "all_warmups_attempted": True,
+                },
                 "coverage": {
                     "canonical_inventory_count": len(self.benchmarks),
                     "allocator_cells": len(self.benchmarks) * len(variants),
                     "complete_cells": len(self.benchmarks) * len(variants),
                     "censored_cells": 0,
+                    "pending_cells": 0,
+                    "all_allocator_complete_benchmarks": len(self.benchmarks),
                 },
                 "comparison_selection": {
                     "complete_all_allocator_benchmarks": list(self.benchmarks),
                     "comparable_benchmarks": list(self.benchmarks),
+                    "comparable_count": len(self.benchmarks),
+                    "excluded_count": 0,
                 },
                 "robustness_selection": {
                     "threshold_ns_per_iter": 100.0,
                     "selected_benchmarks": list(self.benchmarks),
                 },
                 "cells": cells,
+                "censored_cells": [],
             },
         )
         write_json(
@@ -452,9 +689,93 @@ class Fixture:
                 "completed_terminal_processes": len(self.benchmarks)
                 * len(variants)
                 * 4,
+                "censored_cells": 0,
             },
         )
         return root
+
+    def censor_micro_baseline(
+        self, benchmark: str = "alpha::one", variant: str = "jemalloc"
+    ) -> None:
+        root = self.micro_baseline
+        records_path = root / "records.jsonl"
+        records = [json.loads(line) for line in records_path.read_text().splitlines()]
+        retained = []
+        for record in records:
+            if record["benchmark"] != benchmark or record["allocator"] != variant:
+                retained.append(record)
+            elif record["phase"] == "warmup":
+                record.update(
+                    {
+                        "status": "timeout_censored",
+                        "valid": False,
+                        "timed_out": True,
+                        "timeout_seconds": 30,
+                    }
+                )
+                record.pop("ns_per_iter", None)
+                record.pop("peak_rss_kib", None)
+                retained.append(record)
+        records_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in retained),
+            encoding="utf-8",
+        )
+        summary_path = root / "summary.json"
+        summary = json.loads(summary_path.read_text())
+        censoring = {
+            "benchmark": benchmark,
+            "allocator": variant,
+            "phase": "warmup",
+            "round": 0,
+            "timeout_seconds": 30,
+            "valid_measured_rounds_before_timeout": [],
+        }
+        cell = next(
+            row
+            for row in summary["cells"]
+            if row["benchmark"] == benchmark and row["allocator"] == variant
+        )
+        cell.update(
+            {
+                "status": "censored",
+                "valid_measured_rounds": [],
+                "censoring": censoring,
+            }
+        )
+        summary["censored_cells"] = [censoring]
+        summary["coverage"]["complete_cells"] -= 1
+        summary["coverage"]["censored_cells"] = 1
+        summary["coverage"]["all_allocator_complete_benchmarks"] -= 1
+        summary["record_counts"].update(
+            {
+                "all": len(retained),
+                "valid": len(retained) - 1,
+                "timeout_censored": 1,
+            }
+        )
+        completed = [name for name in self.benchmarks if name != benchmark]
+        summary["comparison_selection"].update(
+            {
+                "complete_all_allocator_benchmarks": completed,
+                "comparable_benchmarks": completed,
+                "comparable_count": len(completed),
+                "excluded_count": 1,
+            }
+        )
+        summary["robustness_selection"]["selected_benchmarks"] = completed
+        write_json(summary_path, summary)
+        state_path = root / "campaign-state.json"
+        state = json.loads(state_path.read_text())
+        state.update(
+            {
+                "status": "complete_with_timeout_censoring",
+                "completed_terminal_processes": len(retained),
+                "censored_cells": 1,
+                "records_sha256": sha256(records_path),
+                "summary_sha256": sha256(summary_path),
+            }
+        )
+        write_json(state_path, state)
 
     def _macro_feature(self) -> Path:
         suite_digest = sha256(self.suite)
@@ -712,8 +1033,10 @@ class Fixture:
             "protocol_id": "primary-macro-allocator-baselines-v1",
             "build_adapter_version": 2,
             "runner": {
-                "id": "fixture-primary-macro-runner",
-                "source_sha256": "5" * 64,
+                "path": str(
+                    MODULE.MACRO_RUNNER_PATH.relative_to(MODULE.REPOSITORY_ROOT)
+                ),
+                "sha256": sha256(MODULE.MACRO_RUNNER_PATH),
             },
             "suite": {
                 "id": "fixture-current-suite",
@@ -1117,6 +1440,116 @@ class Fixture:
         )
         return root
 
+    def swc_jemalloc_direct_load_record(self) -> dict[str, object]:
+        root = self.root / "swc-jemalloc-route"
+        worktree = root / "worktree"
+        worktree.mkdir(parents=True)
+        upstream_lock = worktree / "Cargo.lock"
+        upstream_lock.write_text(
+            'version = 4\n\n[[package]]\nname = "tikv-jemallocator"\n'
+            'version = "0.5.4"\n',
+            encoding="utf-8",
+        )
+        direct = root / "direct"
+        source_root = direct / "source"
+        source_root.mkdir(parents=True)
+        manifest = source_root / "Cargo.toml"
+        source = source_root / "src/lib.rs"
+        source.parent.mkdir(parents=True)
+        lock = source_root / "Cargo.lock"
+        rlib = direct / "libunialloc_direct_jemallocator.rlib"
+        wrapper = direct / "wrapper"
+        manifest.write_text(
+            MODULE.macro_runner.SWC_JEMALLOC_DIRECT_LOAD_MANIFEST,
+            encoding="utf-8",
+        )
+        source.write_text("pub use jemallocator::Jemalloc;\n", encoding="utf-8")
+        lock.write_text(
+            'version = 4\n\n[[package]]\nname = "tikv-jemallocator"\n'
+            'version = "0.7.0"\n\n[[package]]\n'
+            'name = "tikv-jemalloc-sys"\n'
+            f'version = "{MODULE.SWC_JEMALLOC_SYS_VERSION}"\n',
+            encoding="utf-8",
+        )
+        rlib.write_bytes(b"fixture-jemalloc-rlib\n")
+        wrapper.write_text(
+            MODULE.macro_runner.SWC_JEMALLOC_DIRECT_LOAD_WRAPPER,
+            encoding="utf-8",
+        )
+        commands = []
+        for index in range(2):
+            stdout = direct / f"command-{index}.stdout"
+            stderr = direct / f"command-{index}.stderr"
+            stdout.write_text(f"command-{index}\n", encoding="utf-8")
+            stderr.write_text("", encoding="utf-8")
+            commands.append(
+                {
+                    "command": ["fixture", str(index)],
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "wall_seconds": 0.01,
+                    "stdout": str(stdout.resolve()),
+                    "stdout_sha256": sha256(stdout),
+                    "stderr": str(stderr.resolve()),
+                    "stderr_sha256": sha256(stderr),
+                }
+            )
+        direct_record = {
+            "schema_version": 1,
+            "success": True,
+            "route": MODULE.SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+            "wrapper_package": "tikv-jemallocator",
+            "wrapper_version": MODULE.SWC_JEMALLOC_VERSION,
+            "sys_package": "tikv-jemalloc-sys",
+            "sys_version": MODULE.SWC_JEMALLOC_SYS_VERSION,
+            "locked_wrapper_package": {
+                "name": "tikv-jemallocator",
+                "version": MODULE.SWC_JEMALLOC_VERSION,
+            },
+            "locked_sys_package": {
+                "name": "tikv-jemalloc-sys",
+                "version": MODULE.SWC_JEMALLOC_SYS_VERSION,
+            },
+            "adapter_source_sha256": sha256(MODULE.MACRO_RUNNER_PATH),
+            "toolchain": "fixture-toolchain",
+            "commands": commands,
+            "artifacts": {
+                "manifest": self.artifact_reference(manifest),
+                "source": self.artifact_reference(source),
+                "lockfile": self.artifact_reference(lock),
+                "rlib": self.artifact_reference(rlib),
+                "wrapper": self.artifact_reference(wrapper),
+            },
+        }
+        record_path = write_json(direct / "build.json", direct_record)
+        upstream_package = {
+            "name": "tikv-jemallocator",
+            "version": MODULE.SWC_UPSTREAM_JEMALLOC_VERSION,
+        }
+        return {
+            "target_id": "swc",
+            "variant": "jemalloc",
+            "toolchain": "fixture-toolchain",
+            "worktree": str(worktree.resolve()),
+            "derived_cargo_lock_sha256": sha256(upstream_lock),
+            "jemalloc_direct_load_route": {
+                "id": MODULE.SWC_JEMALLOC_DIRECT_LOAD_ROUTE,
+                "adapter_source_sha256": sha256(MODULE.MACRO_RUNNER_PATH),
+                "target_crate": "typescript",
+                "wrapper_package": "tikv-jemallocator",
+                "wrapper_version": MODULE.SWC_JEMALLOC_VERSION,
+                "sys_package": "tikv-jemalloc-sys",
+                "sys_version": MODULE.SWC_JEMALLOC_SYS_VERSION,
+                "upstream_inactive_lock_package": upstream_package,
+                "cargo_lock_before_sha256": sha256(upstream_lock),
+                "cargo_lock_after_sha256": sha256(upstream_lock),
+                "record": str(record_path.resolve()),
+                "record_sha256": sha256(record_path),
+                "rlib": direct_record["artifacts"]["rlib"],
+                "wrapper": direct_record["artifacts"]["wrapper"],
+            },
+        }
+
     def export(self) -> Path:
         return MODULE.export(
             suite_path=self.suite,
@@ -1272,17 +1705,43 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
             / "absolute-process-index.jsonl"
         )
         rows = [json.loads(line) for line in index.read_text().splitlines()]
+        changed_digests = {}
         for row in rows:
             if (
                 row["benchmark"] == "alpha::one"
                 and row["variant_id"] == "typeiso_perf"
-                and row["phase"] == "measurement"
+                and row["phase"] == "measured"
             ):
                 row["ns_per_iter"] = 50.0
+                record_path = self.fixture.micro_feature / row["record_path"]
+                record = json.loads(record_path.read_text())
+                record["ns_per_iter"] = 50.0
+                write_json(record_path, record)
+                row["record_sha256"] = sha256(record_path)
+                changed_digests[(row["phase"], row["round"])] = row["record_sha256"]
         index.write_text(
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
             encoding="utf-8",
         )
+        terminal_path = (
+            self.fixture.micro_feature
+            / "derived"
+            / "fixture-cohort"
+            / "terminal-accounting.json"
+        )
+        terminal = json.loads(terminal_path.read_text())
+        terminal_cell = next(
+            cell
+            for benchmark in terminal["benchmarks"]
+            if benchmark["benchmark"] == "alpha::one"
+            for cell in benchmark["cells"]
+            if cell["variant_id"] == "typeiso_perf"
+        )
+        for slot in terminal_cell["observed_process_slots"]:
+            key = (slot["phase"], slot["round"])
+            if key in changed_digests:
+                slot["record_sha256"] = changed_digests[key]
+        write_json(terminal_path, terminal)
         output = self.fixture.export()
         data = json.loads((output / "presentation-data.json").read_text())
         compiler_alpha = next(
@@ -1333,20 +1792,81 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         )
         lines = index.read_text(encoding="utf-8").splitlines()
         index.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
-        with self.assertRaisesRegex(MODULE.EvidenceError, "matrix is incomplete"):
+        with self.assertRaisesRegex(MODULE.EvidenceError, "terminal"):
             self.fixture.export()
 
-    def test_censored_micro_baseline_fails_closed(self) -> None:
+    def test_censored_micro_feature_uses_only_common_completed_benchmarks(
+        self,
+    ) -> None:
+        self.fixture.censor_micro_feature()
+        output = self.fixture.export()
+        data = json.loads((output / "presentation-data.json").read_text())
+        identity = data["inputs"]["micro_feature"]
+        self.assertEqual(3, identity["common_completed_benchmark_count"])
+        self.assertEqual(1, identity["common_completed_excluded_benchmark_count"])
+        self.assertEqual(
+            ["alpha::one"], identity["common_completed_excluded_benchmarks"]
+        )
+        self.assertEqual(1, identity["timeout_censored_cell_count"])
+        self.assertEqual(2, identity["peer_timeout_blocked_cell_count"])
+        feature_units = {
+            row["unit_id"]
+            for row in data["normalized_rows"]
+            if row["comparison_group"] == "feature"
+            and row["population"] == "micro"
+            and row["aggregation_level"] == "benchmark_case"
+        }
+        self.assertNotIn("alpha::one", feature_units)
+
+    def test_censored_micro_feature_peer_blocking_tamper_fails_closed(self) -> None:
+        self.fixture.censor_micro_feature()
+        terminal_path = (
+            self.fixture.micro_feature
+            / "derived"
+            / "fixture-cohort"
+            / "terminal-accounting.json"
+        )
+        terminal = json.loads(terminal_path.read_text())
+        excluded = next(
+            row for row in terminal["benchmarks"] if row["benchmark"] == "alpha::one"
+        )
+        excluded["cells"][1]["blocked_by_timeout_variants"] = []
+        write_json(terminal_path, terminal)
+        with self.assertRaisesRegex(MODULE.EvidenceError, "cell accounting"):
+            self.fixture.export()
+
+    def test_censored_micro_baseline_uses_only_common_completed_benchmarks(
+        self,
+    ) -> None:
+        self.fixture.censor_micro_baseline()
+        output = self.fixture.export()
+        data = json.loads((output / "presentation-data.json").read_text())
+        identity = data["inputs"]["micro_baseline"]
+        self.assertEqual(3, identity["common_completed_benchmark_count"])
+        self.assertEqual(1, identity["common_completed_excluded_benchmark_count"])
+        self.assertEqual(
+            ["alpha::one"], identity["common_completed_excluded_benchmarks"]
+        )
+        self.assertEqual(1, identity["censored_cell_count"])
+        baseline_units = {
+            row["unit_id"]
+            for row in data["normalized_rows"]
+            if row["comparison_group"] == "baseline"
+            and row["aggregation_level"] == "benchmark_case"
+        }
+        self.assertNotIn("alpha::one", baseline_units)
+
+    def test_censored_micro_baseline_asymmetric_selection_fails_closed(self) -> None:
+        self.fixture.censor_micro_baseline()
         summary_path = self.fixture.micro_baseline / "summary.json"
         summary = json.loads(summary_path.read_text())
-        summary["cells"][0]["status"] = "censored"
+        summary["comparison_selection"]["comparable_benchmarks"].append("alpha::one")
         write_json(summary_path, summary)
         state_path = self.fixture.micro_baseline / "campaign-state.json"
         state = json.loads(state_path.read_text())
-        state["status"] = "complete_with_timeout_censoring"
         state["summary_sha256"] = sha256(summary_path)
         write_json(state_path, state)
-        with self.assertRaisesRegex(MODULE.EvidenceError, "censoring"):
+        with self.assertRaisesRegex(MODULE.EvidenceError, "comparison selection"):
             self.fixture.export()
 
     def test_macro_plan_requires_every_warmup_cell(self) -> None:
@@ -1387,6 +1907,25 @@ class CurrentAllocatorEvaluationTests(unittest.TestCase):
         write_json(build, value)
         with self.assertRaisesRegex(MODULE.EvidenceError, "build identity mismatch"):
             self.fixture.export()
+
+    def test_swc_jemalloc_direct_load_route_is_fully_bound(self) -> None:
+        build_record = self.fixture.swc_jemalloc_direct_load_record()
+        retained = MODULE.validate_swc_jemalloc_direct_load(
+            build_record, "fixture SWC jemalloc"
+        )
+        self.assertGreaterEqual(len(retained), 11)
+        roles = {role for _identity, role in retained}
+        self.assertIn("swc_upstream_lock", roles)
+        self.assertIn("swc_jemalloc_direct_load_artifact", roles)
+
+    def test_swc_jemalloc_direct_load_route_tamper_fails_closed(self) -> None:
+        build_record = self.fixture.swc_jemalloc_direct_load_record()
+        route = build_record["jemalloc_direct_load_route"]
+        route["sys_version"] = "0.7.1+tampered"
+        with self.assertRaisesRegex(MODULE.EvidenceError, "route identity mismatch"):
+            MODULE.validate_swc_jemalloc_direct_load(
+                build_record, "fixture SWC jemalloc"
+            )
 
     def test_arbitrary_suite_path_is_rejected(self) -> None:
         copied = self.fixture.root / "copied-suite.json"
