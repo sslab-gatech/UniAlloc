@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">Cache-first indexing cuts scan selections 99.854 percent</title>
+  <desc id="description">A source-bound diagnostic slide showing packing, fastpath, operation-time, and peak-RSS evidence from the SWC fixed-work campaign.</desc>
+  <rect width="1600" height="900" fill="#FFFFFF"/>
+  <style>
+    text { font-family: Aptos, Arial, sans-serif; fill: #17181A; }
+    .title { font-size: 42px; font-weight: 700; }
+    .subtitle { font-size: 20px; fill: #62646B; }
+    .panel-title { font-size: 23px; font-weight: 700; }
+    .label { font-size: 17px; font-weight: 600; }
+    .metric { font-size: 38px; font-weight: 700; }
+    .detail { font-size: 16px; fill: #47484F; }
+    .small { font-size: 14px; fill: #62646B; }
+    .badge { font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+  </style>
+
+  <text id="slide-title" class="title" x="70" y="72">Cache-first indexing cuts scan selections 99.854%.</text>
+  <text class="subtitle" x="70" y="108">Mixed packing keeps 3 extents; current four-arm contrasts share one binary and 996,240 routes/process.</text>
+  <rect x="1230" y="42" width="300" height="42" rx="21" fill="#FDE8DE"/>
+  <text class="badge" x="1380" y="68" text-anchor="middle" fill="#9D3F1F">CURRENT DIAGNOSTIC · NOT CLAIM-GRADE</text>
+
+  <!-- Packing panel -->
+  <rect x="60" y="145" width="465" height="575" rx="18" fill="#F7F8FA" stroke="#DDDEE1"/>
+  <text class="panel-title" x="90" y="190">1  PACK DENSELY</text>
+  <text class="detail" x="90" y="220">Legacy geometry → heterogeneous 64 KiB regions</text>
+  <text class="label" x="90" y="275">Peak extents</text>
+  <rect x="215" y="250" width="242" height="30" rx="6" fill="#BCBEC4"/>
+  <rect x="215" y="295" width="66" height="30" rx="6" fill="#5477C4"/>
+  <text class="detail" x="465" y="272" text-anchor="end">11</text>
+  <text class="detail" x="292" y="317">3</text>
+  <text class="metric" x="90" y="390">11 → 3</text>
+  <text class="detail" x="90" y="420">72.7% fewer simultaneously live extents</text>
+
+  <text class="label" x="90" y="485">Physical THP footprint</text>
+  <rect x="90" y="510" width="340" height="34" rx="6" fill="#A3D576"/>
+  <rect x="90" y="560" width="93" height="34" rx="6" fill="#2E4780"/>
+  <text class="detail" x="440" y="534" text-anchor="end">22 MiB</text>
+  <text class="detail" x="193" y="584">6 MiB</text>
+  <text class="detail" x="90" y="635">Every ordinary sample: 0 KiB</text>
+  <text class="detail" x="90" y="662">Every mixed-THP sample: 6,144 KiB</text>
+
+  <!-- Fastpath panel -->
+  <rect x="555" y="145" width="465" height="575" rx="18" fill="#FFF7F2" stroke="#F0C8B5"/>
+  <text class="panel-title" x="585" y="190">2  INDEX THE HOT REGION</text>
+  <text class="detail" x="585" y="220">Prior scan prototype → cache-first snapshot</text>
+  <text class="small" x="585" y="245">Same fixed SWC work/routing; separate allocator binaries</text>
+  <text class="metric" x="585" y="300">94.31%</text>
+  <text class="detail" x="585" y="330">939,574 / 996,240 exact cache hits</text>
+
+  <text class="label" x="585" y="390">Available-list searches</text>
+  <text class="metric" x="585" y="440">996,240 → 56,666</text>
+  <text class="detail" x="585" y="468">94.31% fewer searches</text>
+
+  <text class="label" x="585" y="530">Descriptor-scan selections</text>
+  <text class="metric" x="585" y="580">940,170 → 1,376</text>
+  <text class="detail" x="585" y="608">99.854% fewer selections</text>
+  <text class="detail" x="585" y="660">Remaining scan attempts: 1,379</text>
+  <text class="small" x="585" y="688">Routed deallocation still takes one arena slow-path lock/object.</text>
+
+  <!-- Outcome panel -->
+  <rect x="1050" y="145" width="490" height="575" rx="18" fill="#F5F8F2" stroke="#C9DDB8"/>
+  <text class="panel-title" x="1080" y="190">3  MEASURE TIME AND MEMORY</text>
+  <text class="detail" x="1080" y="220">Paired percent saving; positive means faster/lower</text>
+
+  <line x1="1115" y1="290" x2="1470" y2="290" stroke="#BCBEC4" stroke-width="2"/>
+  <line x1="1203.75" y1="260" x2="1203.75" y2="420" stroke="#62646B" stroke-width="2" stroke-dasharray="5 5"/>
+  <text class="small" x="1115" y="315">-1%</text><text class="small" x="1203.75" y="315" text-anchor="middle">0%</text><text class="small" x="1470" y="315" text-anchor="end">+3%</text>
+
+  <text class="label" x="1080" y="355">Mixed vs legacy THP</text>
+  <line x1="1162.617256045245" y1="385" x2="1266.26798751248" y2="385" stroke="#2E4780" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="1198.6347211826642" cy="385" r="9" fill="#2E4780"/>
+  <text class="detail" x="1080" y="420">-0.058%  [95% CI -0.463%, +0.704%]</text>
+
+  <text class="label" x="1080" y="470">Mixed THP vs mixed ordinary</text>
+  <line x1="1274.4916726721956" y1="500" x2="1399.994123888587" y2="500" stroke="#67A83E" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="1335.519753459403" cy="500" r="9" fill="#67A83E"/>
+  <text class="detail" x="1080" y="535">+1.485%  [95% CI +0.797%, +2.211%] · 8/8</text>
+
+  <text class="label" x="1080" y="590">Peak RSS arm medians: legacy THP → mixed THP</text>
+  <text class="metric" x="1080" y="640">47,652 → 31,448 KiB</text>
+  <text class="detail" x="1080" y="675">Paired median saving +34.185% · 95% CI [32.561%, 37.152%] · 8/8</text>
+
+  <rect x="60" y="750" width="1480" height="95" rx="14" fill="#F0F1F2"/>
+  <text class="detail" x="85" y="785">Boundary: SWC fixed work; N=8 paired blocks; 32 fresh processes; CPU 20; zero app warmup; no Criterion.</text>
+  <text class="detail" x="85" y="815">Dirty working-tree snapshot; performance_claim_eligible=false; presentation_claim_eligible=false. Use as mechanism evidence pending a clean committed rerun.</text>
+  <text class="small" x="85" y="838">Raw d757723b9561ed13… · compact 0543c6d01bd20bbd… · output identity equal · separate allocator binaries b1ac7bdb…/2bc2d093…</text>
+  <text class="small" x="1520" y="838" text-anchor="end">B13</text>
+</svg>

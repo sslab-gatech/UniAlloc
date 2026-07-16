@@ -52,7 +52,7 @@ unwind forces compiler abstention.
 | DataFusion resident tables | generated-driver prior site matched 1/1; 2,048/2,048 target outcomes Long | exact classification mechanism inside a real query process; three timing pairs are preliminary |
 | SWC N=20 matched backing | THP pipeline time improved 4.076%, 95% CI [3.567%, 4.375%] | claim-grade physical-backing contrast; RSS increased 65.477% |
 | SWC mixed prototype N=8 | extents 11 -> 3; THP peak RSS improved 34.453%; mixed THP beat mixed ordinary by 1.045% | quick dirty-tree screen exposed an 8.732% scan penalty against legacy THP |
-| SWC mixed cache-first N=8 | extents 11 -> 3; THP peak RSS improved 34.185%; operation delta -0.058% | quick dirty-tree rescue screen; timing CI crosses zero |
+| SWC mixed cache-first N=8 | extents 11 -> 3; THP peak RSS improved 34.185%; mixed THP beat mixed ordinary by 1.485% | quick dirty-tree rescue screen; mixed-versus-legacy estimate -0.058%, CI spans zero |
 
 ## Bounded empty-extent retention
 
@@ -208,18 +208,30 @@ physical THP backing in every mixed-policy-2 process while changing the hot path
 
 - exact mixed cache hits: 939,574 allocations;
 - cache lookup hit rate: 94.312%;
+- available-list searches: 996,240 -> 56,666, a 94.312% reduction;
 - descriptor-scan selections: 940,170 -> 1,376, a 99.854% reduction;
 - scan attempts: 0.138% of routed allocations;
 - THP mixed-versus-legacy paired median saving: -0.058%, 95% CI
   [-0.463%, 0.704%], four of eight pairs faster;
 - THP peak-RSS saving: 34.185%, 95% CI [32.561%, 37.152%], eight of eight
-  pairs lower.
+  pairs lower;
+- within the cache-first mixed layout, physical THP operation-time saving over
+  ordinary backing: 1.485%, 95% CI [0.797%, 2.211%], eight of eight pairs
+  faster; the paired peak-RSS interval crossed zero at -0.339%, 95% CI
+  [-0.640%, 2.611%]; every mixed-ordinary sample recorded zero anonymous THP
+  and every mixed-THP sample recorded 6,144 KiB;
+- mixed ordinary versus legacy ordinary remained 0.486% slower, 95% CI
+  [0.019%, 0.784%] slower, and used 7.693% more peak RSS, 95% CI
+  [5.468%, 9.288%] more.
 
-The quick screen therefore recovers THP operation-time parity while preserving
-the memory mechanism. Its N=8 dirty-working-tree provenance keeps performance
-claim eligibility false. A clean committed rerun is the next gate. Routed
-deallocation still records one arena slow-path lock per object, so the larger
-TLS/per-CPU refill-lane work remains valuable.
+The earlier 8.732% scan-bound THP penalty is absent from the current point
+estimate; the current mixed-versus-legacy THP estimate is -0.058% saving with
+a confidence interval spanning zero. No equivalence margin was preregistered.
+The matched within-layout contrast retains a positive physical-backing effect.
+The N=8 dirty-working-tree provenance keeps performance and presentation claim
+eligibility false. A clean committed rerun is the next gate. Routed deallocation
+still records one arena slow-path lock per object, so the larger TLS/per-CPU
+refill-lane work remains valuable.
 
 ## Modern TCMalloc relationship
 
@@ -266,7 +278,9 @@ lane selector; exact runtime survival continues to correct its admission.
 - **Packing opportunity:** heterogeneous filling reduced SWC extents 11 -> 3.
   The cache-first rescue preserved a 34.185% THP peak-RSS saving and reduced
   scan selections by 99.854%, with a quick N=8 THP paired median saving of
-  -0.058% and a confidence interval crossing zero.
+  -0.058% against the legacy layout. Within the mixed layout, physical THP was
+  1.485% faster than ordinary backing, 95% CI [0.797%, 2.211%]. These are
+  mechanism results pending a clean committed rerun.
 
 ## Evidence inventory
 
@@ -282,7 +296,8 @@ Tracked compact evidence:
 - `mixed-filler-swc-quick-summary.json` -- quick mixed-filler memory and scan
   diagnosis;
 - `mixed-filler-fastpath-swc-quick-summary.json` -- cache-first scan rescue,
-  retained memory result, and remaining lock boundary.
+  retained memory result, all four planned paired contrasts, per-arm backing
+  proof, and remaining lock boundary.
 
 Large raw artifacts remain gitignored under `evaluation/raw/`. Compact
 summaries record source identities and SHA-256 digests; summaries add source

@@ -204,16 +204,29 @@ A cache-first follow-on uses an exact hot-region key and an O(1) free-side
 ownership prefilter. In a second four-arm N=8 screen it:
 
 - served 939,574 allocations from the mixed hot-region cache;
+- reduced available-list searches from 996,240 to 56,666, or 94.312%;
 - reduced scan selections from 940,170 to 1,376, or 99.854%;
 - kept the three-extent layout and 6,144 KiB physical THP backing;
 - retained a 34.185% paired peak-RSS saving, 95% CI [32.561%, 37.152%];
 - produced a -0.058% THP paired median operation saving, 95% CI
-  [-0.463%, 0.704%].
+  [-0.463%, 0.704%], against the legacy layout;
+- produced a 1.485% paired operation-time saving for physical THP over
+  ordinary backing inside the mixed layout, 95% CI [0.797%, 2.211%], with all
+  eight pairs faster; the paired peak-RSS interval crossed zero; every
+  mixed-ordinary sample recorded zero anonymous THP and every mixed-THP sample
+  recorded 6,144 KiB;
+- left mixed ordinary 0.486% slower than legacy ordinary, 95% CI
+  [0.019%, 0.784%] slower, with 7.693% higher peak RSS, 95% CI
+  [5.468%, 9.288%] higher.
 
-This recovers operation-time parity in the quick screen. The result comes from
-a dirty working-tree snapshot with eight pairs, so it remains mechanism evidence
-until the implementation is committed and the campaign reruns from a clean
-revision. Routed deallocation still takes one arena slow-path lock per object.
+The earlier 8.73% scan-bound THP penalty is absent from the current point
+estimate; the current mixed-versus-legacy THP estimate is -0.058% saving with
+a confidence interval spanning zero. No equivalence margin was preregistered.
+The matched within-layout contrast retains a positive physical-backing effect.
+The result comes from a dirty working-tree snapshot with eight pairs, so it
+remains mechanism evidence until the implementation is committed and the
+campaign reruns from a clean revision. Routed deallocation still takes one
+arena slow-path lock per object.
 The compact evidence is in
 `docs/evidence/lifetime-resident-index-20260715/mixed-filler-fastpath-swc-quick-summary.json`.
 

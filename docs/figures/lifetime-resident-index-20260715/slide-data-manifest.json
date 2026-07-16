@@ -1,0 +1,48 @@
+{
+  "assets": {
+    "png": {
+      "height_px": 1800,
+      "path": "mixed-filler-fastpath-evidence-slide.png",
+      "sha256": "23341991d778b927a112069616297c176cd96d4353a7feeec1204efd3b447063",
+      "width_px": 3200
+    },
+    "svg": {
+      "height_px": 900,
+      "path": "mixed-filler-fastpath-evidence-slide.svg",
+      "sha256": "3592037f93d5c91e1e6040c3652ae5f8aece2ec9dfceec1201c048f7cd4ac1c4",
+      "width_px": 1600
+    }
+  },
+  "claim_boundary": {
+    "claim_grade": false,
+    "dirty_working_tree_snapshot": true,
+    "performance_claim_eligible": false,
+    "presentation_claim_eligible": false,
+    "scope": "SWC fixed-work packing, fastpath, and physical-backing mechanism"
+  },
+  "deck_embedding": {
+    "deck_path": "docs/UniAlloc-Qualifier-Core-Deck.pptx",
+    "deck_sha256": "b5d5fceeb5d5d668847bbc01d68d66eca5c929b72eef0e7b17c65ab42e3c7e2e",
+    "physical_slide_number": 32,
+    "presentation_label": "B13"
+  },
+  "generators": {
+    "deck_appender": {
+      "path": "evaluation/scripts/append_lifetime_fastpath_backup_slide.py",
+      "sha256": "d855a0d427d69acc482353bc1868f0a523b2da896139ac798adc43311d9723f4"
+    },
+    "svg_renderer": {
+      "path": "evaluation/scripts/render_lifetime_mixed_fastpath_slide.py",
+      "sha256": "152547a429c7774d164d122a59607f9906ced94515c77ac1d6d4f6c47cb977a3"
+    }
+  },
+  "raw_artifact": {
+    "path_relative_to_source_worktree": "evaluation/raw/lifetime-tcmalloc-fastpath-swc-quick-n16-r8-20260715/results.json",
+    "sha256": "d757723b9561ed1362c56bb5fd59939cf340aa3d3dcf5bcc3204d4c6f0c83c2e"
+  },
+  "schema_version": 1,
+  "source_summary": {
+    "path": "docs/evidence/lifetime-resident-index-20260715/mixed-filler-fastpath-swc-quick-summary.json",
+    "sha256": "0543c6d01bd20bbd15e7de3ca288caeed1aaa982bcdb0cd117439b7886b520c5"
+  }
+}

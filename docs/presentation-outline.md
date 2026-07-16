@@ -7,6 +7,8 @@
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
 > Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-case Rust `std_bench` inventory: 466 cases have complete seven-way comparisons between default UniAlloc and six external allocators, and 236 pass the timing robustness gate. Macrobenchmarks cover 29 workloads across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. The primary macro comparison is Type Isolation versus default UniAlloc: total execution cost is `2.5770x`, compiler-route-equivalent execution cost is `1.0421x`, and fixed-work peak RSS is `1.0034x` (`+0.342%`). The matched typed-route ablation reports `1.0054x` policy execution cost and `1.0006x` (`+0.057%`) policy RSS. The five-case Collections Type Isolation diagnostic remains in the CSV/JSON appendix. The detailed seven-target figure and full heatmap remain audit-only backup evidence.
+>
+> Current lifetime/THP backup: physical slide 32 in `docs/UniAlloc-Qualifier-Core-Deck.pptx` is labeled B13 and uses the PNG companion of the editable `docs/figures/lifetime-resident-index-20260715/mixed-filler-fastpath-evidence-slide.svg`. It is a current source-bound diagnostic with `performance_claim_eligible=false` and `presentation_claim_eligible=false`; keep the boundary footer visible.
 
 ## 1. One-Sentence Conclusion
 
@@ -475,6 +477,7 @@ Every results slide must carry one badge in the lower-right corner:
 
 - `PAPER-REPORTED HISTORICAL`
 - `CURRENT FUNCTIONALITY PROBE`
+- `CURRENT DIAGNOSTIC — NOT CLAIM-GRADE`
 - `HISTORICAL SOURCE-BOUND RECORD — PARTIAL`
 - `CURRENT SOURCE-BOUND CLAIM — COMPLETE`
 - `PLANNED / INCOMPLETE`
@@ -502,7 +505,7 @@ This reduces both production cost and Q&A switching cost.
 | `../rust-alloc-paper/fig/overview.pdf` | **Redraw** as a 3-lane progressive architecture; put the original in backup | Comprehensive, but too dense for the main talk |
 | `../rust-alloc-paper/fig/bg-alloc.pdf` | Redraw as cache→zone→backend→PAL | Suited to the paper rather than spoken instruction |
 | `default-perf.pdf`, `perf-type.pdf` | In the main deck, redraw only the aggregate/per-workload takeaways used on Slides 26--27; put the originals in backup | A multi-baseline bar chart cannot be read in 30 seconds |
-| `metadata-separation.pdf`, `hugepage.pdf`, `perf-pac.pdf` | Backup only; label the historical direction: 4% speedup, 2--4% speedup, 1--3% slowdown | They are outside the evidence required for the main H2 argument, and the current claim has not reproduced them |
+| `metadata-separation.pdf`, `hugepage.pdf`, `perf-pac.pdf` | Backup only; label the historical direction: 4% speedup, 2--4% speedup, 1--3% slowdown | Keep historical paper plots separate from the current SWC physical-backing contrast and the current diagnostic mixed-filler mechanism |
 | Windows/macOS result figures | Use paper figures only as backup/historical; list G002 functional status separately | Keep historical figures separate from live five-platform validation; show current functional PASS, current probes, and external validation gaps in separate columns |
 
 Principle: **Each slide asks the committee to compare only one dimension.** Do not paste paper screenshots or paragraphs onto slides.
@@ -518,6 +521,7 @@ Maintain the following compact table while producing the deck. Every claim slide
 | 24 | paper reported five environments and runtime has retargeting boundaries | historical + current functional probes | paper eval + PAL/fixed heap + platform artifacts; Wine `38b8b59` lifecycle `3/3` and `3c725a9` FLS-failure `1/1` remain separate | tested adapter/path and source-bound run | zero-porting/native Windows universality/current five-platform aggregate closure | B13/B17 |
 | 26--27 | original prototype observed reported ranges | historical | paper eval | original setup | current reproduction | B14--B16 |
 | 28 | paper-performance reproduction was explicitly deferred while functional work continues | current audit snapshot | G001 stop handoff + G002 probes | exact source binding and evidence tier | mechanism is absent or deferred claims failed | B18 |
+| B13 | cache-first mixed filling cuts descriptor-scan selections by 99.854% while preserving the three-extent layout | current diagnostic, not claim-grade | `mixed-filler-fastpath-swc-quick-summary.json`, raw SHA `d757723b...` | SWC fixed work, N=8, dirty working-tree snapshot, every measured backing sample gated | general performance, default/Google-TCMalloc comparison, multithread scaling, equivalence, classifier precision | B13 |
 
 ## 8. Q&A method: answer directly, then expand the evidence boundary
 
@@ -551,7 +555,7 @@ This demonstrates the research judgment required for a qualifier more clearly th
 | **10. Will the MIR pass be brittle across rustc versions?** | Yes. This is an explicit maintenance cost of compiler integration. | Present a stable ABI/contract and a versioned regression suite as the next step. B3 |
 | **11. Can per-type/per-thread caches cause memory blowup?** | They increase retention/fragmentation risk; the current design mitigates that risk with bounded caches and empty-slab controls. | Show the historical anomalous workloads and current footprint controls. B10/B11 |
 | **12. Is "retargetable" merely `cfg`/feature flags?** | The semantic policy and allocator pipeline are reused; PAL, raw memory, concurrency, and metadata layout are adapted. | Each target still requires real runtime evidence and platform work. B12/B17 |
-| **13. How do you prove that hugepages were actually used rather than ordinary-page fallback?** | Current HEAD has `17/17` hugepage/ordinary-domain and fallback tests, while the local direct probe observed no real hugepage backing; macOS returned `KERN_INVALID_ARGUMENT`, so backing remains missing. | Domain separation/fallback PASS does not equal mapping/backing PASS; closure requires a suitable host and a fresh probe consistent with the current three-object side-cache materialization. B13 |
+| **13. How do you prove that hugepages were actually used rather than ordinary-page fallback?** | The current SWC matched-backing campaign requires every measured ordinary sample to report zero `AnonHugePages` and every THP sample to report positive backing: the claim-grade N=20 contrast passed 20/20 per arm, and the mixed N=8 diagnostic passed 8/8 per arm at 0 versus 6,144 KiB. | The N=20 result supports the bounded physical-backing effect; the N=8 dirty-tree mixed-filler result supports only the cache/packing/backing mechanism. Domain-routing tests remain separate from physical backing. B13 |
 | **14. What has PAC actually validated so far?** | Current HEAD validates the allocator PAC metadata's safe software fallback and typed side-cache reuse; an independent `no_std` consumer contract isolates std-only dev-dependencies and permits a real arm64e allocator runtime probe built with `rust-src`. | External ABI evidence cannot replace allocator runtime evidence; only a source-bound arm64e `no_std` probe can support hardware functional evidence, and C006 cost/percentage remains deferred. B12 |
 | **15. What is the denominator for 72.17%, and is it current?** | The original paper describes "72.17% of objects" in the standard Rust `alloc` benchmark; it is not a closed current source-bound number. | When raw evidence does not define the event/object denominator, preserve the original terminology; present the original method, fallback, and current audit. B14/B18 |
 | **16. Why does 99.851437% coverage appear now?** | The repository cargo-test hook observed the `std_bench` test-mode `430/430` finite inventory; this is not independent actual-wrapper compiler coverage, performance, or a whole-program denominator, and it has no independent log artifact. The historical `99.851437%` remains G001 freeze-bound evidence; the latest source-bound Oxipng one-shot at `a57d318` separately reports actual direct/scope/Drop/ownership counts of `6/260/320/12`, while retaining unresolved `566/2`, multi-owner `117`, and `whole_program=false`. The later `8e4d37c` reports only the independent current/pinned exact-wrapper soundness closure; results from different revisions or denominators cannot be converted or merged into the older percentage. | Check the source digest, denominator, actual-rewrite/dynamic-execution evidence, and evidence tier first; do not rebind across revisions or present the value as a performance claim. B18 |
@@ -592,13 +596,33 @@ Use `B1`--`B19` directly as slide numbers and record each jump target in the mai
 | B10 | Thread cache, zone, empty slab, RSS/fragmentation controls | memory overhead |
 | B11 | Metadata layouts: in-band/segregated/compressed/hybrid | locality/security/footprint tradeoff |
 | B12 | PAC/MTE/MPK/guard/quarantine: hardware vs software vs simulation | feature evidence |
-| B13 | Hugepage mapping/fallback and fixed-heap/PAL adapters | backing/retargeting |
+| B13 | Physical-backing gate plus cache-first mixed filling: extents, scan path, time, RSS, and claim boundary | backing/fragmentation/hot-path cost |
 | B14 | Original benchmark suite, baselines, hardware, toolchain | method validity |
 | B15 | Six runs, discard first, geomean, normalization | statistics |
 | B16 | Original per-workload plots; aggregate only after raw view | outliers/fairness |
 | B17 | Platform-by-platform adapter and evidence matrix | retargeting claim |
 | B18 | Current source fingerprint, C001--C007, worklist, gap plan | provenance/current status |
 | B19 | Future experiment design: stable identity contract, exploit corpus, source-frozen matrix, FFI frontend | dissertation direction |
+
+### B13 delivery path
+
+- **Takeaway:** An exact hot-region cache preserved the mixed filler's
+  three-extent layout while reducing descriptor-scan selections by 99.854%.
+- **Mechanism:** heterogeneous 64 KiB regions pack different eligible size
+  geometries into one 2 MiB lifetime lane; the exact cache serves 939,574 of
+  996,240 routed allocations before the fallback search.
+- **Memory:** mixed THP reduced paired peak RSS by 34.185% versus legacy THP,
+  95% CI [32.561%, 37.152%], with all eight pairs lower.
+- **Timing:** mixed versus legacy THP measured -0.058% saving, 95% CI
+  [-0.463%, 0.704%]. The within-mixed physical-backing contrast measured
+  +1.485%, 95% CI [0.797%, 2.211%], with all eight pairs faster.
+- **Backing proof:** every mixed-ordinary sample reported zero anonymous THP;
+  every mixed-THP sample reported 6,144 KiB.
+- **Boundary:** N=8 dirty working-tree diagnostic, 32 fresh processes, fixed
+  SWC work, no application warmup, no Criterion, no preregistered equivalence
+  margin, and one arena slow-path lock per routed deallocation. Keep
+  `performance_claim_eligible=false` and `presentation_claim_eligible=false`
+  visible on the slide.
 
 ## 10. Opening, transition, and closing scripts
 
@@ -703,7 +727,7 @@ Open these files first when building the slides. Copy no factual claims from cha
 | Constrained-platform ABI layout parity | `tools/rust-for-linux-link-contract/src/abi_layout_contract.rs`, `test_rust_for_linux_link_contract.py` (`315cfc4`; 5 records, 75 offsets/language; local-host C compiler boundary) |
 | Cache/footprint controls | `docs/allocator-memory-and-mechanisms.md` (`d87d5e0`, `25d316c`; hosted footprint reduction + matching-saturation correctness repair; diagnostic only) |
 | PAC functionality vs cost boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/pac-current-head-94b2523d8823-20260712T060647Z/`, `docs/evaluation-toolchains.md:272-280` |
-| Hugepage domain/fallback vs backing boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`; current domain/fallback PASS, real backing MISSING |
+| Hugepage domain/fallback vs backing boundary | Domain/fallback functional evidence remains in `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`. Current physical-backing evidence is separate: `docs/evidence/lifetime-resident-index-20260715/swc-thp-matched-summary.json` gates all 20 measured samples per arm, and `mixed-filler-fastpath-swc-quick-summary.json` gates all 8 diagnostic samples per arm. |
 | Current claim status | `evaluation/results/claim_check_current.json` |
 | Missing claim requirements | `evaluation/results/overclaim_worklist.json` |
 | Deferred paper-performance scope | `evaluation/results/paper_performance_gap_plan.json`, `.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json` |
