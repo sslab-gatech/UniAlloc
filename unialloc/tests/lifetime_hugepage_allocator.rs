@@ -545,6 +545,52 @@ fn compiler_directed_thp_collapses_only_after_the_extent_is_full() {
     assert!(lifetime_hugepage_stats_reset());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn compiler_directed_thp_requires_one_exact_compiler_cohort() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(16 * 1024, 64).unwrap();
+    let regions_per_extent =
+        LIFETIME_HUGEPAGE_EXTENT_BYTES / LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+    let slots_per_region = LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / layout.size();
+    let base = AllocationMetadata::for_type(0xA11C_019B)
+        .with_module(0xC0DE_019B)
+        .with_flags(0)
+        .with_callsite(0xCA11_019B)
+        .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::CompilerDirectedHugepage
+    ));
+    assert!(lifetime_hugepage_compiler_directed_telemetry_enable());
+    assert!(lifetime_hugepage_stats_reset());
+    let mut pointers = Vec::with_capacity(regions_per_extent * slots_per_region);
+    for site_offset in 0..regions_per_extent as u64 {
+        let site = base.with_callsite(base.callsite + site_offset);
+        for _ in 0..slots_per_region {
+            pointers.push(flags_zero_scoped_alloc(&alloc, layout, site, true));
+        }
+    }
+    let mixed = lifetime_hugepage_stats_snapshot();
+    assert_eq!(mixed.current_extents, 1);
+    assert_eq!(
+        mixed.routed_allocations,
+        regions_per_extent * slots_per_region
+    );
+    assert_eq!(mixed.thp_advice_attempts, 0);
+    assert_eq!(mixed.thp_collapse_attempts, 0);
+    assert_eq!(mixed.compiler_directed_density_promotion_attempts, 0);
+
+    for ptr in pointers {
+        unsafe { GlobalAlloc::dealloc(&alloc, ptr, layout) };
+    }
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+    assert!(lifetime_hugepage_stats_reset());
+}
+
 #[test]
 fn adaptive_flags_zero_scope_requires_nonzero_callsite_and_type() {
     let _guard = test_guard();

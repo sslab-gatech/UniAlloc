@@ -2019,6 +2019,10 @@ struct Extent {
     /// empty promoted extent clears this bit; a sparse cycle is unmapped when it
     /// drains instead of retaining an old density certificate indefinitely.
     promoted_reuse_cycle_full: bool,
+    /// True only while synchronous MADV_COLLAPSE owns the mapping. Advice-only
+    /// compiler-inferred promotion leaves this false even though backing is
+    /// `ThpAdvisedUnverified`.
+    collapse_pending: bool,
     adaptive_trailer: bool,
     available_prev: usize,
     available_next: usize,
@@ -2046,6 +2050,7 @@ impl Extent {
             backing: ActualBacking::Unmapped,
             promoted_reuse_identity: None,
             promoted_reuse_cycle_full: false,
+            collapse_pending: false,
             adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
@@ -3926,6 +3931,9 @@ impl LifetimeArenaState {
     unsafe fn unmap_empty_extent(&mut self, idx: usize) -> bool {
         debug_assert!(self.extents[idx].in_use());
         debug_assert_eq!(self.extents[idx].live, 0);
+        if self.extents[idx].collapse_pending {
+            return false;
+        }
         let extent_base = self.extents[idx].base;
         let extent_backing = self.extents[idx].backing;
         let was_retained = self.remove_retained_empty(idx);
@@ -4109,7 +4117,7 @@ impl LifetimeArenaState {
         .then_some(PromotedReuseIdentity {
             arena: first_region.identity,
             callsite: first_region.callsite,
-        });
+        })?;
         self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
         if sys_alloc::advise_transparent_hugepage(
             extent_base as *mut u8,
@@ -4118,8 +4126,10 @@ impl LifetimeArenaState {
             self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
             self.thp_collapse_attempts = self.thp_collapse_attempts.saturating_add(1);
             self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
-            self.extents[idx].promoted_reuse_identity = promoted_reuse_identity;
-            self.extents[idx].promoted_reuse_cycle_full = promoted_reuse_identity.is_some();
+            self.extents[idx].promoted_reuse_identity = Some(promoted_reuse_identity);
+            self.extents[idx].promoted_reuse_cycle_full = true;
+            self.extents[idx].collapse_pending = true;
+            self.remove_available(idx);
             Some(Ok(extent_base))
         } else {
             self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
@@ -4150,6 +4160,8 @@ impl LifetimeArenaState {
             self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
             self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
             self.thp_collapse_attempts = self.thp_collapse_attempts.saturating_add(1);
+            self.extents[idx].collapse_pending = true;
+            self.remove_available(idx);
             Some(extent_base)
         } else {
             self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
@@ -4159,14 +4171,20 @@ impl LifetimeArenaState {
         }
     }
 
-    fn finish_dense_thp_collapse(&mut self, extent_base: usize, outcome: Result<(), isize>) {
-        let idx = self
-            .lookup_extent(extent_base)
-            .expect("a density-crossing allocation must keep its extent live");
-        debug_assert_eq!(
-            self.extents[idx].backing,
-            ActualBacking::ThpAdvisedUnverified
-        );
+    fn finish_dense_thp_collapse(
+        &mut self,
+        extent_base: usize,
+        outcome: Result<(), isize>,
+    ) -> bool {
+        let Some(idx) = self.lookup_extent(extent_base) else {
+            return false;
+        };
+        if !self.extents[idx].collapse_pending
+            || self.extents[idx].backing != ActualBacking::ThpAdvisedUnverified
+        {
+            return false;
+        }
+        self.extents[idx].collapse_pending = false;
         match outcome {
             Ok(()) => {
                 self.thp_collapse_successes = self.thp_collapse_successes.saturating_add(1);
@@ -4186,6 +4204,26 @@ impl LifetimeArenaState {
                 self.extents[idx].promoted_reuse_cycle_full = false;
             }
         }
+        if self.extents[idx].live == 0 {
+            let policy = LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire));
+            let backend = LifetimePageBackend::from_usize(BACKEND.load(Ordering::Acquire));
+            if empty_extent_retention_eligible(policy, backend, &self.extents[idx]) {
+                self.add_available(idx);
+                self.add_retained_empty(idx);
+                self.retained_empty_extent_insertions =
+                    self.retained_empty_extent_insertions.saturating_add(1);
+                unsafe { self.enforce_retained_empty_capacity() };
+                self.peak_retained_empty_extents = core::cmp::max(
+                    self.peak_retained_empty_extents,
+                    self.current_retained_empty_extents,
+                );
+            } else {
+                let _ = unsafe { self.unmap_empty_extent(idx) };
+            }
+        } else if self.extents[idx].has_available_slot() {
+            self.add_available(idx);
+        }
+        true
     }
 
     unsafe fn create_extent(
@@ -4241,6 +4279,7 @@ impl LifetimeArenaState {
             backing: mapping.backing,
             promoted_reuse_identity: None,
             promoted_reuse_cycle_full: false,
+            collapse_pending: false,
             adaptive_trailer: geometry.adaptive_trailer,
             available_prev: NONE,
             available_next: NONE,
@@ -4523,7 +4562,7 @@ impl LifetimeArenaState {
         }
         let extent_accepts_current_epoch = policy != LifetimeHugepagePolicy::EpochCohortHugepage
             || cohort_epoch == self.current_epoch;
-        if was_full && extent_accepts_current_epoch {
+        if was_full && extent_accepts_current_epoch && !self.extents[idx].collapse_pending {
             self.add_available(idx);
         }
         self.routed_deallocations = self.routed_deallocations.saturating_add(1);
@@ -4541,6 +4580,11 @@ impl LifetimeArenaState {
             LifetimePlacementClass::Unknown => unreachable!(),
         }
         if self.extents[idx].live != 0 {
+            return true;
+        }
+
+        if self.extents[idx].collapse_pending {
+            self.remove_available(idx);
             return true;
         }
 
@@ -5571,7 +5615,7 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             extent_base as *mut u8,
             LIFETIME_HUGEPAGE_EXTENT_BYTES,
         );
-        ARENA.lock().finish_dense_thp_collapse(extent_base, outcome);
+        let _ = ARENA.lock().finish_dense_thp_collapse(extent_base, outcome);
     }
     if let Some(extent_base) = compiler_directed_collapse_base {
         let outcome = sys_alloc::collapse_transparent_hugepage(
@@ -5580,9 +5624,9 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         );
         let succeeded = outcome.is_ok();
         let mut state = ARENA.lock();
-        state.finish_dense_thp_collapse(extent_base, outcome);
+        let finished = state.finish_dense_thp_collapse(extent_base, outcome);
         if compiler_directed_telemetry {
-            if succeeded {
+            if finished && succeeded {
                 state.compiler_directed_density_promotion_successes = state
                     .compiler_directed_density_promotion_successes
                     .saturating_add(1);
@@ -6075,6 +6119,21 @@ mod tests {
             1
         );
         assert_eq!(routed.thp_collapse_attempts, 0);
+        if routed.compiler_inferred_density_promotion_successes == 1 {
+            let state = ARENA.lock();
+            let extent_base = pointers[0] as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state
+                .lookup_extent(extent_base)
+                .expect("advice-only compiler extent should remain mapped while live");
+            assert_eq!(
+                state.extents[idx].backing,
+                ActualBacking::ThpAdvisedUnverified
+            );
+            assert!(
+                !state.extents[idx].collapse_pending,
+                "advice-only promotion must not acquire the synchronous-collapse pin"
+            );
+        }
 
         for ptr in pointers {
             assert!(unsafe { try_deallocate(ptr) });
@@ -6094,6 +6153,69 @@ mod tests {
         assert_eq!(released.adaptive_short_observations, 0);
         assert_eq!(released.adaptive_long_observations, 0);
         assert_eq!(released.adaptive_censored_observations, 0);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn collapse_pending_pins_empty_mapping_and_rejects_duplicate_completion() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::CompilerDirectedHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let geometry = slot_geometry(layout, LifetimePlacementClass::LongLived, false).unwrap();
+        let mut state = ARENA.lock();
+        let idx = unsafe {
+            state
+                .create_extent(
+                    geometry,
+                    LifetimePlacementClass::LongLived,
+                    RequestedBacking::EpochCandidate,
+                    LifetimePageBackend::TransparentHugepage,
+                    1,
+                    false,
+                )
+                .unwrap()
+        };
+        let base = state.extents[idx].base;
+        state.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+        state.extents[idx].promoted_reuse_identity = Some(PromotedReuseIdentity {
+            arena: ArenaIdentity {
+                type_id: 1,
+                module_id: 2,
+                flags: 0,
+                lifetime_hint: LIFETIME_HINT_LONG_LIVED,
+                placement_hint: 0,
+            },
+            callsite: 3,
+        });
+        state.extents[idx].promoted_reuse_cycle_full = true;
+        state.extents[idx].collapse_pending = true;
+        state.remove_available(idx);
+
+        assert!(!unsafe { state.unmap_empty_extent(idx) });
+        assert_eq!(state.current_extents, 1);
+        assert_eq!(state.extent_unmaps, 0);
+
+        assert!(state.finish_dense_thp_collapse(base, Ok(())));
+        assert!(!state.extents[idx].collapse_pending);
+        assert_eq!(state.thp_collapse_successes, 1);
+        assert_eq!(state.current_retained_empty_extents, 1);
+        assert!(!state.finish_dense_thp_collapse(base, Ok(())));
+        assert_eq!(state.thp_collapse_successes, 1);
+        assert_eq!(state.thp_collapse_errors, 0);
+
+        assert!(unsafe { state.trim_retained_empty_extents() });
+        assert_eq!(state.current_extents, 0);
+        assert_eq!(state.extent_unmaps, 1);
+        drop(state);
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::Disabled
         ));
@@ -6205,6 +6327,7 @@ mod tests {
             backing,
             promoted_reuse_identity: None,
             promoted_reuse_cycle_full: false,
+            collapse_pending: false,
             adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
@@ -6692,6 +6815,7 @@ mod tests {
             backing: ActualBacking::ThpCandidateNoHugepage,
             promoted_reuse_identity: None,
             promoted_reuse_cycle_full: false,
+            collapse_pending: false,
             adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
@@ -6739,6 +6863,7 @@ mod tests {
             backing: ActualBacking::ThpCandidateNoHugepage,
             promoted_reuse_identity: None,
             promoted_reuse_cycle_full: false,
+            collapse_pending: false,
             adaptive_trailer: true,
             available_prev: NONE,
             available_next: NONE,
