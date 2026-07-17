@@ -12,13 +12,15 @@ use unialloc::{
     lifetime_hugepage_adaptive_site_force_track_all_enable,
     lifetime_hugepage_adaptive_site_recording_disable,
     lifetime_hugepage_adaptive_site_recording_enable, lifetime_hugepage_adaptive_site_snapshot,
-    lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
+    lifetime_hugepage_advance_epoch, lifetime_hugepage_compiler_directed_telemetry_enable,
+    lifetime_hugepage_compiler_directed_telemetry_enabled, lifetime_hugepage_configure,
     lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
     lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
-    type_isolation_side_cache_snapshot, with_semantic_metadata, AllocationMetadata,
-    LifetimeAdaptiveSiteSnapshot, LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot,
-    LifetimePageBackend, SemanticAlloc, UniAlloc, FLAG_DELAYED_FREE,
-    LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
+    lifetime_hugepage_trim_retained_empty_extents, type_isolation_side_cache_snapshot,
+    with_semantic_metadata, AllocationMetadata, LifetimeAdaptiveSiteSnapshot,
+    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LifetimePageBackend, SemanticAlloc,
+    UniAlloc, FLAG_DELAYED_FREE, LIFETIME_HINT_BOUNDED_PROCESS_LONG,
+    LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
     LIFETIME_HINT_LONG_LIVED, LIFETIME_HUGEPAGE_EXTENT_BYTES,
     LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
@@ -105,6 +107,24 @@ fn assert_runtime_validation_closes(snapshot: LifetimeHugepageStatsSnapshot) {
     );
 }
 
+fn assert_compiler_directed_runtime_state_is_idle(snapshot: LifetimeHugepageStatsSnapshot) {
+    assert_eq!(snapshot.runtime_validated_objects, 0);
+    assert_eq!(snapshot.runtime_validated_bytes, 0);
+    assert_eq!(snapshot.adaptive_pressure_bytes, 0);
+    assert_eq!(snapshot.adaptive_epoch_advances, 0);
+    assert_eq!(snapshot.adaptive_site_count, 0);
+    assert_eq!(snapshot.adaptive_eligible_allocations, 0);
+    assert_eq!(snapshot.adaptive_training_allocations, 0);
+    assert_eq!(snapshot.adaptive_observation_site_count, 0);
+    assert_eq!(snapshot.adaptive_observation_table_bypasses, 0);
+    assert_eq!(snapshot.adaptive_live_trailers, 0);
+    assert_eq!(snapshot.adaptive_live_survival_registrations, 0);
+    assert_eq!(snapshot.adaptive_live_survival_scans, 0);
+    assert_eq!(snapshot.adaptive_short_observations, 0);
+    assert_eq!(snapshot.adaptive_long_observations, 0);
+    assert_eq!(snapshot.adaptive_censored_observations, 0);
+}
+
 #[test]
 fn enabled_adaptive_policy_observes_flags_zero_compiler_scopes() {
     let _guard = test_guard();
@@ -170,7 +190,10 @@ fn enabled_adaptive_policy_observes_flags_zero_compiler_scopes() {
     }
     let released = lifetime_hugepage_stats_snapshot();
     assert_eq!(released.live_objects, 0);
-    assert!(released.all_mappings_released);
+    assert_eq!(released.current_retained_empty_extents, 1);
+    assert!(!released.all_mappings_released);
+    assert!(lifetime_hugepage_trim_retained_empty_extents());
+    assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
     assert_eq!(type_isolation_side_cache_snapshot(), cache_before);
 
     assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
@@ -223,7 +246,8 @@ fn flags_zero_lifetime_scope_admission_is_policy_specific_and_recovery_free() {
     let compiler = lifetime_hugepage_stats_snapshot();
     assert_eq!(compiler.compiler_inferred_direct_long_routes, 1);
     assert_eq!(compiler.live_objects, 0);
-    assert!(compiler.all_mappings_released);
+    assert_eq!(compiler.current_retained_empty_extents, 1);
+    assert!(!compiler.all_mappings_released);
     assert_eq!(type_isolation_side_cache_snapshot(), cache_before);
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
@@ -249,6 +273,276 @@ fn flags_zero_lifetime_scope_admission_is_policy_specific_and_recovery_free() {
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
     ));
+}
+
+#[test]
+fn compiler_directed_policies_route_only_medium_long_without_runtime_measurement() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let base = AllocationMetadata::for_type(0xA11C_0180)
+        .with_module(0xC0DE_0180)
+        .with_flags(0)
+        .with_callsite(0xCA11_0180);
+
+    for policy in [
+        LifetimeHugepagePolicy::CompilerDirectedHugepage,
+        LifetimeHugepagePolicy::CompilerDirectedOrdinary,
+    ] {
+        assert!(lifetime_hugepage_configure(policy));
+        assert!(lifetime_hugepage_compiler_directed_telemetry_enable());
+        assert!(lifetime_hugepage_compiler_directed_telemetry_enabled());
+        assert!(lifetime_hugepage_stats_reset());
+        let cache_before = type_isolation_side_cache_snapshot();
+
+        // Unknown and observation-only metadata use the base allocator before
+        // ARENA is acquired. Explicit SemanticAlloc calls make that admission
+        // decision observable without enabling compiler-scope recovery state.
+        for (offset, hint) in [
+            (1u64, 0u16),
+            (2u64, LIFETIME_HINT_LOCAL_DROP_FACT),
+            (3u64, LIFETIME_HINT_BOUNDED_PROCESS_LONG),
+            (4u64, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE),
+            (5u64, 0x7eed),
+        ] {
+            let unknown = AllocationMetadata {
+                type_id: base.type_id + offset,
+                ..base
+            }
+            .with_callsite(base.callsite + offset)
+            .with_lifetime_hint(hint);
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, unknown) };
+            assert!(!ptr.is_null());
+            assert_eq!(take_auto_deallocation_metadata(ptr, layout), None);
+            unsafe { alloc.dealloc_with_metadata(ptr, layout, unknown) };
+        }
+
+        let short = base.with_lifetime_hint(LIFETIME_HINT_EPHEMERAL);
+        let long = AllocationMetadata {
+            type_id: base.type_id + 6,
+            ..base
+        }
+        .with_callsite(base.callsite + 6)
+        .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+        let short_ptr = flags_zero_scoped_alloc(&alloc, layout, short, false);
+        let long_ptr = flags_zero_scoped_alloc(&alloc, layout, long, true);
+
+        let routed = lifetime_hugepage_stats_snapshot();
+        assert_eq!(routed.policy, policy);
+        assert!(routed.compiler_directed_telemetry);
+        assert_eq!(routed.routed_allocations, 1);
+        assert_eq!(routed.live_ephemeral_objects, 0);
+        assert_eq!(routed.live_long_lived_objects, 1);
+        assert_eq!(routed.compiler_directed_unknown_bypasses, 5);
+        assert_eq!(
+            routed.compiler_directed_bypass_requested_bytes,
+            5 * layout.size()
+        );
+        assert_eq!(routed.compiler_directed_arena_lock_acquisitions, 1);
+        assert_eq!(routed.compiler_directed_short_routes, 0);
+        assert_eq!(routed.compiler_directed_short_requested_bytes, 0);
+        assert_eq!(routed.compiler_directed_short_slot_bytes, 0);
+        assert_eq!(routed.compiler_directed_long_routes, 1);
+        assert_eq!(routed.compiler_directed_long_requested_bytes, layout.size());
+        assert_eq!(routed.compiler_directed_long_slot_bytes, layout.size());
+        assert_eq!(routed.compiler_directed_routes_without_trailer, 1);
+        assert_eq!(routed.compiler_directed_deallocations, 0);
+        assert_compiler_directed_runtime_state_is_idle(routed);
+
+        match policy {
+            LifetimeHugepagePolicy::CompilerDirectedHugepage => {
+                assert_eq!(routed.current_ordinary_extents, 0);
+                assert_eq!(routed.current_thp_extents, 1);
+                assert_eq!(routed.thp_candidate_extent_mappings, 1);
+                assert_eq!(routed.compiler_directed_density_promotion_attempts, 0);
+            }
+            LifetimeHugepagePolicy::CompilerDirectedOrdinary => {
+                assert_eq!(routed.current_ordinary_extents, 1);
+                assert_eq!(routed.current_thp_extents, 0);
+                assert_eq!(routed.thp_candidate_extent_mappings, 0);
+            }
+            _ => unreachable!(),
+        }
+
+        let resized = Layout::from_size_align(layout.size() + 16, layout.align()).unwrap();
+        let long_ptr = unsafe { GlobalAlloc::realloc(&alloc, long_ptr, layout, resized.size()) };
+        assert!(!long_ptr.is_null());
+        assert_eq!(take_auto_deallocation_metadata(long_ptr, resized), None);
+        let long_address = long_ptr as usize;
+        std::thread::spawn(move || unsafe {
+            GlobalAlloc::dealloc(&UniAlloc::new(), long_address as *mut u8, resized);
+        })
+        .join()
+        .unwrap();
+        unsafe { GlobalAlloc::dealloc(&alloc, short_ptr, layout) };
+        let released = lifetime_hugepage_stats_snapshot();
+        assert_eq!(released.routed_deallocations, 1);
+        assert_eq!(released.compiler_directed_deallocations, 1);
+        assert_compiler_directed_runtime_state_is_idle(released);
+        assert_eq!(type_isolation_side_cache_snapshot(), cache_before);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(!lifetime_hugepage_compiler_directed_telemetry_enabled());
+    }
+}
+
+#[test]
+fn compiler_directed_telemetry_is_default_off_on_the_production_path() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 32).unwrap();
+    let base = AllocationMetadata::for_type(0xA11C_0190)
+        .with_module(0xC0DE_0190)
+        .with_flags(0)
+        .with_callsite(0xCA11_0190);
+
+    for policy in [
+        LifetimeHugepagePolicy::CompilerDirectedHugepage,
+        LifetimeHugepagePolicy::CompilerDirectedOrdinary,
+    ] {
+        assert!(lifetime_hugepage_configure(policy));
+        assert!(!lifetime_hugepage_compiler_directed_telemetry_enabled());
+        assert!(lifetime_hugepage_stats_reset());
+
+        let unknown = base.with_lifetime_hint(0);
+        let unknown_ptr = unsafe { alloc.alloc_with_metadata(layout, unknown) };
+        assert!(!unknown_ptr.is_null());
+        unsafe { alloc.dealloc_with_metadata(unknown_ptr, layout, unknown) };
+
+        let short_ptr = flags_zero_scoped_alloc(
+            &alloc,
+            layout,
+            base.with_lifetime_hint(LIFETIME_HINT_EPHEMERAL),
+            false,
+        );
+        let long_ptr = flags_zero_scoped_alloc(
+            &alloc,
+            layout,
+            AllocationMetadata {
+                type_id: base.type_id + 1,
+                ..base
+            }
+            .with_callsite(base.callsite + 1)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED),
+            true,
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, short_ptr, layout);
+            GlobalAlloc::dealloc(&alloc, long_ptr, layout);
+        }
+
+        let snapshot = lifetime_hugepage_stats_snapshot();
+        assert_eq!(snapshot.routed_allocations, 1);
+        assert!(!snapshot.compiler_directed_telemetry);
+        assert_eq!(snapshot.compiler_directed_unknown_bypasses, 0);
+        assert_eq!(snapshot.compiler_directed_arena_lock_acquisitions, 0);
+        assert_eq!(snapshot.compiler_directed_short_routes, 0);
+        assert_eq!(snapshot.compiler_directed_long_routes, 0);
+        assert_eq!(snapshot.compiler_directed_deallocations, 0);
+        assert_eq!(snapshot.compiler_directed_routes_without_trailer, 0);
+        assert_compiler_directed_runtime_state_is_idle(snapshot);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn compiler_directed_thp_collapses_only_after_the_extent_is_full() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let slots_per_extent = LIFETIME_HUGEPAGE_EXTENT_BYTES / layout.size();
+    let metadata = AllocationMetadata::for_type(0xA11C_0198)
+        .with_module(0xC0DE_0198)
+        .with_flags(0)
+        .with_callsite(0xCA11_0198)
+        .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::CompilerDirectedHugepage
+    ));
+    assert!(lifetime_hugepage_compiler_directed_telemetry_enable());
+    assert!(lifetime_hugepage_stats_reset());
+
+    let mut pointers = Vec::with_capacity(slots_per_extent);
+    for _ in 0..(slots_per_extent - 1) {
+        pointers.push(flags_zero_scoped_alloc(&alloc, layout, metadata, true));
+    }
+    let before_full = lifetime_hugepage_stats_snapshot();
+    assert_eq!(before_full.current_extents, 1);
+    assert_eq!(before_full.thp_advice_attempts, 0);
+    assert_eq!(before_full.thp_collapse_attempts, 0);
+    assert_eq!(before_full.compiler_directed_density_promotion_attempts, 0);
+
+    pointers.push(flags_zero_scoped_alloc(&alloc, layout, metadata, true));
+    let promoted_extent_base = pointers[0] as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+    let full = lifetime_hugepage_stats_snapshot();
+    assert_eq!(full.current_extents, 1);
+    assert_eq!(full.thp_advice_attempts, 1);
+    assert_eq!(full.thp_advice_successes + full.thp_advice_errors, 1);
+    if full.thp_advice_successes == 1 {
+        assert_eq!(full.thp_collapse_attempts, 1);
+        assert_eq!(full.thp_collapse_successes + full.thp_collapse_errors, 1);
+    }
+    assert_eq!(full.compiler_directed_density_promotion_attempts, 1);
+    assert_eq!(
+        full.compiler_directed_density_promotion_successes
+            + full.compiler_directed_density_promotion_errors,
+        1
+    );
+
+    for ptr in pointers.drain(..) {
+        unsafe { GlobalAlloc::dealloc(&alloc, ptr, layout) };
+    }
+    if full.thp_collapse_successes == 1 {
+        let retained = lifetime_hugepage_stats_snapshot();
+        assert_eq!(retained.current_extents, 1);
+        assert_eq!(retained.current_retained_empty_extents, 1);
+        assert_eq!(retained.extent_unmaps, 0);
+
+        let other_site = metadata.with_callsite(metadata.callsite.wrapping_add(1));
+        let other_ptr = flags_zero_scoped_alloc(&alloc, layout, other_site, true);
+        let other_extent_base = other_ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        assert_ne!(other_extent_base, promoted_extent_base);
+        let isolated = lifetime_hugepage_stats_snapshot();
+        assert_eq!(isolated.current_extents, 2);
+        assert_eq!(isolated.thp_extent_mappings, 2);
+        assert_eq!(isolated.thp_collapse_attempts, 1);
+        unsafe { GlobalAlloc::dealloc(&alloc, other_ptr, layout) };
+
+        for _ in 0..slots_per_extent {
+            pointers.push(flags_zero_scoped_alloc(&alloc, layout, metadata, true));
+        }
+        assert!(pointers.iter().all(|ptr| {
+            *ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1) == promoted_extent_base
+        }));
+        let reused_full = lifetime_hugepage_stats_snapshot();
+        assert_eq!(reused_full.thp_extent_mappings, 2);
+        assert_eq!(reused_full.thp_collapse_attempts, 1);
+        assert_eq!(reused_full.retained_empty_extent_reuse_hits, 1);
+        for ptr in pointers.drain(..) {
+            unsafe { GlobalAlloc::dealloc(&alloc, ptr, layout) };
+        }
+
+        let sparse_ptr = flags_zero_scoped_alloc(&alloc, layout, metadata, true);
+        assert_eq!(
+            sparse_ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1),
+            promoted_extent_base
+        );
+        unsafe { GlobalAlloc::dealloc(&alloc, sparse_ptr, layout) };
+        let sparse_evicted = lifetime_hugepage_stats_snapshot();
+        assert_eq!(sparse_evicted.retained_empty_extent_reuse_hits, 2);
+        assert_eq!(sparse_evicted.current_extents, 1);
+        assert_eq!(sparse_evicted.current_retained_empty_extents, 1);
+        assert_eq!(sparse_evicted.extent_unmaps, 1);
+    }
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+    assert!(lifetime_hugepage_stats_reset());
 }
 
 #[test]
@@ -952,10 +1246,18 @@ fn thp_backend_counts_advice_separately_from_epoch_confirmed_collapse() {
     }
 
     let eager_released = lifetime_hugepage_stats_snapshot();
-    assert_eq!(eager_released.current_extents, 0);
-    assert_eq!(eager_released.current_thp_extents, 0);
-    assert_eq!(eager_released.extent_unmaps, 1);
-    assert!(eager_released.all_mappings_released);
+    if eager_released.thp_advice_successes == 1 {
+        assert_eq!(eager_released.current_extents, 1);
+        assert_eq!(eager_released.current_thp_extents, 1);
+        assert_eq!(eager_released.current_retained_empty_extents, 1);
+        assert_eq!(eager_released.extent_unmaps, 0);
+        assert!(!eager_released.all_mappings_released);
+    } else {
+        assert_eq!(eager_released.current_extents, 0);
+        assert_eq!(eager_released.current_thp_extents, 0);
+        assert_eq!(eager_released.extent_unmaps, 1);
+        assert!(eager_released.all_mappings_released);
+    }
     // Advice success is VMA intent. Without collapse/smaps evidence the
     // allocator conservatively records this same-epoch release as ordinary.
     assert_eq!(eager_released.placement_true_negative_objects, 1);
@@ -1095,6 +1397,7 @@ fn adaptive_runtime_learns_short_without_manual_epoch_markers() {
     assert_runtime_validation_closes(trained);
 
     let mappings_before_sampling = trained.ordinary_extent_mappings;
+    let reuse_before_sampling = trained.retained_empty_extent_reuse_hits;
     unsafe {
         for _ in 0..256 {
             let ptr = alloc.alloc_with_metadata(layout, short);
@@ -1107,9 +1410,10 @@ fn adaptive_runtime_learns_short_without_manual_epoch_markers() {
     assert_eq!(applied.adaptive_short_bypassed_allocations, 255);
     assert_eq!(applied.adaptive_long_routed_allocations, 0);
     assert_eq!(applied.adaptive_live_trailers, 0);
+    assert_eq!(applied.ordinary_extent_mappings, mappings_before_sampling);
     assert_eq!(
-        applied.ordinary_extent_mappings,
-        mappings_before_sampling + 1
+        applied.retained_empty_extent_reuse_hits,
+        reuse_before_sampling + 1
     );
     assert_eq!(applied.phase_advances, 0);
     assert_runtime_validation_closes(applied);
@@ -1153,8 +1457,11 @@ fn adaptive_runtime_caps_cold_inflight_training() {
     assert_eq!(released.adaptive_short_observations, 8);
     assert_eq!(released.adaptive_short_sites, 1);
     assert_eq!(released.adaptive_live_trailers, 0);
-    assert_eq!(released.current_extents, 0);
+    assert_eq!(released.current_retained_empty_extents, 1);
+    assert!(!released.all_mappings_released);
     assert_runtime_validation_closes(released);
+    assert!(lifetime_hugepage_trim_retained_empty_extents());
+    assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
     ));
@@ -1526,6 +1833,7 @@ fn adaptive_runtime_backs_off_after_censored_cold_training() {
     let training_before = trained.adaptive_training_allocations;
     let bypasses_before = trained.adaptive_cold_bypassed_allocations;
     let mappings_before = trained.ordinary_extent_mappings;
+    let reuse_before = trained.retained_empty_extent_reuse_hits;
 
     unsafe {
         for _ in 0..256 {
@@ -1545,7 +1853,8 @@ fn adaptive_runtime_backs_off_after_censored_cold_training() {
         sampled.adaptive_cold_bypassed_allocations - bypasses_before,
         255
     );
-    assert_eq!(sampled.ordinary_extent_mappings - mappings_before, 1);
+    assert_eq!(sampled.ordinary_extent_mappings, mappings_before);
+    assert_eq!(sampled.retained_empty_extent_reuse_hits, reuse_before + 1);
     assert_eq!(sampled.adaptive_live_trailers, 0);
     assert_runtime_validation_closes(sampled);
     assert!(lifetime_hugepage_configure(
@@ -1554,7 +1863,7 @@ fn adaptive_runtime_backs_off_after_censored_cold_training() {
 }
 
 #[test]
-fn adaptive_runtime_learns_long_from_allocation_pressure_and_routes_thp() {
+fn adaptive_runtime_learns_long_and_keeps_sparse_candidate_unbacked() {
     let _guard = test_guard();
     let alloc = UniAlloc::new();
     let survivor_layout = Layout::from_size_align(64, 16).unwrap();
@@ -1608,7 +1917,8 @@ fn adaptive_runtime_learns_long_from_allocation_pressure_and_routes_thp() {
     let applied = lifetime_hugepage_stats_snapshot();
     assert_eq!(applied.adaptive_long_routed_allocations, 1);
     assert!(applied.thp_extent_mappings > thp_before);
-    assert!(applied.thp_advice_attempts >= 1);
+    assert_eq!(applied.thp_candidate_extent_mappings, 1);
+    assert_eq!(applied.thp_advice_attempts, 0);
     assert_eq!(applied.adaptive_live_trailers, 0);
     assert_runtime_validation_closes(applied);
     assert!(lifetime_hugepage_configure(
@@ -1670,9 +1980,11 @@ fn adaptive_runtime_recovers_cross_thread_site_from_slot_trailer() {
     assert_eq!(snapshot.adaptive_trailer_corruptions, 0);
     assert_eq!(snapshot.adaptive_static_hint_false_positive_objects, 1);
     assert_eq!(snapshot.adaptive_static_hint_abstained_objects, 0);
-    assert_eq!(snapshot.current_extents, 0);
-    assert!(snapshot.all_mappings_released);
+    assert_eq!(snapshot.current_retained_empty_extents, 1);
+    assert!(!snapshot.all_mappings_released);
     assert_runtime_validation_closes(snapshot);
+    assert!(lifetime_hugepage_trim_retained_empty_extents());
+    assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
     ));

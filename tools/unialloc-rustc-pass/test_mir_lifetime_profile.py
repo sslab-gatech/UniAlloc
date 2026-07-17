@@ -278,6 +278,18 @@ pub mod alloc_api {
     pub extern "C" fn __unialloc_semantic_scope_push_hints_local(
         _: u64, _: u64, _: u32, lifetime: u16, _: u16, _: u64,
     ) { super::record(lifetime); }
+    pub fn __unialloc_semantic_scope_push_for_rust_type<T: 'static>(
+        _: u64, _: u32, _: u64,
+    ) { super::record(0); }
+    pub fn __unialloc_semantic_scope_push_for_rust_type_local<T: 'static>(
+        _: u64, _: u32, _: u64,
+    ) { super::record(0); }
+    pub fn __unialloc_semantic_scope_push_for_rust_type_hints<T: 'static>(
+        _: u64, _: u32, lifetime: u16, _: u16, _: u64,
+    ) { super::record(lifetime); }
+    pub fn __unialloc_semantic_scope_push_for_rust_type_hints_local<T: 'static>(
+        _: u64, _: u32, lifetime: u16, _: u16, _: u64,
+    ) { super::record(lifetime); }
     #[no_mangle]
     pub extern "C" fn __unialloc_semantic_scope_pop() {}
 }

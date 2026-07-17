@@ -17,7 +17,8 @@
 
 use super::type_isolation::{
     compiler_bounded_lifetime_placement_class, lifetime_placement_class, AllocationMetadata,
-    LifetimePlacementClass, FLAG_DELAYED_FREE,
+    LifetimePlacementClass, FLAG_DELAYED_FREE, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
+    LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
 };
 use crate::pal::sys_alloc::{self, prots, HugePageMmapBacking};
 use crate::size_class::{get_size_class_tuple, SizeClass, TOTAL_SIZE_CLASS};
@@ -47,6 +48,11 @@ const TOMBSTONE: usize = usize::MAX - 1;
 // Preregistered feasibility threshold for the first runtime-validation
 // experiment. It is an evaluation parameter, not a claimed universal optimum.
 const THP_PROMOTION_MIN_LIVE_BYTES: usize = LIFETIME_HUGEPAGE_EXTENT_BYTES / 2;
+// Adaptive THP placement admits provisional Long priors to candidate extents,
+// but only runtime-confirmed Long slots contribute to promotion. Requiring
+// three quarters of one extent keeps the backing decision occupancy-driven.
+const ADAPTIVE_THP_PROMOTION_MIN_CONFIRMED_LIVE_BYTES: usize =
+    LIFETIME_HUGEPAGE_EXTENT_BYTES * 3 / 4;
 
 // Marker-free lifetime learning uses allocation pressure instead of attempting
 // to infer application-specific semantic phases. One epoch is one 2 MiB THP's
@@ -64,15 +70,40 @@ const ADAPTIVE_OBSERVATION_PROBE_LIMIT: usize = 16;
 /// Maximum number of exact runtime lifetime sites retained in the fixed table.
 pub const LIFETIME_ADAPTIVE_SITE_SNAPSHOT_CAPACITY: usize = ADAPTIVE_OBSERVATION_SLOTS;
 /// Version of [`LifetimeAdaptiveSiteSnapshot`]'s public field contract.
-pub const LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION: u32 = 1;
+pub const LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION: u32 = 2;
 const ADAPTIVE_SITE_PROBE_LIMIT: usize = 16;
 const ADAPTIVE_MIN_DECISIVE_SAMPLES: u32 = 8;
 const ADAPTIVE_PRIOR_VALIDATION_SAMPLES: u32 = 4;
 const ADAPTIVE_MIN_SAMPLES_AFTER_TRANSITION: u32 = 4;
 const ADAPTIVE_COUNTER_DECAY_INTERVAL: u32 = 256;
 const ADAPTIVE_COLD_MAX_INFLIGHT: u32 = 8;
+const ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE: usize = ADAPTIVE_COLD_MAX_INFLIGHT as usize;
+const ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS: usize = ADAPTIVE_SITE_SLOTS / u64::BITS as usize;
 const ADAPTIVE_SHORT_SAMPLE_INTERVAL: u32 = 256;
+// Observation-only borrowed Vec reserve candidates target the resident buffer
+// band found in the real-workload audit. Smaller metadata objects cannot fill
+// extents efficiently; larger allocations belong to the allocator's large
+// object path. Keep this gate on the actual runtime Layout.
+const DYNAMIC_BUFFER_OBSERVE_MIN_BYTES: usize = 4 * 1024;
+const DYNAMIC_BUFFER_OBSERVE_MAX_BYTES: usize = 32 * 1024;
+// Direct compiler placement is limited to layouts the arena can actually
+// serve. Keeping this distinct from the broader observation band avoids
+// acquiring ARENA only to discover a Large size class.
+const COMPILER_DIRECTED_LONG_MIN_BYTES: usize = 4 * 1024;
+const COMPILER_DIRECTED_LONG_MAX_BYTES: usize = crate::size_class::MAX_SIZE;
+// Bound the extra fullness comparison work on the allocation hot path.
+// The existing available-list search still traverses incompatible entries for
+// correctness; adaptive Long placement compares at most 32 usable candidates.
+const ADAPTIVE_FULLNESS_CANDIDATE_LIMIT: usize = 32;
+// Lifetime-routed workloads repeatedly drain the same small geometry set.
+// Keep one bounded process-local hot set so a fully empty extent can be reused
+// without repeating mmap/munmap and THP-advice work on every operation.
+const LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY: usize = 16;
 const ADAPTIVE_TRAILER_ACTIVE: u16 = 1;
+const ADAPTIVE_TRAILER_CONFIRMED_LONG: u16 = 1 << 1;
+const ADAPTIVE_TRAILER_SURVIVAL_RECORDED: u16 = 1 << 2;
+const ADAPTIVE_TRAILER_KNOWN_FLAGS: u16 =
+    ADAPTIVE_TRAILER_ACTIVE | ADAPTIVE_TRAILER_CONFIRMED_LONG | ADAPTIVE_TRAILER_SURVIVAL_RECORDED;
 
 #[inline]
 fn adaptive_lifetime_outcome(age_bytes: u64) -> Option<bool> {
@@ -120,7 +151,8 @@ pub enum LifetimeHugepagePolicy {
     /// Learn allocation-site survival from allocator-observed byte pressure.
     /// Tracked Cold and sampled Short allocations use ordinary
     /// `MADV_NOHUGEPAGE` extents, model-directed bypasses use the base allocator,
-    /// and learned-Long sites use eager anonymous `MADV_HUGEPAGE` extents.
+    /// and Long placements share delayed THP candidates. Only runtime-confirmed
+    /// Long occupancy can cross the density gate and request `MADV_HUGEPAGE`.
     AdaptiveRuntimeHugepage = 5,
     /// Trust only the bounded process-long compiler oracle. Local-Drop facts,
     /// legacy hints, and unclassified allocations bypass before the arena lock;
@@ -137,12 +169,29 @@ pub enum LifetimeHugepagePolicy {
     /// `MADV_NOHUGEPAGE` extents. This is the matched THP-off control for
     /// `AdaptiveRuntimeHugepage`.
     AdaptiveRuntimeOrdinary = 8,
+    /// Trust the compiler's exact Long hint only for medium layouts supported
+    /// by the arena. Admitted Long allocations use density-gated THP
+    /// candidates; Short, Unknown, observation-only, and out-of-band layouts
+    /// stay on the base allocator before the arena lock. This policy carries no
+    /// runtime classifier, pressure clock, observation trailer, or
+    /// deallocation-time validation.
+    CompilerDirectedHugepage = 9,
+    /// Matched THP-off control for `CompilerDirectedHugepage`. The compiler's
+    /// same admitted medium Long allocations use ordinary pages under
+    /// `MADV_NOHUGEPAGE`; every other allocation stays on the base allocator.
+    CompilerDirectedOrdinary = 10,
+    /// Learn and place from allocator-observed survival only. Exact compiler
+    /// site identity remains available to the online classifier, while the
+    /// static lifetime hint is normalized to Unknown for prediction and arena
+    /// identity. This same-binary runtime-profile control pays cold learning,
+    /// trailer, pressure-clock, locking, and density-promotion costs.
+    AdaptiveRuntimeProfileHugepage = 11,
 }
 
 impl LifetimeHugepagePolicy {
     #[inline]
     fn from_usize(value: usize) -> Self {
-        match value {
+        match value & POLICY_VALUE_MASK {
             1 => Self::SegregatedOrdinary,
             2 => Self::LongLivedHugepage,
             3 => Self::SegregatedHugepage,
@@ -151,6 +200,9 @@ impl LifetimeHugepagePolicy {
             6 => Self::CompilerInferredHugepage,
             7 => Self::CompilerInferredOrdinary,
             8 => Self::AdaptiveRuntimeOrdinary,
+            9 => Self::CompilerDirectedHugepage,
+            10 => Self::CompilerDirectedOrdinary,
+            11 => Self::AdaptiveRuntimeProfileHugepage,
             _ => Self::Disabled,
         }
     }
@@ -159,7 +211,30 @@ impl LifetimeHugepagePolicy {
     fn is_adaptive(self) -> bool {
         matches!(
             self,
-            Self::AdaptiveRuntimeHugepage | Self::AdaptiveRuntimeOrdinary
+            Self::AdaptiveRuntimeHugepage
+                | Self::AdaptiveRuntimeOrdinary
+                | Self::AdaptiveRuntimeProfileHugepage
+        )
+    }
+
+    #[inline]
+    fn is_adaptive_thp(self) -> bool {
+        matches!(
+            self,
+            Self::AdaptiveRuntimeHugepage | Self::AdaptiveRuntimeProfileHugepage
+        )
+    }
+
+    #[inline]
+    fn ignores_static_lifetime_prior(self) -> bool {
+        self == Self::AdaptiveRuntimeProfileHugepage
+    }
+
+    #[inline]
+    fn is_compiler_directed(self) -> bool {
+        matches!(
+            self,
+            Self::CompilerDirectedHugepage | Self::CompilerDirectedOrdinary
         )
     }
 
@@ -171,11 +246,18 @@ impl LifetimeHugepagePolicy {
     ) -> Option<RequestedBacking> {
         let requested = match (self, class) {
             (Self::Disabled, _) | (_, LifetimePlacementClass::Unknown) => None,
-            (Self::SegregatedOrdinary | Self::AdaptiveRuntimeOrdinary, _) => {
-                Some(RequestedBacking::Ordinary)
-            }
             (
-                Self::LongLivedHugepage | Self::EpochCohortHugepage | Self::AdaptiveRuntimeHugepage,
+                Self::SegregatedOrdinary
+                | Self::AdaptiveRuntimeOrdinary
+                | Self::CompilerDirectedOrdinary,
+                _,
+            ) => Some(RequestedBacking::Ordinary),
+            (
+                Self::LongLivedHugepage
+                | Self::EpochCohortHugepage
+                | Self::AdaptiveRuntimeHugepage
+                | Self::AdaptiveRuntimeProfileHugepage
+                | Self::CompilerDirectedHugepage,
                 LifetimePlacementClass::Ephemeral,
             ) => Some(RequestedBacking::Ordinary),
             (
@@ -189,7 +271,9 @@ impl LifetimeHugepagePolicy {
                 Self::LongLivedHugepage
                 | Self::EpochCohortHugepage
                 | Self::AdaptiveRuntimeHugepage
-                | Self::CompilerInferredHugepage,
+                | Self::AdaptiveRuntimeProfileHugepage
+                | Self::CompilerInferredHugepage
+                | Self::CompilerDirectedHugepage,
                 LifetimePlacementClass::LongLived,
             )
             | (Self::SegregatedHugepage, _) => Some(RequestedBacking::LargePage),
@@ -197,7 +281,11 @@ impl LifetimeHugepagePolicy {
         if backend == LifetimePageBackend::TransparentHugepage
             && matches!(
                 self,
-                Self::EpochCohortHugepage | Self::CompilerInferredHugepage
+                Self::EpochCohortHugepage
+                    | Self::AdaptiveRuntimeHugepage
+                    | Self::AdaptiveRuntimeProfileHugepage
+                    | Self::CompilerInferredHugepage
+                    | Self::CompilerDirectedHugepage
             )
             && requested == Some(RequestedBacking::LargePage)
         {
@@ -210,6 +298,18 @@ impl LifetimeHugepagePolicy {
     #[inline]
     fn separates_epoch_extents(self) -> bool {
         self == Self::EpochCohortHugepage
+    }
+}
+
+/// Interpret only the stable compiler-directed binary hint contract. The
+/// bounded-process oracle and observation-only tags keep their independent
+/// experiment semantics and therefore abstain in this policy pair.
+#[inline]
+const fn compiler_directed_lifetime_placement_class(lifetime_hint: u16) -> LifetimePlacementClass {
+    match lifetime_hint {
+        LIFETIME_HINT_EPHEMERAL => LifetimePlacementClass::Ephemeral,
+        LIFETIME_HINT_LONG_LIVED => LifetimePlacementClass::LongLived,
+        _ => LifetimePlacementClass::Unknown,
     }
 }
 
@@ -228,7 +328,12 @@ fn requested_backing_for_allocation(
     backend: LifetimePageBackend,
     adaptive_long_confirmed: bool,
 ) -> Option<RequestedBacking> {
-    if policy.is_adaptive()
+    if policy.is_adaptive_thp()
+        && class == LifetimePlacementClass::LongLived
+        && backend == LifetimePageBackend::TransparentHugepage
+    {
+        Some(RequestedBacking::EpochCandidate)
+    } else if policy.is_adaptive()
         && class == LifetimePlacementClass::LongLived
         && !adaptive_long_confirmed
     {
@@ -254,8 +359,8 @@ enum ActualBacking {
     /// Delayed candidate whose initial `MADV_NOHUGEPAGE` failed. Its actual
     /// page size remains unverified until the promotion transition runs.
     ThpCandidateNoHugepageAdviceFailed = 7,
-    /// `MADV_COLLAPSE` succeeded for this range at a phase boundary. Linux may
-    /// split the THP later, so this is a point-in-time observation.
+    /// `MADV_COLLAPSE` succeeded for this range at a controlled transition.
+    /// Linux may split the THP later, so this is a point-in-time observation.
     ThpCollapseSucceededPointInTime = 8,
 }
 
@@ -468,6 +573,17 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub adaptive_force_track_all_raw_reallocation_pressure_requested_bytes: usize,
     pub adaptive_live_trailers: usize,
     pub adaptive_trailer_corruptions: usize,
+    /// Bounded live-survivor sampler telemetry. A live observation means the
+    /// object crossed the Long pressure threshold before deallocation. It
+    /// updates the predictor once, while its allocation-time placement remains
+    /// provisional and receives no retroactive density credit.
+    pub adaptive_live_survival_registrations: usize,
+    pub adaptive_live_survival_registration_bypasses: usize,
+    pub adaptive_live_survival_scans: usize,
+    pub adaptive_live_survival_slots_examined: usize,
+    pub adaptive_live_survival_observations: usize,
+    pub adaptive_live_survival_promotions: usize,
+    pub adaptive_live_survival_stale_abstentions: usize,
     pub adaptive_short_observations: usize,
     pub adaptive_long_observations: usize,
     pub adaptive_censored_observations: usize,
@@ -530,6 +646,46 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub compiler_inferred_density_promotion_attempts: usize,
     pub compiler_inferred_density_promotion_successes: usize,
     pub compiler_inferred_density_promotion_errors: usize,
+    /// Compiler-directed diagnostic telemetry. Collection is explicitly
+    /// default-off so the performance arm pays no per-event atomic RMW. The
+    /// two bypass fields are updated before the arena lock only while
+    /// telemetry is enabled; routed fields are ordinary counters protected by
+    /// the arena lock.
+    pub compiler_directed_telemetry: bool,
+    /// Pre-lock admission bypasses. The legacy `unknown` field name covers
+    /// Short hints and out-of-band Long layouts as well as Unknown hints under
+    /// the medium-Long-only policy contract.
+    pub compiler_directed_unknown_bypasses: usize,
+    pub compiler_directed_bypass_requested_bytes: usize,
+    pub compiler_directed_arena_lock_acquisitions: usize,
+    /// Compatibility fields from the original two-lane prototype. Direct
+    /// policies keep these at zero because Short allocations use the base
+    /// allocator.
+    pub compiler_directed_short_routes: usize,
+    pub compiler_directed_short_requested_bytes: usize,
+    pub compiler_directed_short_slot_bytes: usize,
+    pub compiler_directed_long_routes: usize,
+    pub compiler_directed_long_requested_bytes: usize,
+    pub compiler_directed_long_slot_bytes: usize,
+    pub compiler_directed_deallocations: usize,
+    pub compiler_directed_routes_without_trailer: usize,
+    pub compiler_directed_density_promotion_attempts: usize,
+    pub compiler_directed_density_promotion_successes: usize,
+    pub compiler_directed_density_promotion_errors: usize,
+    /// Maximum number of fully empty lifetime-routed extents retained for exact
+    /// geometry/backing reuse. Kernel unmap failures can temporarily exceed it.
+    pub empty_extent_retention_capacity: usize,
+    /// Fully empty mapped extents currently held in the bounded reuse LRU.
+    pub current_retained_empty_extents: usize,
+    pub peak_retained_empty_extents: usize,
+    pub current_retained_empty_bytes: usize,
+    pub peak_retained_empty_bytes: usize,
+    /// Extent-level lifecycle counters. A reuse hit is the first allocation
+    /// that reactivates one retained empty extent.
+    pub retained_empty_extent_insertions: usize,
+    pub retained_empty_extent_reuse_hits: usize,
+    pub retained_empty_extent_evictions: usize,
+    pub retained_empty_extent_trims: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -545,6 +701,35 @@ struct SlotGeometry {
 struct AvailableRegion {
     extent_idx: usize,
     region_idx: usize,
+}
+
+#[inline]
+fn fullness_candidate_is_better(
+    candidate_live: usize,
+    candidate_reuses_identity: bool,
+    incumbent: Option<(usize, bool)>,
+) -> bool {
+    match incumbent {
+        None => true,
+        Some((incumbent_live, incumbent_reuses_identity)) => {
+            candidate_live > incumbent_live
+                || (candidate_live == incumbent_live
+                    && candidate_reuses_identity
+                    && !incumbent_reuses_identity)
+        }
+    }
+}
+
+#[inline]
+fn confirmed_long_live_after_deallocation(
+    current: usize,
+    confirmed_long_provenance: Option<bool>,
+) -> usize {
+    match confirmed_long_provenance {
+        Some(true) => current.saturating_sub(1),
+        Some(false) => current,
+        None => 0,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -982,6 +1167,85 @@ enum AdaptiveTransition {
 }
 
 #[derive(Clone, Copy)]
+struct AdaptiveLiveSurvivorSample {
+    ptr: usize,
+    birth_pressure: u64,
+}
+
+impl AdaptiveLiveSurvivorSample {
+    const fn empty() -> Self {
+        Self {
+            ptr: 0,
+            birth_pressure: 0,
+        }
+    }
+}
+
+/// Bounded live-object samples for one production predictor site.
+///
+/// Cold and sampled-Short sites need a way to learn from objects that remain
+/// resident until process shutdown. The eight slots match the existing Cold
+/// in-flight cap, keep allocator metadata fixed-size, and never change the
+/// predictor key. The birth pressure disambiguates a pointer that was freed
+/// and subsequently reused before a defensive stale-entry scan.
+#[derive(Clone, Copy)]
+struct AdaptiveLiveSurvivorSite {
+    samples: [AdaptiveLiveSurvivorSample; ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE],
+    active_slots: u8,
+}
+
+impl AdaptiveLiveSurvivorSite {
+    const fn empty() -> Self {
+        Self {
+            samples: [AdaptiveLiveSurvivorSample::empty(); ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE],
+            active_slots: 0,
+        }
+    }
+
+    #[inline]
+    fn insert(&mut self, ptr: *mut u8, birth_pressure: u64) -> bool {
+        for slot in 0..ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE {
+            let mask = 1u8 << slot;
+            if self.active_slots & mask == 0 {
+                self.samples[slot] = AdaptiveLiveSurvivorSample {
+                    ptr: ptr as usize,
+                    birth_pressure,
+                };
+                self.active_slots |= mask;
+                return true;
+            }
+        }
+        false
+    }
+
+    #[inline]
+    fn remove(&mut self, ptr: *mut u8, birth_pressure: u64) -> bool {
+        for slot in 0..ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE {
+            let mask = 1u8 << slot;
+            if self.active_slots & mask != 0
+                && self.samples[slot].ptr == ptr as usize
+                && self.samples[slot].birth_pressure == birth_pressure
+            {
+                self.clear(slot);
+                return true;
+            }
+        }
+        false
+    }
+
+    #[inline]
+    fn clear(&mut self, slot: usize) {
+        self.samples[slot] = AdaptiveLiveSurvivorSample::empty();
+        self.active_slots &= !(1u8 << slot);
+    }
+
+    #[inline]
+    fn is_empty(self) -> bool {
+        self.active_slots == 0
+    }
+}
+
+#[derive(Clone, Copy)]
 struct AdaptiveForceTrackAllState {
     enabled: bool,
     maximum_allocations: usize,
@@ -1199,6 +1463,20 @@ pub struct LifetimeAdaptiveSiteSnapshot {
     pub maximum_completed_age_bytes: u64,
     pub tracked_inflight: usize,
     pub inflight_age_lower_bound_bytes: u64,
+    /// Tracked objects classified Long while still live. These observations
+    /// are orthogonal to completed outcomes and receive exactly one predictor
+    /// vote before a later deallocation closes the allocation generation.
+    pub live_survival_observations: usize,
+    pub live_survival_requested_bytes: usize,
+    pub live_survival_payload_bytes: usize,
+    pub minimum_live_survival_age_bytes: u64,
+    pub maximum_live_survival_age_bytes: u64,
+    /// Live-survival observations whose allocation generation has not yet
+    /// completed. `long_outcomes + current_live_survival_inflight` is the
+    /// exact, non-overlapping Long truth currently known for this row.
+    pub current_live_survival_inflight: usize,
+    pub current_live_survival_inflight_requested_bytes: usize,
+    pub current_live_survival_inflight_payload_bytes: usize,
     pub first_allocation_pressure: u64,
     pub last_allocation_pressure: u64,
     /// True when this observation row saw more than one production predictor
@@ -1239,6 +1517,14 @@ impl LifetimeAdaptiveSiteSnapshot {
             maximum_completed_age_bytes: 0,
             tracked_inflight: 0,
             inflight_age_lower_bound_bytes: 0,
+            live_survival_observations: 0,
+            live_survival_requested_bytes: 0,
+            live_survival_payload_bytes: 0,
+            minimum_live_survival_age_bytes: 0,
+            maximum_live_survival_age_bytes: 0,
+            current_live_survival_inflight: 0,
+            current_live_survival_inflight_requested_bytes: 0,
+            current_live_survival_inflight_payload_bytes: 0,
             first_allocation_pressure: 0,
             last_allocation_pressure: 0,
             predictor_key_ambiguous: false,
@@ -1277,6 +1563,14 @@ struct AdaptiveObservationState {
     maximum_completed_age_bytes: u64,
     tracked_inflight: usize,
     inflight_birth_pressure_sum: u64,
+    live_survival_observations: usize,
+    live_survival_requested_bytes: usize,
+    live_survival_payload_bytes: usize,
+    minimum_live_survival_age_bytes: u64,
+    maximum_live_survival_age_bytes: u64,
+    current_live_survival_inflight: usize,
+    current_live_survival_inflight_requested_bytes: usize,
+    current_live_survival_inflight_payload_bytes: usize,
     first_allocation_pressure: u64,
     last_allocation_pressure: u64,
     first_predictor_fingerprint: u64,
@@ -1309,6 +1603,14 @@ impl AdaptiveObservationState {
             maximum_completed_age_bytes: 0,
             tracked_inflight: 0,
             inflight_birth_pressure_sum: 0,
+            live_survival_observations: 0,
+            live_survival_requested_bytes: 0,
+            live_survival_payload_bytes: 0,
+            minimum_live_survival_age_bytes: 0,
+            maximum_live_survival_age_bytes: 0,
+            current_live_survival_inflight: 0,
+            current_live_survival_inflight_requested_bytes: 0,
+            current_live_survival_inflight_payload_bytes: 0,
             first_allocation_pressure: 0,
             last_allocation_pressure: 0,
             first_predictor_fingerprint: 0,
@@ -1384,13 +1686,30 @@ impl AdaptiveObservationState {
         self.latest_static_prior = static_prior;
     }
 
-    fn note_deallocation(&mut self, birth_pressure: u64, age_bytes: u64, outcome: Option<bool>) {
+    fn note_deallocation(
+        &mut self,
+        birth_pressure: u64,
+        age_bytes: u64,
+        outcome: Option<bool>,
+        live_survival_recorded: bool,
+        payload_capacity: usize,
+    ) {
         self.tracked_inflight = self.tracked_inflight.saturating_sub(1);
         self.inflight_birth_pressure_sum = self
             .inflight_birth_pressure_sum
             .saturating_sub(birth_pressure);
         self.total_completed_age_bytes = self.total_completed_age_bytes.saturating_add(age_bytes);
         self.maximum_completed_age_bytes = self.maximum_completed_age_bytes.max(age_bytes);
+        if live_survival_recorded {
+            self.current_live_survival_inflight =
+                self.current_live_survival_inflight.saturating_sub(1);
+            self.current_live_survival_inflight_requested_bytes = self
+                .current_live_survival_inflight_requested_bytes
+                .saturating_sub(self.key.requested_size);
+            self.current_live_survival_inflight_payload_bytes = self
+                .current_live_survival_inflight_payload_bytes
+                .saturating_sub(payload_capacity);
+        }
         match outcome {
             Some(false) => {
                 self.short_outcomes = self.short_outcomes.saturating_add(1);
@@ -1411,6 +1730,30 @@ impl AdaptiveObservationState {
                     .saturating_add(self.key.requested_size);
             }
         }
+    }
+
+    fn note_live_survival(&mut self, age_bytes: u64, payload_capacity: usize) {
+        self.live_survival_observations = self.live_survival_observations.saturating_add(1);
+        self.live_survival_requested_bytes = self
+            .live_survival_requested_bytes
+            .saturating_add(self.key.requested_size);
+        self.live_survival_payload_bytes = self
+            .live_survival_payload_bytes
+            .saturating_add(payload_capacity);
+        if self.minimum_live_survival_age_bytes == 0 {
+            self.minimum_live_survival_age_bytes = age_bytes;
+        } else {
+            self.minimum_live_survival_age_bytes =
+                self.minimum_live_survival_age_bytes.min(age_bytes);
+        }
+        self.maximum_live_survival_age_bytes = self.maximum_live_survival_age_bytes.max(age_bytes);
+        self.current_live_survival_inflight = self.current_live_survival_inflight.saturating_add(1);
+        self.current_live_survival_inflight_requested_bytes = self
+            .current_live_survival_inflight_requested_bytes
+            .saturating_add(self.key.requested_size);
+        self.current_live_survival_inflight_payload_bytes = self
+            .current_live_survival_inflight_payload_bytes
+            .saturating_add(payload_capacity);
     }
 
     fn snapshot(self, current_pressure: u64) -> LifetimeAdaptiveSiteSnapshot {
@@ -1443,6 +1786,16 @@ impl AdaptiveObservationState {
             inflight_age_lower_bound_bytes: current_pressure
                 .saturating_mul(self.tracked_inflight as u64)
                 .saturating_sub(self.inflight_birth_pressure_sum),
+            live_survival_observations: self.live_survival_observations,
+            live_survival_requested_bytes: self.live_survival_requested_bytes,
+            live_survival_payload_bytes: self.live_survival_payload_bytes,
+            minimum_live_survival_age_bytes: self.minimum_live_survival_age_bytes,
+            maximum_live_survival_age_bytes: self.maximum_live_survival_age_bytes,
+            current_live_survival_inflight: self.current_live_survival_inflight,
+            current_live_survival_inflight_requested_bytes: self
+                .current_live_survival_inflight_requested_bytes,
+            current_live_survival_inflight_payload_bytes: self
+                .current_live_survival_inflight_payload_bytes,
             first_allocation_pressure: self.first_allocation_pressure,
             last_allocation_pressure: self.last_allocation_pressure,
             predictor_key_ambiguous: self.predictor_key_ambiguous,
@@ -1475,26 +1828,24 @@ struct AdaptiveAllocationRecord {
     requested_size: usize,
     learned_prediction: AdaptivePrediction,
     static_hint: LifetimePlacementClass,
+    confirmed_long_placement: bool,
 }
 
 impl AdaptiveSlotTrailer {
-    fn new(
-        ptr: *mut u8,
-        birth_pressure: u64,
-        site_fingerprint: u64,
-        site_index: usize,
-        requested_size: usize,
-        learned_prediction: AdaptivePrediction,
-        static_hint: LifetimePlacementClass,
-    ) -> Self {
+    fn new(ptr: *mut u8, record: AdaptiveAllocationRecord) -> Self {
         let mut trailer = Self {
-            birth_pressure,
-            site_fingerprint,
-            site_index: site_index as u32,
-            requested_size: requested_size as u32,
-            prediction: learned_prediction as u8,
-            static_hint: static_hint as u8,
-            flags: ADAPTIVE_TRAILER_ACTIVE,
+            birth_pressure: record.birth_pressure,
+            site_fingerprint: record.site_fingerprint,
+            site_index: record.site_index as u32,
+            requested_size: record.requested_size as u32,
+            prediction: record.learned_prediction as u8,
+            static_hint: record.static_hint as u8,
+            flags: ADAPTIVE_TRAILER_ACTIVE
+                | if record.confirmed_long_placement {
+                    ADAPTIVE_TRAILER_CONFIRMED_LONG
+                } else {
+                    0
+                },
             checksum: 0,
         };
         trailer.checksum = trailer.expected_checksum(ptr);
@@ -1524,12 +1875,30 @@ impl AdaptiveSlotTrailer {
 
     #[inline]
     fn is_valid(self, ptr: *mut u8, payload_capacity: usize) -> bool {
-        self.flags == ADAPTIVE_TRAILER_ACTIVE
+        self.flags & ADAPTIVE_TRAILER_ACTIVE != 0
+            && self.flags & !ADAPTIVE_TRAILER_KNOWN_FLAGS == 0
             && self.requested_size as usize <= payload_capacity
             && (self.site_index as usize) < ADAPTIVE_SITE_SLOTS
             && AdaptivePrediction::from_u8(self.prediction).is_some()
             && lifetime_class_from_u8(self.static_hint).is_some()
             && self.checksum == self.expected_checksum(ptr)
+    }
+
+    #[inline]
+    fn confirmed_long_placement(self) -> bool {
+        self.flags & ADAPTIVE_TRAILER_CONFIRMED_LONG != 0
+    }
+
+    #[inline]
+    fn survival_recorded(self) -> bool {
+        self.flags & ADAPTIVE_TRAILER_SURVIVAL_RECORDED != 0
+    }
+
+    #[inline]
+    fn record_survival(&mut self, ptr: *mut u8) {
+        debug_assert!(!self.survival_recorded());
+        self.flags |= ADAPTIVE_TRAILER_SURVIVAL_RECORDED;
+        self.checksum = self.expected_checksum(ptr);
     }
 }
 
@@ -1566,11 +1935,32 @@ impl ArenaIdentity {
             placement_hint: metadata.placement_hint,
         }
     }
+
+    const fn from_metadata_without_lifetime_hint(metadata: AllocationMetadata) -> Self {
+        Self {
+            type_id: metadata.type_id,
+            module_id: metadata.module_id,
+            flags: metadata.flags,
+            lifetime_hint: 0,
+            placement_hint: metadata.placement_hint,
+        }
+    }
+}
+
+/// Stable allocation-side key for reusing a compiler-directed extent whose
+/// physical THP backing was established by a prior full cohort. `ArenaIdentity`
+/// deliberately excludes callsite for ordinary region packing, while a density
+/// certificate must remain tied to the exact allocation site that earned it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PromotedReuseIdentity {
+    arena: ArenaIdentity,
+    callsite: u64,
 }
 
 #[derive(Clone, Copy)]
 struct IdentityRegion {
     identity: ArenaIdentity,
+    callsite: u64,
     /// Allocation epoch when every live slot is known to share one epoch.
     birth_epoch: usize,
     /// A non-cohort policy reused this region across allocation epochs while
@@ -1586,6 +1976,7 @@ impl IdentityRegion {
     const fn empty() -> Self {
         Self {
             identity: ArenaIdentity::unknown(),
+            callsite: 0,
             birth_epoch: 0,
             epoch_mixed: false,
             next_unused: 0,
@@ -1608,6 +1999,9 @@ struct Extent {
     payload_capacity: usize,
     region_capacity: usize,
     live: usize,
+    /// Adaptive slots placed after runtime learning confirmed Long. Static
+    /// priors share this candidate extent but never contribute to promotion.
+    adaptive_confirmed_long_live: usize,
     bucket: usize,
     regions: [IdentityRegion; IDENTITY_REGIONS_PER_EXTENT],
     lifetime_class: LifetimePlacementClass,
@@ -1617,10 +2011,21 @@ struct Extent {
     /// the observed backing state.
     requested_backing: Option<RequestedBacking>,
     backing: ActualBacking,
+    /// Homogeneous compiler allocation identity that filled this extent before
+    /// its successful synchronous collapse. While present, the mapping is
+    /// sealed against other allocation sites, including during collapse.
+    promoted_reuse_identity: Option<PromotedReuseIdentity>,
+    /// Whether the current activation reached full density. Reactivating an
+    /// empty promoted extent clears this bit; a sparse cycle is unmapped when it
+    /// drains instead of retaining an old density certificate indefinitely.
+    promoted_reuse_cycle_full: bool,
     adaptive_trailer: bool,
     available_prev: usize,
     available_next: usize,
     on_available_list: bool,
+    retained_empty_prev: usize,
+    retained_empty_next: usize,
+    on_retained_empty_list: bool,
     next_free_descriptor: usize,
 }
 
@@ -1632,16 +2037,22 @@ impl Extent {
             payload_capacity: 0,
             region_capacity: 0,
             live: 0,
+            adaptive_confirmed_long_live: 0,
             bucket: 0,
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: LifetimePlacementClass::Unknown,
             cohort_epoch: 0,
             requested_backing: None,
             backing: ActualBacking::Unmapped,
+            promoted_reuse_identity: None,
+            promoted_reuse_cycle_full: false,
             adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
+            retained_empty_prev: NONE,
+            retained_empty_next: NONE,
+            on_retained_empty_list: false,
             next_free_descriptor: NONE,
         }
     }
@@ -1655,15 +2066,33 @@ impl Extent {
     fn matching_region_with_space(
         &self,
         identity: ArenaIdentity,
+        callsite: u64,
         birth_epoch: usize,
         require_epoch_match: bool,
+        require_callsite_match: bool,
     ) -> Option<usize> {
         self.regions.iter().position(|region| {
             region.assigned
                 && region.identity == identity
+                && (!require_callsite_match || region.callsite == callsite)
                 && (!require_epoch_match || region.birth_epoch == birth_epoch)
                 && region.has_available_slot(self.region_capacity)
         })
+    }
+
+    #[inline]
+    fn exact_geometry_matches(&self, geometry: SlotGeometry) -> bool {
+        self.slot_size == geometry.slot_size
+            && self.payload_capacity == geometry.payload_capacity
+            && self.region_capacity == geometry.region_capacity
+            && self.bucket == geometry.bucket
+            && self.adaptive_trailer == geometry.adaptive_trailer
+    }
+
+    #[inline]
+    fn full_slot_count(&self) -> usize {
+        self.region_capacity
+            .saturating_mul(IDENTITY_REGIONS_PER_EXTENT)
     }
 
     #[inline]
@@ -1678,6 +2107,102 @@ impl Extent {
                 .regions
                 .iter()
                 .any(|region| region.assigned && region.has_available_slot(self.region_capacity))
+    }
+}
+
+#[inline]
+fn empty_extent_retention_eligible(
+    policy: LifetimeHugepagePolicy,
+    backend: LifetimePageBackend,
+    extent: &Extent,
+) -> bool {
+    if extent.live != 0
+        || extent.adaptive_confirmed_long_live != 0
+        || extent.cohort_epoch != 0
+        || extent.lifetime_class == LifetimePlacementClass::Unknown
+        || extent.regions.iter().any(|region| region.assigned)
+    {
+        return false;
+    }
+    match policy {
+        LifetimeHugepagePolicy::SegregatedOrdinary
+        | LifetimeHugepagePolicy::CompilerInferredOrdinary
+        | LifetimeHugepagePolicy::CompilerDirectedOrdinary => {
+            backend == LifetimePageBackend::TransparentHugepage
+                && !extent.adaptive_trailer
+                && extent.lifetime_class == LifetimePlacementClass::LongLived
+                && extent.requested_backing == Some(RequestedBacking::Ordinary)
+                && extent.backing == ActualBacking::Ordinary
+        }
+        LifetimeHugepagePolicy::CompilerInferredHugepage => {
+            !extent.adaptive_trailer
+                && extent.lifetime_class == LifetimePlacementClass::LongLived
+                && extent.requested_backing == Some(RequestedBacking::EpochCandidate)
+                && extent.backing == ActualBacking::ThpCandidateNoHugepage
+        }
+        LifetimeHugepagePolicy::CompilerDirectedHugepage => {
+            !extent.adaptive_trailer
+                && extent.lifetime_class == LifetimePlacementClass::LongLived
+                && extent.requested_backing == Some(RequestedBacking::EpochCandidate)
+                && (extent.backing == ActualBacking::ThpCandidateNoHugepage
+                    || (extent.backing == ActualBacking::ThpCollapseSucceededPointInTime
+                        && extent.promoted_reuse_identity.is_some()
+                        && extent.promoted_reuse_cycle_full))
+        }
+        LifetimeHugepagePolicy::LongLivedHugepage => {
+            !extent.adaptive_trailer
+                && extent.lifetime_class == LifetimePlacementClass::LongLived
+                && extent.requested_backing == Some(RequestedBacking::LargePage)
+                && matches!(
+                    extent.backing,
+                    ActualBacking::ThpAdvisedUnverified
+                        | ActualBacking::ThpCollapseSucceededPointInTime
+                )
+        }
+        LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary => {
+            backend == LifetimePageBackend::TransparentHugepage
+                && extent.adaptive_trailer
+                && extent.requested_backing == Some(RequestedBacking::Ordinary)
+                && extent.backing == ActualBacking::Ordinary
+        }
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        | LifetimeHugepagePolicy::AdaptiveRuntimeProfileHugepage => {
+            backend == LifetimePageBackend::TransparentHugepage
+                && extent.adaptive_trailer
+                && ((extent.requested_backing == Some(RequestedBacking::Ordinary)
+                    && extent.backing == ActualBacking::Ordinary)
+                    || (extent.requested_backing == Some(RequestedBacking::EpochCandidate)
+                        && extent.backing == ActualBacking::ThpCandidateNoHugepage))
+        }
+        _ => false,
+    }
+}
+
+#[inline]
+fn adaptive_thp_promotion_eligibility(extent: &Extent) -> ThpPromotionEligibility {
+    if !extent.in_use()
+        || extent.lifetime_class != LifetimePlacementClass::LongLived
+        || !extent.adaptive_trailer
+        || !matches!(
+            extent.requested_backing,
+            Some(RequestedBacking::EpochCandidate)
+        )
+        || !matches!(
+            extent.backing,
+            ActualBacking::ThpCandidateNoHugepage
+                | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+        )
+    {
+        return ThpPromotionEligibility::Ineligible;
+    }
+    if extent
+        .adaptive_confirmed_long_live
+        .saturating_mul(extent.slot_size)
+        < ADAPTIVE_THP_PROMOTION_MIN_CONFIRMED_LIVE_BYTES
+    {
+        ThpPromotionEligibility::LowOccupancy
+    } else {
+        ThpPromotionEligibility::Eligible
     }
 }
 
@@ -1710,6 +2235,14 @@ struct LifetimeArenaState {
     available_heads: [usize; BUCKET_COUNT],
     next_unused_descriptor: usize,
     free_descriptor_head: usize,
+    retained_empty_head: usize,
+    retained_empty_tail: usize,
+    current_retained_empty_extents: usize,
+    peak_retained_empty_extents: usize,
+    retained_empty_extent_insertions: usize,
+    retained_empty_extent_reuse_hits: usize,
+    retained_empty_extent_evictions: usize,
+    retained_empty_extent_trims: usize,
     current_epoch: usize,
     phase_advances: usize,
     epoch_cohort_extent_mappings: usize,
@@ -1768,6 +2301,9 @@ struct LifetimeArenaState {
     current_identity_regions: usize,
     peak_identity_regions: usize,
     adaptive_sites: [AdaptiveSiteState; ADAPTIVE_SITE_SLOTS],
+    adaptive_live_survivors: [AdaptiveLiveSurvivorSite; ADAPTIVE_SITE_SLOTS],
+    adaptive_live_survivor_active_sites: [u64; ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS],
+    adaptive_live_survivor_next_due_pressure: u64,
     adaptive_observations: [AdaptiveObservationState; ADAPTIVE_OBSERVATION_SLOTS],
     adaptive_pressure_bytes: u64,
     adaptive_epoch_advances: usize,
@@ -1787,6 +2323,13 @@ struct LifetimeArenaState {
     adaptive_force_track_all: AdaptiveForceTrackAllState,
     adaptive_live_trailers: usize,
     adaptive_trailer_corruptions: usize,
+    adaptive_live_survival_registrations: usize,
+    adaptive_live_survival_registration_bypasses: usize,
+    adaptive_live_survival_scans: usize,
+    adaptive_live_survival_slots_examined: usize,
+    adaptive_live_survival_observations: usize,
+    adaptive_live_survival_promotions: usize,
+    adaptive_live_survival_stale_abstentions: usize,
     adaptive_short_observations: usize,
     adaptive_long_observations: usize,
     adaptive_censored_observations: usize,
@@ -1798,6 +2341,18 @@ struct LifetimeArenaState {
     adaptive_static_hint_confusion: ConfusionCounters,
     adaptive_static_hint_abstained_objects: usize,
     adaptive_static_hint_abstained_bytes: usize,
+    compiler_directed_arena_lock_acquisitions: usize,
+    compiler_directed_short_routes: usize,
+    compiler_directed_short_requested_bytes: usize,
+    compiler_directed_short_slot_bytes: usize,
+    compiler_directed_long_routes: usize,
+    compiler_directed_long_requested_bytes: usize,
+    compiler_directed_long_slot_bytes: usize,
+    compiler_directed_deallocations: usize,
+    compiler_directed_routes_without_trailer: usize,
+    compiler_directed_density_promotion_attempts: usize,
+    compiler_directed_density_promotion_successes: usize,
+    compiler_directed_density_promotion_errors: usize,
 }
 
 impl LifetimeArenaState {
@@ -1808,6 +2363,14 @@ impl LifetimeArenaState {
             available_heads: [NONE; BUCKET_COUNT],
             next_unused_descriptor: 0,
             free_descriptor_head: NONE,
+            retained_empty_head: NONE,
+            retained_empty_tail: NONE,
+            current_retained_empty_extents: 0,
+            peak_retained_empty_extents: 0,
+            retained_empty_extent_insertions: 0,
+            retained_empty_extent_reuse_hits: 0,
+            retained_empty_extent_evictions: 0,
+            retained_empty_extent_trims: 0,
             current_epoch: 1,
             phase_advances: 0,
             epoch_cohort_extent_mappings: 0,
@@ -1866,6 +2429,9 @@ impl LifetimeArenaState {
             current_identity_regions: 0,
             peak_identity_regions: 0,
             adaptive_sites: [AdaptiveSiteState::empty(); ADAPTIVE_SITE_SLOTS],
+            adaptive_live_survivors: [AdaptiveLiveSurvivorSite::empty(); ADAPTIVE_SITE_SLOTS],
+            adaptive_live_survivor_active_sites: [0; ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS],
+            adaptive_live_survivor_next_due_pressure: u64::MAX,
             adaptive_observations: [AdaptiveObservationState::empty(); ADAPTIVE_OBSERVATION_SLOTS],
             adaptive_pressure_bytes: 0,
             adaptive_epoch_advances: 0,
@@ -1885,6 +2451,13 @@ impl LifetimeArenaState {
             adaptive_force_track_all: AdaptiveForceTrackAllState::disabled(),
             adaptive_live_trailers: 0,
             adaptive_trailer_corruptions: 0,
+            adaptive_live_survival_registrations: 0,
+            adaptive_live_survival_registration_bypasses: 0,
+            adaptive_live_survival_scans: 0,
+            adaptive_live_survival_slots_examined: 0,
+            adaptive_live_survival_observations: 0,
+            adaptive_live_survival_promotions: 0,
+            adaptive_live_survival_stale_abstentions: 0,
             adaptive_short_observations: 0,
             adaptive_long_observations: 0,
             adaptive_censored_observations: 0,
@@ -1896,11 +2469,32 @@ impl LifetimeArenaState {
             adaptive_static_hint_confusion: ConfusionCounters::new(),
             adaptive_static_hint_abstained_objects: 0,
             adaptive_static_hint_abstained_bytes: 0,
+            compiler_directed_arena_lock_acquisitions: 0,
+            compiler_directed_short_routes: 0,
+            compiler_directed_short_requested_bytes: 0,
+            compiler_directed_short_slot_bytes: 0,
+            compiler_directed_long_routes: 0,
+            compiler_directed_long_requested_bytes: 0,
+            compiler_directed_long_slot_bytes: 0,
+            compiler_directed_deallocations: 0,
+            compiler_directed_routes_without_trailer: 0,
+            compiler_directed_density_promotion_attempts: 0,
+            compiler_directed_density_promotion_successes: 0,
+            compiler_directed_density_promotion_errors: 0,
         }
     }
 
     #[inline]
     fn reset_counters(&mut self, preserve_adaptive_model: bool) {
+        debug_assert_eq!(self.current_extents, 0);
+        debug_assert_eq!(self.current_retained_empty_extents, 0);
+        self.retained_empty_head = NONE;
+        self.retained_empty_tail = NONE;
+        self.peak_retained_empty_extents = 0;
+        self.retained_empty_extent_insertions = 0;
+        self.retained_empty_extent_reuse_hits = 0;
+        self.retained_empty_extent_evictions = 0;
+        self.retained_empty_extent_trims = 0;
         self.current_epoch = 1;
         self.phase_advances = 0;
         self.epoch_cohort_extent_mappings = 0;
@@ -1954,6 +2548,9 @@ impl LifetimeArenaState {
                 site.tracked_inflight = 0;
             }
         }
+        self.adaptive_live_survivors = [AdaptiveLiveSurvivorSite::empty(); ADAPTIVE_SITE_SLOTS];
+        self.adaptive_live_survivor_active_sites = [0; ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS];
+        self.adaptive_live_survivor_next_due_pressure = u64::MAX;
         self.adaptive_pressure_bytes = 0;
         self.adaptive_epoch_advances = 0;
         self.adaptive_eligible_allocations = 0;
@@ -1972,6 +2569,13 @@ impl LifetimeArenaState {
         self.adaptive_force_track_all.reset_counters();
         self.adaptive_live_trailers = 0;
         self.adaptive_trailer_corruptions = 0;
+        self.adaptive_live_survival_registrations = 0;
+        self.adaptive_live_survival_registration_bypasses = 0;
+        self.adaptive_live_survival_scans = 0;
+        self.adaptive_live_survival_slots_examined = 0;
+        self.adaptive_live_survival_observations = 0;
+        self.adaptive_live_survival_promotions = 0;
+        self.adaptive_live_survival_stale_abstentions = 0;
         self.adaptive_short_observations = 0;
         self.adaptive_long_observations = 0;
         self.adaptive_censored_observations = 0;
@@ -1983,6 +2587,18 @@ impl LifetimeArenaState {
         self.adaptive_static_hint_confusion = ConfusionCounters::new();
         self.adaptive_static_hint_abstained_objects = 0;
         self.adaptive_static_hint_abstained_bytes = 0;
+        self.compiler_directed_arena_lock_acquisitions = 0;
+        self.compiler_directed_short_routes = 0;
+        self.compiler_directed_short_requested_bytes = 0;
+        self.compiler_directed_short_slot_bytes = 0;
+        self.compiler_directed_long_routes = 0;
+        self.compiler_directed_long_requested_bytes = 0;
+        self.compiler_directed_long_slot_bytes = 0;
+        self.compiler_directed_deallocations = 0;
+        self.compiler_directed_routes_without_trailer = 0;
+        self.compiler_directed_density_promotion_attempts = 0;
+        self.compiler_directed_density_promotion_successes = 0;
+        self.compiler_directed_density_promotion_errors = 0;
         self.peak_extents = self.current_extents;
         self.peak_ordinary_extents = self.current_ordinary_extents;
         self.peak_hugetlb_extents = self.current_hugetlb_extents;
@@ -2167,6 +2783,14 @@ impl LifetimeArenaState {
                 .raw_reallocation_pressure_requested_bytes,
             adaptive_live_trailers: self.adaptive_live_trailers,
             adaptive_trailer_corruptions: self.adaptive_trailer_corruptions,
+            adaptive_live_survival_registrations: self.adaptive_live_survival_registrations,
+            adaptive_live_survival_registration_bypasses: self
+                .adaptive_live_survival_registration_bypasses,
+            adaptive_live_survival_scans: self.adaptive_live_survival_scans,
+            adaptive_live_survival_slots_examined: self.adaptive_live_survival_slots_examined,
+            adaptive_live_survival_observations: self.adaptive_live_survival_observations,
+            adaptive_live_survival_promotions: self.adaptive_live_survival_promotions,
+            adaptive_live_survival_stale_abstentions: self.adaptive_live_survival_stale_abstentions,
             adaptive_short_observations: self.adaptive_short_observations,
             adaptive_long_observations: self.adaptive_long_observations,
             adaptive_censored_observations: self.adaptive_censored_observations,
@@ -2248,6 +2872,40 @@ impl LifetimeArenaState {
                 COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.load(Ordering::Acquire),
             compiler_inferred_density_promotion_errors: COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS
                 .load(Ordering::Acquire),
+            compiler_directed_telemetry: lifetime_hugepage_compiler_directed_telemetry_enabled(),
+            compiler_directed_unknown_bypasses: COMPILER_DIRECTED_UNKNOWN_BYPASSES
+                .load(Ordering::Acquire),
+            compiler_directed_bypass_requested_bytes: COMPILER_DIRECTED_BYPASS_REQUESTED_BYTES
+                .load(Ordering::Acquire),
+            compiler_directed_arena_lock_acquisitions: self
+                .compiler_directed_arena_lock_acquisitions,
+            compiler_directed_short_routes: self.compiler_directed_short_routes,
+            compiler_directed_short_requested_bytes: self.compiler_directed_short_requested_bytes,
+            compiler_directed_short_slot_bytes: self.compiler_directed_short_slot_bytes,
+            compiler_directed_long_routes: self.compiler_directed_long_routes,
+            compiler_directed_long_requested_bytes: self.compiler_directed_long_requested_bytes,
+            compiler_directed_long_slot_bytes: self.compiler_directed_long_slot_bytes,
+            compiler_directed_deallocations: self.compiler_directed_deallocations,
+            compiler_directed_routes_without_trailer: self.compiler_directed_routes_without_trailer,
+            compiler_directed_density_promotion_attempts: self
+                .compiler_directed_density_promotion_attempts,
+            compiler_directed_density_promotion_successes: self
+                .compiler_directed_density_promotion_successes,
+            compiler_directed_density_promotion_errors: self
+                .compiler_directed_density_promotion_errors,
+            empty_extent_retention_capacity: LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY,
+            current_retained_empty_extents: self.current_retained_empty_extents,
+            peak_retained_empty_extents: self.peak_retained_empty_extents,
+            current_retained_empty_bytes: self
+                .current_retained_empty_extents
+                .saturating_mul(LIFETIME_HUGEPAGE_EXTENT_BYTES),
+            peak_retained_empty_bytes: self
+                .peak_retained_empty_extents
+                .saturating_mul(LIFETIME_HUGEPAGE_EXTENT_BYTES),
+            retained_empty_extent_insertions: self.retained_empty_extent_insertions,
+            retained_empty_extent_reuse_hits: self.retained_empty_extent_reuse_hits,
+            retained_empty_extent_evictions: self.retained_empty_extent_evictions,
+            retained_empty_extent_trims: self.retained_empty_extent_trims,
         }
     }
 
@@ -2346,10 +3004,34 @@ impl LifetimeArenaState {
     fn adaptive_observation_note_deallocation(
         &mut self,
         site: AdaptiveSiteKey,
-        requested_size: usize,
-        birth_pressure: u64,
+        trailer: AdaptiveSlotTrailer,
         age_bytes: u64,
         outcome: Option<bool>,
+        payload_capacity: usize,
+    ) {
+        if !self.adaptive_observation_recording {
+            return;
+        }
+        let key = AdaptiveObservationKey::from_site(site, trailer.requested_size as usize);
+        let Some(idx) = self.adaptive_observation_find(key) else {
+            return;
+        };
+        self.adaptive_observations[idx].note_deallocation(
+            trailer.birth_pressure,
+            age_bytes,
+            outcome,
+            trailer.survival_recorded(),
+            payload_capacity,
+        );
+    }
+
+    #[inline]
+    fn adaptive_observation_note_live_survival(
+        &mut self,
+        site: AdaptiveSiteKey,
+        requested_size: usize,
+        age_bytes: u64,
+        payload_capacity: usize,
     ) {
         if !self.adaptive_observation_recording {
             return;
@@ -2358,7 +3040,24 @@ impl LifetimeArenaState {
         let Some(idx) = self.adaptive_observation_find(key) else {
             return;
         };
-        self.adaptive_observations[idx].note_deallocation(birth_pressure, age_bytes, outcome);
+        self.adaptive_observations[idx].note_live_survival(age_bytes, payload_capacity);
+    }
+
+    #[inline]
+    fn adaptive_observation_note_latest_prediction(
+        &mut self,
+        site: AdaptiveSiteKey,
+        requested_size: usize,
+        prediction: AdaptivePrediction,
+    ) {
+        if !self.adaptive_observation_recording {
+            return;
+        }
+        let key = AdaptiveObservationKey::from_site(site, requested_size);
+        let Some(idx) = self.adaptive_observation_find(key) else {
+            return;
+        };
+        self.adaptive_observations[idx].latest_prediction = prediction;
     }
 
     fn adaptive_observation_snapshot(&self, out: &mut [LifetimeAdaptiveSiteSnapshot]) -> usize {
@@ -2377,6 +3076,301 @@ impl LifetimeArenaState {
     }
 
     #[inline]
+    fn adaptive_live_survivor_register(
+        &mut self,
+        site_idx: usize,
+        ptr: *mut u8,
+        birth_pressure: u64,
+        learned_prediction: AdaptivePrediction,
+    ) {
+        // Learned-Long sites already route future objects as Long. Continuing
+        // to sample every Long allocation would exceed the bounded Cold-site
+        // purpose of this table and adds no early-learning value.
+        if learned_prediction == AdaptivePrediction::Long {
+            return;
+        }
+        if !self.adaptive_live_survivors[site_idx].insert(ptr, birth_pressure) {
+            self.adaptive_live_survival_registration_bypasses = self
+                .adaptive_live_survival_registration_bypasses
+                .saturating_add(1);
+            return;
+        }
+        let word = site_idx / u64::BITS as usize;
+        let bit = site_idx % u64::BITS as usize;
+        self.adaptive_live_survivor_active_sites[word] |= 1u64 << bit;
+        self.adaptive_live_survivor_next_due_pressure = self
+            .adaptive_live_survivor_next_due_pressure
+            .min(birth_pressure.saturating_add(ADAPTIVE_LONG_AGE_BYTES));
+        self.adaptive_live_survival_registrations =
+            self.adaptive_live_survival_registrations.saturating_add(1);
+    }
+
+    #[inline]
+    fn adaptive_live_survivor_unregister(
+        &mut self,
+        site_idx: usize,
+        ptr: *mut u8,
+        birth_pressure: u64,
+    ) -> bool {
+        if !self.adaptive_live_survivors[site_idx].remove(ptr, birth_pressure) {
+            return false;
+        }
+        if self.adaptive_live_survivors[site_idx].is_empty() {
+            let word = site_idx / u64::BITS as usize;
+            let bit = site_idx % u64::BITS as usize;
+            self.adaptive_live_survivor_active_sites[word] &= !(1u64 << bit);
+        }
+        true
+    }
+
+    /// Corrupt trailers cannot be trusted for their site index or birth
+    /// pressure. Deallocation uses this bounded slow path before releasing the
+    /// slot so no stale sample can later reinterpret reused storage as its old
+    /// allocation generation.
+    fn adaptive_live_survivor_unregister_ptr(&mut self, ptr: *mut u8) -> bool {
+        for word_idx in 0..ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS {
+            let mut active_sites = self.adaptive_live_survivor_active_sites[word_idx];
+            while active_sites != 0 {
+                let bit = active_sites.trailing_zeros() as usize;
+                active_sites &= active_sites - 1;
+                let site_idx = word_idx * u64::BITS as usize + bit;
+                for slot in 0..ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE {
+                    let mask = 1u8 << slot;
+                    if self.adaptive_live_survivors[site_idx].active_slots & mask != 0
+                        && self.adaptive_live_survivors[site_idx].samples[slot].ptr == ptr as usize
+                    {
+                        self.adaptive_live_survivors[site_idx].clear(slot);
+                        if self.adaptive_live_survivors[site_idx].is_empty() {
+                            self.adaptive_live_survivor_active_sites[word_idx] &= !(1u64 << bit);
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    unsafe fn adaptive_live_survivor_trailer(
+        &self,
+        site_idx: usize,
+        sample: AdaptiveLiveSurvivorSample,
+    ) -> Option<(usize, usize, ActualBacking, AdaptiveSlotTrailer)> {
+        let ptr = sample.ptr as *mut u8;
+        let base = sample.ptr & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        let extent_idx = self.lookup_extent(base)?;
+        let extent = &self.extents[extent_idx];
+        if !extent.in_use() || !extent.adaptive_trailer || extent.live == 0 {
+            return None;
+        }
+        let offset = sample.ptr.checked_sub(extent.base)?;
+        if offset >= LIFETIME_HUGEPAGE_EXTENT_BYTES || extent.slot_size == 0 {
+            return None;
+        }
+        let region_idx = offset / LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+        let region_offset = offset % LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+        let region = extent.regions.get(region_idx)?;
+        if !region.assigned
+            || region.live == 0
+            || region_offset % extent.slot_size != 0
+            || region_offset / extent.slot_size >= region.next_unused
+        {
+            return None;
+        }
+        let trailer = ptr
+            .add(extent.payload_capacity)
+            .cast::<AdaptiveSlotTrailer>()
+            .read();
+        if !trailer.is_valid(ptr, extent.payload_capacity)
+            || trailer.site_index as usize != site_idx
+            || trailer.site_fingerprint != self.adaptive_sites[site_idx].fingerprint
+            || trailer.birth_pressure != sample.birth_pressure
+        {
+            return None;
+        }
+        Some((
+            extent.payload_capacity,
+            extent.slot_size,
+            extent.backing,
+            trailer,
+        ))
+    }
+
+    fn adaptive_record_decisive_truth(
+        &mut self,
+        payload_capacity: usize,
+        slot_size: usize,
+        backing: ActualBacking,
+        trailer: AdaptiveSlotTrailer,
+        actual_long: bool,
+    ) {
+        self.adaptive_decisive_observation_bytes = self
+            .adaptive_decisive_observation_bytes
+            .saturating_add(payload_capacity);
+        self.runtime_validated_objects = self.runtime_validated_objects.saturating_add(1);
+        self.runtime_validated_bytes = self.runtime_validated_bytes.saturating_add(slot_size);
+        let prediction = AdaptivePrediction::from_u8(trailer.prediction)
+            .expect("validated adaptive trailer has an invalid prediction");
+        let predicted_long = prediction == AdaptivePrediction::Long;
+        // The generic matrix treats learned Cold as a negative abstention. The
+        // adaptive matrix excludes Cold, while static-prior and physical-
+        // placement effects retain their separate matrices.
+        self.predictor_confusion
+            .record(predicted_long, actual_long, slot_size);
+        if prediction != AdaptivePrediction::Cold {
+            self.adaptive_predictor_confusion
+                .record(predicted_long, actual_long, payload_capacity);
+        }
+        match lifetime_class_from_u8(trailer.static_hint)
+            .expect("validated adaptive trailer has an invalid static hint")
+        {
+            LifetimePlacementClass::Unknown => {
+                self.adaptive_static_hint_abstained_objects = self
+                    .adaptive_static_hint_abstained_objects
+                    .saturating_add(1);
+                self.adaptive_static_hint_abstained_bytes = self
+                    .adaptive_static_hint_abstained_bytes
+                    .saturating_add(payload_capacity);
+            }
+            LifetimePlacementClass::Ephemeral => {
+                self.adaptive_static_hint_confusion
+                    .record(false, actual_long, payload_capacity)
+            }
+            LifetimePlacementClass::LongLived => {
+                self.adaptive_static_hint_confusion
+                    .record(true, actual_long, payload_capacity)
+            }
+        }
+        self.placement_confusion
+            .record(backing.is_large_page_confirmed(), actual_long, slot_size);
+    }
+
+    fn adaptive_observe_site(
+        &mut self,
+        site_idx: usize,
+        requested_size: usize,
+        actual_long: Option<bool>,
+        live_survival: bool,
+    ) {
+        let prior = self.adaptive_sites[site_idx].static_prior;
+        let transition = self.adaptive_sites[site_idx].observe(actual_long);
+        match transition {
+            AdaptiveTransition::None => {}
+            AdaptiveTransition::PromotedShort => {
+                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
+                if prior == LifetimePlacementClass::LongLived {
+                    self.adaptive_prior_corrections =
+                        self.adaptive_prior_corrections.saturating_add(1);
+                }
+            }
+            AdaptiveTransition::PromotedLong => {
+                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
+                if live_survival {
+                    self.adaptive_live_survival_promotions =
+                        self.adaptive_live_survival_promotions.saturating_add(1);
+                }
+                if prior == LifetimePlacementClass::Ephemeral {
+                    self.adaptive_prior_corrections =
+                        self.adaptive_prior_corrections.saturating_add(1);
+                }
+            }
+            AdaptiveTransition::Demoted => {
+                self.adaptive_demotions = self.adaptive_demotions.saturating_add(1)
+            }
+        }
+        let site = self.adaptive_sites[site_idx].key;
+        let prediction = self.adaptive_sites[site_idx].prediction;
+        self.adaptive_observation_note_latest_prediction(site, requested_size, prediction);
+    }
+
+    unsafe fn adaptive_scan_due_live_survivors(&mut self) {
+        if self.adaptive_pressure_bytes < self.adaptive_live_survivor_next_due_pressure {
+            return;
+        }
+        self.adaptive_live_survival_scans = self.adaptive_live_survival_scans.saturating_add(1);
+        let mut next_due = u64::MAX;
+        for word_idx in 0..ADAPTIVE_LIVE_SURVIVOR_ACTIVE_WORDS {
+            let mut active_sites = self.adaptive_live_survivor_active_sites[word_idx];
+            while active_sites != 0 {
+                let bit = active_sites.trailing_zeros() as usize;
+                active_sites &= active_sites - 1;
+                let site_idx = word_idx * u64::BITS as usize + bit;
+                for slot in 0..ADAPTIVE_LIVE_SURVIVOR_SLOTS_PER_SITE {
+                    let mask = 1u8 << slot;
+                    if self.adaptive_live_survivors[site_idx].active_slots & mask == 0 {
+                        continue;
+                    }
+                    self.adaptive_live_survival_slots_examined =
+                        self.adaptive_live_survival_slots_examined.saturating_add(1);
+                    let sample = self.adaptive_live_survivors[site_idx].samples[slot];
+                    let due = sample
+                        .birth_pressure
+                        .saturating_add(ADAPTIVE_LONG_AGE_BYTES);
+                    if self.adaptive_pressure_bytes < due {
+                        next_due = next_due.min(due);
+                        continue;
+                    }
+                    let Some((payload_capacity, slot_size, backing, mut trailer)) =
+                        self.adaptive_live_survivor_trailer(site_idx, sample)
+                    else {
+                        self.adaptive_live_survivors[site_idx].clear(slot);
+                        self.adaptive_live_survival_stale_abstentions = self
+                            .adaptive_live_survival_stale_abstentions
+                            .saturating_add(1);
+                        continue;
+                    };
+                    if trailer.survival_recorded() {
+                        self.adaptive_live_survivors[site_idx].clear(slot);
+                        self.adaptive_live_survival_stale_abstentions = self
+                            .adaptive_live_survival_stale_abstentions
+                            .saturating_add(1);
+                        continue;
+                    }
+                    let ptr = sample.ptr as *mut u8;
+                    let age_bytes = self
+                        .adaptive_pressure_bytes
+                        .saturating_sub(sample.birth_pressure);
+                    debug_assert!(age_bytes >= ADAPTIVE_LONG_AGE_BYTES);
+                    trailer.record_survival(ptr);
+                    ptr.add(payload_capacity)
+                        .cast::<AdaptiveSlotTrailer>()
+                        .write(trailer);
+                    self.adaptive_live_survivors[site_idx].clear(slot);
+
+                    let site = self.adaptive_sites[site_idx].key;
+                    self.adaptive_observation_note_live_survival(
+                        site,
+                        trailer.requested_size as usize,
+                        age_bytes,
+                        payload_capacity,
+                    );
+                    self.adaptive_live_survival_observations =
+                        self.adaptive_live_survival_observations.saturating_add(1);
+                    self.adaptive_long_observations =
+                        self.adaptive_long_observations.saturating_add(1);
+                    self.adaptive_record_decisive_truth(
+                        payload_capacity,
+                        slot_size,
+                        backing,
+                        trailer,
+                        true,
+                    );
+                    self.adaptive_observe_site(
+                        site_idx,
+                        trailer.requested_size as usize,
+                        Some(true),
+                        true,
+                    );
+                }
+                if self.adaptive_live_survivors[site_idx].is_empty() {
+                    self.adaptive_live_survivor_active_sites[word_idx] &= !(1u64 << bit);
+                }
+            }
+        }
+        self.adaptive_live_survivor_next_due_pressure = next_due;
+    }
+
+    #[inline]
     fn adaptive_note_pressure(&mut self, payload_capacity: usize) -> u64 {
         let old_epoch = self.adaptive_pressure_bytes / ADAPTIVE_EPOCH_BYTES;
         self.adaptive_pressure_bytes = self
@@ -2386,6 +3380,7 @@ impl LifetimeArenaState {
         self.adaptive_epoch_advances = self
             .adaptive_epoch_advances
             .saturating_add(new_epoch.saturating_sub(old_epoch) as usize);
+        unsafe { self.adaptive_scan_due_live_survivors() };
         self.adaptive_pressure_bytes
     }
 
@@ -2470,18 +3465,31 @@ impl LifetimeArenaState {
         slot_size: usize,
         backing: ActualBacking,
         trailer: AdaptiveSlotTrailer,
-    ) {
+    ) -> Option<bool> {
         self.adaptive_live_trailers = self.adaptive_live_trailers.saturating_sub(1);
+        let candidate_site_idx = trailer.site_index as usize;
+        let live_sample_removed = candidate_site_idx < ADAPTIVE_SITE_SLOTS
+            && self.adaptive_live_survivor_unregister(
+                candidate_site_idx,
+                ptr,
+                trailer.birth_pressure,
+            );
         if !trailer.is_valid(ptr, payload_capacity) {
+            if !live_sample_removed {
+                let _ = self.adaptive_live_survivor_unregister_ptr(ptr);
+            }
             self.adaptive_trailer_corruptions = self.adaptive_trailer_corruptions.saturating_add(1);
-            return;
+            return None;
         }
         let site_idx = trailer.site_index as usize;
         if self.adaptive_sites[site_idx].is_empty()
             || self.adaptive_sites[site_idx].fingerprint != trailer.site_fingerprint
         {
+            if !live_sample_removed {
+                let _ = self.adaptive_live_survivor_unregister_ptr(ptr);
+            }
             self.adaptive_trailer_corruptions = self.adaptive_trailer_corruptions.saturating_add(1);
-            return;
+            return None;
         }
         let site = self.adaptive_sites[site_idx].key;
         self.adaptive_sites[site_idx].note_tracked_deallocation();
@@ -2490,97 +3498,47 @@ impl LifetimeArenaState {
             .adaptive_pressure_bytes
             .saturating_sub(trailer.birth_pressure);
         let actual_long = adaptive_lifetime_outcome(age_bytes);
+        let survival_recorded = trailer.survival_recorded();
+        debug_assert!(!survival_recorded || actual_long == Some(true));
         self.adaptive_observation_note_deallocation(
             site,
-            trailer.requested_size as usize,
-            trailer.birth_pressure,
+            trailer,
             age_bytes,
             actual_long,
+            payload_capacity,
         );
-        match actual_long {
-            Some(false) => {
-                self.adaptive_short_observations =
-                    self.adaptive_short_observations.saturating_add(1)
+        if !survival_recorded {
+            match actual_long {
+                Some(false) => {
+                    self.adaptive_short_observations =
+                        self.adaptive_short_observations.saturating_add(1)
+                }
+                Some(true) => {
+                    self.adaptive_long_observations =
+                        self.adaptive_long_observations.saturating_add(1)
+                }
+                None => {
+                    self.adaptive_censored_observations =
+                        self.adaptive_censored_observations.saturating_add(1)
+                }
             }
-            Some(true) => {
-                self.adaptive_long_observations = self.adaptive_long_observations.saturating_add(1)
-            }
-            None => {
-                self.adaptive_censored_observations =
-                    self.adaptive_censored_observations.saturating_add(1)
-            }
-        }
-
-        if let Some(actual_long) = actual_long {
-            self.adaptive_decisive_observation_bytes = self
-                .adaptive_decisive_observation_bytes
-                .saturating_add(payload_capacity);
-            self.runtime_validated_objects = self.runtime_validated_objects.saturating_add(1);
-            self.runtime_validated_bytes = self.runtime_validated_bytes.saturating_add(slot_size);
-            let prediction = AdaptivePrediction::from_u8(trailer.prediction)
-                .expect("validated adaptive trailer has an invalid prediction");
-            let predicted_long = prediction == AdaptivePrediction::Long;
-            // The generic matrix treats learned Cold as a negative abstention.
-            // The adaptive matrix below excludes Cold, while static-prior and
-            // physical-placement effects retain their separate matrices.
-            self.predictor_confusion
-                .record(predicted_long, actual_long, slot_size);
-            if prediction != AdaptivePrediction::Cold {
-                self.adaptive_predictor_confusion.record(
-                    predicted_long,
-                    actual_long,
+            if let Some(actual_long) = actual_long {
+                self.adaptive_record_decisive_truth(
                     payload_capacity,
+                    slot_size,
+                    backing,
+                    trailer,
+                    actual_long,
                 );
             }
-            match lifetime_class_from_u8(trailer.static_hint)
-                .expect("validated adaptive trailer has an invalid static hint")
-            {
-                LifetimePlacementClass::Unknown => {
-                    self.adaptive_static_hint_abstained_objects = self
-                        .adaptive_static_hint_abstained_objects
-                        .saturating_add(1);
-                    self.adaptive_static_hint_abstained_bytes = self
-                        .adaptive_static_hint_abstained_bytes
-                        .saturating_add(payload_capacity);
-                }
-                LifetimePlacementClass::Ephemeral => {
-                    self.adaptive_static_hint_confusion
-                        .record(false, actual_long, payload_capacity)
-                }
-                LifetimePlacementClass::LongLived => {
-                    self.adaptive_static_hint_confusion
-                        .record(true, actual_long, payload_capacity)
-                }
-            }
-            self.placement_confusion.record(
-                backing.is_large_page_confirmed(),
+            self.adaptive_observe_site(
+                site_idx,
+                trailer.requested_size as usize,
                 actual_long,
-                slot_size,
+                false,
             );
         }
-
-        let prior = self.adaptive_sites[site_idx].static_prior;
-        let transition = self.adaptive_sites[site_idx].observe(actual_long);
-        match transition {
-            AdaptiveTransition::None => {}
-            AdaptiveTransition::PromotedShort => {
-                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
-                if prior == LifetimePlacementClass::LongLived {
-                    self.adaptive_prior_corrections =
-                        self.adaptive_prior_corrections.saturating_add(1);
-                }
-            }
-            AdaptiveTransition::PromotedLong => {
-                self.adaptive_promotions = self.adaptive_promotions.saturating_add(1);
-                if prior == LifetimePlacementClass::Ephemeral {
-                    self.adaptive_prior_corrections =
-                        self.adaptive_prior_corrections.saturating_add(1);
-                }
-            }
-            AdaptiveTransition::Demoted => {
-                self.adaptive_demotions = self.adaptive_demotions.saturating_add(1)
-            }
-        }
+        Some(trailer.confirmed_long_placement())
     }
 
     #[inline]
@@ -2644,6 +3602,49 @@ impl LifetimeArenaState {
         self.extents[idx].on_available_list = false;
     }
 
+    #[inline]
+    fn add_retained_empty(&mut self, idx: usize) {
+        if self.extents[idx].on_retained_empty_list {
+            return;
+        }
+        debug_assert_eq!(self.extents[idx].live, 0);
+        let old_head = self.retained_empty_head;
+        self.extents[idx].retained_empty_prev = NONE;
+        self.extents[idx].retained_empty_next = old_head;
+        self.extents[idx].on_retained_empty_list = true;
+        if old_head != NONE {
+            self.extents[old_head].retained_empty_prev = idx;
+        } else {
+            self.retained_empty_tail = idx;
+        }
+        self.retained_empty_head = idx;
+        self.current_retained_empty_extents = self.current_retained_empty_extents.saturating_add(1);
+    }
+
+    #[inline]
+    fn remove_retained_empty(&mut self, idx: usize) -> bool {
+        if !self.extents[idx].on_retained_empty_list {
+            return false;
+        }
+        let prev = self.extents[idx].retained_empty_prev;
+        let next = self.extents[idx].retained_empty_next;
+        if prev == NONE {
+            self.retained_empty_head = next;
+        } else {
+            self.extents[prev].retained_empty_next = next;
+        }
+        if next == NONE {
+            self.retained_empty_tail = prev;
+        } else {
+            self.extents[next].retained_empty_prev = prev;
+        }
+        self.extents[idx].retained_empty_prev = NONE;
+        self.extents[idx].retained_empty_next = NONE;
+        self.extents[idx].on_retained_empty_list = false;
+        self.current_retained_empty_extents = self.current_retained_empty_extents.saturating_sub(1);
+        true
+    }
+
     /// Epoch-cohort extents from older phases remain valid for their live
     /// objects, while new allocations must start from a current-epoch list.
     /// Detaching once per explicit phase keeps allocation search independent
@@ -2661,16 +3662,28 @@ impl LifetimeArenaState {
 
     fn find_available(
         &mut self,
-        bucket: usize,
+        geometry: SlotGeometry,
         requested_backing: RequestedBacking,
         identity: ArenaIdentity,
+        callsite: u64,
         birth_epoch: usize,
         require_extent_cohort: bool,
+        prefer_fullest: bool,
+        restrict_confirmed_compiler_reuse: bool,
     ) -> Option<AvailableRegion> {
+        let bucket = geometry.bucket;
+        let requested_reuse_identity = PromotedReuseIdentity {
+            arena: identity,
+            callsite,
+        };
         let mut idx = self.available_heads[bucket];
         let mut matching_region = None;
         let mut unassigned_fallback = None;
+        let mut fullest_compatible = None;
+        let mut fullest_live = 0usize;
+        let mut fullest_reuses_identity = false;
         let mut visited = 0usize;
+        let mut fullness_candidates = 0usize;
         while idx != NONE {
             let extent = &self.extents[idx];
             if extent.bucket != bucket || !extent.on_available_list {
@@ -2678,17 +3691,77 @@ impl LifetimeArenaState {
             }
             let cohort_matches = !require_extent_cohort || extent.cohort_epoch == birth_epoch;
             let backing_matches = extent.requested_backing == Some(requested_backing);
-            if cohort_matches && backing_matches {
-                if let Some(region_idx) =
-                    extent.matching_region_with_space(identity, birth_epoch, require_extent_cohort)
-                {
+            let geometry_matches = extent.exact_geometry_matches(geometry);
+            if cohort_matches && backing_matches && geometry_matches {
+                let matching_region_idx = extent.matching_region_with_space(
+                    identity,
+                    callsite,
+                    birth_epoch,
+                    require_extent_cohort,
+                    restrict_confirmed_compiler_reuse,
+                );
+                let exact_promoted_reuse =
+                    extent.promoted_reuse_identity == Some(requested_reuse_identity);
+                let sealed_for_another_identity =
+                    extent.promoted_reuse_identity.is_some() && !exact_promoted_reuse;
+                let confirmed_compiler_drain_only = restrict_confirmed_compiler_reuse
+                    && extent.backing.is_thp_confirmed_at_collapse()
+                    && extent.promoted_reuse_identity.is_none();
+                let allow_unassigned =
+                    !sealed_for_another_identity && !confirmed_compiler_drain_only;
+                if sealed_for_another_identity {
+                    idx = extent.available_next;
+                    visited += 1;
+                    if visited > MAX_EXTENTS {
+                        panic!("cyclic lifetime-arena available list");
+                    }
+                    continue;
+                }
+                if prefer_fullest {
+                    let candidate = matching_region_idx
+                        .map(|region_idx| (region_idx, true))
+                        .or_else(|| {
+                            allow_unassigned
+                                .then(|| extent.unassigned_region())
+                                .flatten()
+                                .map(|region_idx| (region_idx, false))
+                        });
+                    if let Some((region_idx, reuses_identity)) = candidate {
+                        fullness_candidates += 1;
+                        let replace = fullness_candidate_is_better(
+                            extent.live,
+                            reuses_identity,
+                            fullest_compatible.map(|_| (fullest_live, fullest_reuses_identity)),
+                        );
+                        if replace {
+                            fullest_compatible = Some(AvailableRegion {
+                                extent_idx: idx,
+                                region_idx,
+                            });
+                            fullest_live = extent.live;
+                            fullest_reuses_identity = reuses_identity;
+                        }
+                    }
+                } else if exact_promoted_reuse {
+                    let region_idx = matching_region_idx.or_else(|| {
+                        allow_unassigned
+                            .then(|| extent.unassigned_region())
+                            .flatten()
+                    });
+                    if let Some(region_idx) = region_idx {
+                        matching_region = Some(AvailableRegion {
+                            extent_idx: idx,
+                            region_idx,
+                        });
+                        break;
+                    }
+                } else if let Some(region_idx) = matching_region_idx {
                     matching_region = Some(AvailableRegion {
                         extent_idx: idx,
                         region_idx,
                     });
                     break;
-                }
-                if unassigned_fallback.is_none() {
+                } else if allow_unassigned && unassigned_fallback.is_none() {
                     if let Some(region_idx) = extent.unassigned_region() {
                         unassigned_fallback = Some(AvailableRegion {
                             extent_idx: idx,
@@ -2702,8 +3775,15 @@ impl LifetimeArenaState {
             if visited > MAX_EXTENTS {
                 panic!("cyclic lifetime-arena available list");
             }
+            if prefer_fullest && fullness_candidates >= ADAPTIVE_FULLNESS_CANDIDATE_LIMIT {
+                break;
+            }
         }
-        let chosen = matching_region.or(unassigned_fallback)?;
+        let chosen = if prefer_fullest {
+            fullest_compatible
+        } else {
+            matching_region.or(unassigned_fallback)
+        }?;
         if self.available_heads[bucket] != chosen.extent_idx {
             self.remove_available(chosen.extent_idx);
             self.add_available(chosen.extent_idx);
@@ -2841,6 +3921,61 @@ impl LifetimeArenaState {
         }
     }
 
+    /// Release one fully empty mapping while preserving all lookup/list
+    /// invariants if the kernel refuses the unmap.
+    unsafe fn unmap_empty_extent(&mut self, idx: usize) -> bool {
+        debug_assert!(self.extents[idx].in_use());
+        debug_assert_eq!(self.extents[idx].live, 0);
+        let extent_base = self.extents[idx].base;
+        let extent_backing = self.extents[idx].backing;
+        let was_retained = self.remove_retained_empty(idx);
+        let was_available = self.extents[idx].on_available_list;
+        self.remove_available(idx);
+        if unmap_extent(extent_base as *mut u8) {
+            if !self.remove_lookup(idx) {
+                panic!("lifetime-arena extent index disappeared before unmap");
+            }
+            self.note_unmapped_extent(extent_backing);
+            self.release_descriptor(idx);
+            true
+        } else {
+            self.extent_unmap_failures = self.extent_unmap_failures.saturating_add(1);
+            if was_available {
+                self.add_available(idx);
+            }
+            if was_retained {
+                self.add_retained_empty(idx);
+            }
+            false
+        }
+    }
+
+    unsafe fn enforce_retained_empty_capacity(&mut self) {
+        while self.current_retained_empty_extents > LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY {
+            let victim = self.retained_empty_tail;
+            debug_assert_ne!(victim, NONE);
+            if !self.unmap_empty_extent(victim) {
+                // A failed munmap must keep the mapping discoverable. The
+                // existing failure counter makes this exceptional over-cap
+                // state visible instead of discarding ownership provenance.
+                break;
+            }
+            self.retained_empty_extent_evictions =
+                self.retained_empty_extent_evictions.saturating_add(1);
+        }
+    }
+
+    unsafe fn trim_retained_empty_extents(&mut self) -> bool {
+        while self.retained_empty_tail != NONE {
+            let victim = self.retained_empty_tail;
+            if !self.unmap_empty_extent(victim) {
+                return false;
+            }
+            self.retained_empty_extent_trims = self.retained_empty_extent_trims.saturating_add(1);
+        }
+        true
+    }
+
     /// Promote prior-epoch THP candidates at a caller-provided quiescent phase
     /// boundary. This runs while the arena lock is held and MADV_COLLAPSE may
     /// perform synchronous kernel work, so callers must treat epoch advance as
@@ -2910,11 +4045,11 @@ impl LifetimeArenaState {
         }
     }
 
-    /// Enable THP eligibility only after bounded-long placement has packed
-    /// at least half of an extent. This performs one asynchronous `MADV_HUGEPAGE`
-    /// advice transition and deliberately avoids synchronous `MADV_COLLAPSE` on
-    /// the allocation path.
-    unsafe fn promote_dense_compiler_inferred_extent(&mut self, idx: usize) {
+    /// Advise one densely packed compiler-selected Long extent for THP.
+    /// `None` means the density/backing gate abstained; `Some` reports whether
+    /// advice succeeded. Synchronous collapse, when requested by a policy,
+    /// runs after the arena lock is released.
+    unsafe fn promote_dense_compiler_long_extent(&mut self, idx: usize) -> Option<bool> {
         let extent = &self.extents[idx];
         if extent.live.saturating_mul(extent.slot_size) < THP_PROMOTION_MIN_LIVE_BYTES
             || !matches!(
@@ -2923,24 +4058,133 @@ impl LifetimeArenaState {
                     | ActualBacking::ThpCandidateNoHugepageAdviceFailed
             )
         {
-            return;
+            return None;
         }
-
-        COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
         self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
         if sys_alloc::advise_transparent_hugepage(
             extent.base as *mut u8,
             LIFETIME_HUGEPAGE_EXTENT_BYTES,
         ) {
             self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
-            COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.fetch_add(1, Ordering::Relaxed);
             self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+            Some(true)
         } else {
             self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
-            COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS.fetch_add(1, Ordering::Relaxed);
             // Record a terminal advice failure so every later allocation in the
             // dense extent does not repeat the same kernel call.
             self.extents[idx].backing = ActualBacking::ThpAdviceFailed;
+            Some(false)
+        }
+    }
+
+    /// Prepare physical THP backing for compiler-directed placement only when
+    /// every slot in the extent is live. This keeps MADV_COLLAPSE from
+    /// faulting a half-filled 2 MiB mapping into RSS. The blocking collapse
+    /// itself runs after the arena lock is released.
+    unsafe fn prepare_full_compiler_directed_long_collapse(
+        &mut self,
+        idx: usize,
+    ) -> Option<Result<usize, ()>> {
+        let extent = &self.extents[idx];
+        let full_slot_count = extent
+            .region_capacity
+            .saturating_mul(IDENTITY_REGIONS_PER_EXTENT);
+        if extent.live != full_slot_count
+            || !matches!(
+                extent.backing,
+                ActualBacking::ThpCandidateNoHugepage
+                    | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+            )
+        {
+            return None;
+        }
+        let extent_base = extent.base;
+        let first_region = extent.regions[0];
+        let promoted_reuse_identity = (first_region.assigned
+            && extent.regions.iter().all(|region| {
+                region.assigned
+                    && region.identity == first_region.identity
+                    && region.callsite == first_region.callsite
+            }))
+        .then_some(PromotedReuseIdentity {
+            arena: first_region.identity,
+            callsite: first_region.callsite,
+        });
+        self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+        if sys_alloc::advise_transparent_hugepage(
+            extent_base as *mut u8,
+            LIFETIME_HUGEPAGE_EXTENT_BYTES,
+        ) {
+            self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
+            self.thp_collapse_attempts = self.thp_collapse_attempts.saturating_add(1);
+            self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+            self.extents[idx].promoted_reuse_identity = promoted_reuse_identity;
+            self.extents[idx].promoted_reuse_cycle_full = promoted_reuse_identity.is_some();
+            Some(Ok(extent_base))
+        } else {
+            self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
+            self.extents[idx].backing = ActualBacking::ThpAdviceFailed;
+            self.extents[idx].promoted_reuse_identity = None;
+            self.extents[idx].promoted_reuse_cycle_full = false;
+            Some(Err(()))
+        }
+    }
+
+    /// Mark a delayed adaptive candidate for synchronous collapse only after
+    /// runtime-confirmed Long slots occupy at least 75% of the extent. Static
+    /// priors may help fill the same candidate but never trigger this step.
+    /// The collapse itself runs after the arena lock is released.
+    unsafe fn prepare_dense_adaptive_long_collapse(&mut self, idx: usize) -> Option<usize> {
+        if adaptive_thp_promotion_eligibility(&self.extents[idx])
+            != ThpPromotionEligibility::Eligible
+        {
+            return None;
+        }
+
+        self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+        let extent_base = self.extents[idx].base;
+        if sys_alloc::advise_transparent_hugepage(
+            extent_base as *mut u8,
+            LIFETIME_HUGEPAGE_EXTENT_BYTES,
+        ) {
+            self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
+            self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+            self.thp_collapse_attempts = self.thp_collapse_attempts.saturating_add(1);
+            Some(extent_base)
+        } else {
+            self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
+            // A terminal state prevents repeated kernel calls for this extent.
+            self.extents[idx].backing = ActualBacking::ThpAdviceFailed;
+            None
+        }
+    }
+
+    fn finish_dense_thp_collapse(&mut self, extent_base: usize, outcome: Result<(), isize>) {
+        let idx = self
+            .lookup_extent(extent_base)
+            .expect("a density-crossing allocation must keep its extent live");
+        debug_assert_eq!(
+            self.extents[idx].backing,
+            ActualBacking::ThpAdvisedUnverified
+        );
+        match outcome {
+            Ok(()) => {
+                self.thp_collapse_successes = self.thp_collapse_successes.saturating_add(1);
+                self.extents[idx].backing = ActualBacking::ThpCollapseSucceededPointInTime;
+                self.current_thp_collapse_confirmed_extents = self
+                    .current_thp_collapse_confirmed_extents
+                    .saturating_add(1);
+                self.peak_thp_collapse_confirmed_extents = core::cmp::max(
+                    self.peak_thp_collapse_confirmed_extents,
+                    self.current_thp_collapse_confirmed_extents,
+                );
+            }
+            Err(code) => {
+                self.thp_collapse_errors = self.thp_collapse_errors.saturating_add(1);
+                self.thp_collapse_last_error_code = code;
+                self.extents[idx].promoted_reuse_identity = None;
+                self.extents[idx].promoted_reuse_cycle_full = false;
+            }
         }
     }
 
@@ -2988,16 +4232,22 @@ impl LifetimeArenaState {
             payload_capacity: geometry.payload_capacity,
             region_capacity: geometry.region_capacity,
             live: 0,
+            adaptive_confirmed_long_live: 0,
             bucket: geometry.bucket,
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: class,
             cohort_epoch: if epoch_cohort { birth_epoch } else { 0 },
             requested_backing: Some(requested),
             backing: mapping.backing,
+            promoted_reuse_identity: None,
+            promoted_reuse_cycle_full: false,
             adaptive_trailer: geometry.adaptive_trailer,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
+            retained_empty_prev: NONE,
+            retained_empty_next: NONE,
+            on_retained_empty_list: false,
             next_free_descriptor: NONE,
         };
         if !self.insert_lookup(idx) {
@@ -3018,16 +4268,27 @@ impl LifetimeArenaState {
         &mut self,
         available: AvailableRegion,
         identity: ArenaIdentity,
+        callsite: u64,
         class: LifetimePlacementClass,
         birth_epoch: usize,
         require_epoch_match: bool,
+        require_callsite_match: bool,
         adaptive_record: Option<AdaptiveAllocationRecord>,
     ) -> *mut u8 {
         let idx = available.extent_idx;
         let region_idx = available.region_idx;
+        let reactivates_empty_extent = self.extents[idx].live == 0;
+        if reactivates_empty_extent && self.remove_retained_empty(idx) {
+            self.retained_empty_extent_reuse_hits =
+                self.retained_empty_extent_reuse_hits.saturating_add(1);
+        }
+        if reactivates_empty_extent && self.extents[idx].promoted_reuse_identity.is_some() {
+            self.extents[idx].promoted_reuse_cycle_full = false;
+        }
         let region = self.extents[idx].regions[region_idx];
         if region.assigned
             && (region.identity != identity
+                || (require_callsite_match && region.callsite != callsite)
                 || (require_epoch_match && region.birth_epoch != birth_epoch)
                 || !region.has_available_slot(self.extents[idx].region_capacity))
         {
@@ -3036,6 +4297,7 @@ impl LifetimeArenaState {
         if !region.assigned {
             self.extents[idx].regions[region_idx] = IdentityRegion {
                 identity,
+                callsite,
                 birth_epoch,
                 epoch_mixed: false,
                 next_unused: 0,
@@ -3068,6 +4330,11 @@ impl LifetimeArenaState {
         };
         self.extents[idx].live += 1;
         self.extents[idx].regions[region_idx].live += 1;
+        if self.extents[idx].promoted_reuse_identity.is_some()
+            && self.extents[idx].live == self.extents[idx].full_slot_count()
+        {
+            self.extents[idx].promoted_reuse_cycle_full = true;
+        }
         let slot_size = self.extents[idx].slot_size;
         if !self.extents[idx].regions[region_idx]
             .has_available_slot(self.extents[idx].region_capacity)
@@ -3077,6 +4344,7 @@ impl LifetimeArenaState {
         }
         self.routed_allocations = self.routed_allocations.saturating_add(1);
         self.live_objects = self.live_objects.saturating_add(1);
+        LIVE_ARENA_OBJECTS.fetch_add(1, Ordering::Release);
         self.live_slot_bytes = self.live_slot_bytes.saturating_add(slot_size);
         match class {
             LifetimePlacementClass::Ephemeral => {
@@ -3090,18 +4358,21 @@ impl LifetimeArenaState {
         let ptr = (region_base + slot_index * slot_size) as *mut u8;
         if let Some(record) = adaptive_record {
             debug_assert!(self.extents[idx].adaptive_trailer);
-            let trailer = AdaptiveSlotTrailer::new(
-                ptr,
-                record.birth_pressure,
-                record.site_fingerprint,
-                record.site_index,
-                record.requested_size,
-                record.learned_prediction,
-                record.static_hint,
-            );
+            if record.confirmed_long_placement {
+                self.extents[idx].adaptive_confirmed_long_live = self.extents[idx]
+                    .adaptive_confirmed_long_live
+                    .saturating_add(1);
+            }
+            let trailer = AdaptiveSlotTrailer::new(ptr, record);
             ptr.add(self.extents[idx].payload_capacity)
                 .cast::<AdaptiveSlotTrailer>()
                 .write(trailer);
+            self.adaptive_live_survivor_register(
+                record.site_index,
+                ptr,
+                record.birth_pressure,
+                record.learned_prediction,
+            );
         }
         ptr
     }
@@ -3156,6 +4427,10 @@ impl LifetimeArenaState {
     }
 
     unsafe fn deallocate(&mut self, ptr: *mut u8) -> bool {
+        // Reconfiguration is rejected while any arena object remains live, so
+        // one policy-word load is authoritative for this entire release.
+        let policy_word = POLICY.load(Ordering::Acquire);
+        let policy = LifetimeHugepagePolicy::from_usize(policy_word);
         let base = (ptr as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
         let idx = match self.lookup_extent(base) {
             Some(idx) => idx,
@@ -3182,7 +4457,7 @@ impl LifetimeArenaState {
         {
             panic!("invalid lifetime-arena identity-region pointer release");
         }
-        if adaptive_trailer {
+        let adaptive_confirmed_long = if adaptive_trailer {
             let trailer = ptr
                 .add(payload_capacity)
                 .cast::<AdaptiveSlotTrailer>()
@@ -3193,14 +4468,25 @@ impl LifetimeArenaState {
                 slot_size,
                 extent_backing,
                 trailer,
-            );
+            )
         } else if matches!(
-            lifetime_hugepage_policy(),
+            policy,
             LifetimeHugepagePolicy::CompilerInferredHugepage
                 | LifetimeHugepagePolicy::CompilerInferredOrdinary
         ) {
             debug_assert_eq!(lifetime_class, LifetimePlacementClass::LongLived);
             COMPILER_INFERRED_DIRECT_LONG_DEALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+            Some(false)
+        } else if policy.is_compiler_directed() {
+            // The compiler already supplied the production placement decision.
+            // Keep deallocation free of epoch validation and adaptive truth
+            // measurement. Optional diagnostics reuse the loaded policy bit
+            // and an ordinary counter protected by this arena lock.
+            if policy_word & POLICY_COMPILER_DIRECTED_TELEMETRY != 0 {
+                self.compiler_directed_deallocations =
+                    self.compiler_directed_deallocations.saturating_add(1);
+            }
+            Some(false)
         } else {
             // The generic validator defines "actually long" by explicit epoch
             // transitions. Compiler-inferred regions carry a separate proof
@@ -3215,26 +4501,35 @@ impl LifetimeArenaState {
                 region.epoch_mixed,
                 slot_size,
             );
-        }
+            Some(false)
+        };
         let was_full = !self.extents[idx].has_available_slot();
         let slot_index = region_offset / slot_size;
         (ptr as *mut usize).write(region.free_head);
         self.extents[idx].regions[region_idx].free_head = slot_index;
         self.extents[idx].regions[region_idx].live -= 1;
         self.extents[idx].live -= 1;
+        // Corrupt provenance cannot safely distinguish confirmed from
+        // provisional occupancy. Resetting the credit prevents a later sparse
+        // extent from crossing the promotion threshold.
+        self.extents[idx].adaptive_confirmed_long_live = confirmed_long_live_after_deallocation(
+            self.extents[idx].adaptive_confirmed_long_live,
+            adaptive_confirmed_long,
+        );
         if self.extents[idx].regions[region_idx].live == 0 {
             self.extents[idx].regions[region_idx] = IdentityRegion::empty();
             self.identity_region_releases = self.identity_region_releases.saturating_add(1);
             self.current_identity_regions = self.current_identity_regions.saturating_sub(1);
         }
-        let extent_accepts_current_epoch = lifetime_hugepage_policy()
-            != LifetimeHugepagePolicy::EpochCohortHugepage
+        let extent_accepts_current_epoch = policy != LifetimeHugepagePolicy::EpochCohortHugepage
             || cohort_epoch == self.current_epoch;
         if was_full && extent_accepts_current_epoch {
             self.add_available(idx);
         }
         self.routed_deallocations = self.routed_deallocations.saturating_add(1);
         self.live_objects = self.live_objects.saturating_sub(1);
+        let prior_live_objects = LIVE_ARENA_OBJECTS.fetch_sub(1, Ordering::Release);
+        debug_assert!(prior_live_objects > 0);
         self.live_slot_bytes = self.live_slot_bytes.saturating_sub(slot_size);
         match lifetime_class {
             LifetimePlacementClass::Ephemeral => {
@@ -3249,28 +4544,37 @@ impl LifetimeArenaState {
             return true;
         }
 
-        self.remove_available(idx);
-        if unmap_extent(extent_base as *mut u8) {
-            if !self.remove_lookup(idx) {
-                panic!("lifetime-arena extent index disappeared before unmap");
-            }
-            self.note_unmapped_extent(extent_backing);
-            self.release_descriptor(idx);
-        } else {
-            // Preserve provenance and reuse capability if the kernel refused
-            // the terminal release.
-            self.extent_unmap_failures = self.extent_unmap_failures.saturating_add(1);
-            if extent_accepts_current_epoch {
-                self.add_available(idx);
-            }
+        if empty_extent_retention_eligible(policy, lifetime_hugepage_backend(), &self.extents[idx])
+        {
+            debug_assert!(extent_accepts_current_epoch);
+            self.add_available(idx);
+            self.add_retained_empty(idx);
+            self.retained_empty_extent_insertions =
+                self.retained_empty_extent_insertions.saturating_add(1);
+            self.enforce_retained_empty_capacity();
+            // Record the stable post-enforcement high-water mark. A transient
+            // cap+1 insertion that was immediately evicted is not retained;
+            // a failed munmap leaves the exceptional over-cap state visible.
+            self.peak_retained_empty_extents = core::cmp::max(
+                self.peak_retained_empty_extents,
+                self.current_retained_empty_extents,
+            );
+            return true;
         }
+        let _ = self.unmap_empty_extent(idx);
         true
     }
 }
 
+const POLICY_VALUE_MASK: usize = 0xff;
+const POLICY_COMPILER_DIRECTED_TELEMETRY: usize = 1 << 8;
+
 static POLICY: AtomicUsize = AtomicUsize::new(LifetimeHugepagePolicy::Disabled as usize);
 static BACKEND: AtomicUsize = AtomicUsize::new(LifetimePageBackend::ExplicitHugeTLB as usize);
 static ACTIVE_EXTENTS: AtomicUsize = AtomicUsize::new(0);
+static LIVE_ARENA_OBJECTS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_UNMAP_FAILURE_BASE: AtomicUsize = AtomicUsize::new(0);
 static ADAPTIVE_FORCE_TRACK_ALL_ENABLED: AtomicBool = AtomicBool::new(false);
 static COMPILER_INFERRED_UNKNOWN_OR_UNPROVEN_BYPASSES: AtomicUsize = AtomicUsize::new(0);
 static COMPILER_INFERRED_PROVEN_EPHEMERAL_BYPASSES: AtomicUsize = AtomicUsize::new(0);
@@ -3284,6 +4588,8 @@ static COMPILER_INFERRED_DIRECT_LONG_ROUTES_WITHOUT_TRAILER: AtomicUsize = Atomi
 static COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES: AtomicUsize = AtomicUsize::new(0);
 static COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_DIRECTED_UNKNOWN_BYPASSES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_DIRECTED_BYPASS_REQUESTED_BYTES: AtomicUsize = AtomicUsize::new(0);
 static ARENA: Mutex<LifetimeArenaState> = Mutex::new(LifetimeArenaState::new());
 #[thread_local]
 static mut PHASE_FLUSH_ACTIVE: bool = false;
@@ -3493,6 +4799,10 @@ unsafe fn advise_no_hugepage(_ptr: *mut u8) -> bool {
 
 #[cfg(unix)]
 unsafe fn unmap_extent(ptr: *mut u8) -> bool {
+    #[cfg(test)]
+    if TEST_UNMAP_FAILURE_BASE.load(Ordering::Acquire) == ptr as usize {
+        return false;
+    }
     libc::munmap(ptr as *mut libc::c_void, LIFETIME_HUGEPAGE_EXTENT_BYTES) == 0
 }
 
@@ -3511,8 +4821,11 @@ pub fn lifetime_hugepage_policy() -> LifetimeHugepagePolicy {
 ///
 /// Adaptive policies need every exact site, including `Unknown`, so runtime
 /// outcomes can train the classifier. Compiler-inferred policies accept only
-/// the bounded process-long oracle. The older static policies accept the two
-/// legacy routable classes while preserving `Unknown` as a raw bypass.
+/// the bounded process-long oracle. Compiler-directed policies accept exactly
+/// the stable binary Long ABI only; Short, `Unknown`, and observation-only
+/// scopes stay on the base allocator before its semantic slow path. The older
+/// static policies accept the two legacy routable classes with the same
+/// Unknown abstention.
 #[inline]
 pub(crate) fn flags_zero_exact_scope_is_effective(metadata: AllocationMetadata) -> bool {
     if metadata.callsite == 0 || !metadata.has_type() {
@@ -3521,10 +4834,16 @@ pub(crate) fn flags_zero_exact_scope_is_effective(metadata: AllocationMetadata) 
     match LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire)) {
         LifetimeHugepagePolicy::Disabled => false,
         LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
-        | LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary => true,
+        | LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+        | LifetimeHugepagePolicy::AdaptiveRuntimeProfileHugepage => true,
         LifetimeHugepagePolicy::CompilerInferredHugepage
         | LifetimeHugepagePolicy::CompilerInferredOrdinary => {
             compiler_bounded_lifetime_placement_class(metadata.lifetime_hint)
+                == LifetimePlacementClass::LongLived
+        }
+        LifetimeHugepagePolicy::CompilerDirectedHugepage
+        | LifetimeHugepagePolicy::CompilerDirectedOrdinary => {
+            compiler_directed_lifetime_placement_class(metadata.lifetime_hint)
                 == LifetimePlacementClass::LongLived
         }
         LifetimeHugepagePolicy::SegregatedOrdinary
@@ -3547,8 +4866,11 @@ pub fn lifetime_hugepage_configure(policy: LifetimeHugepagePolicy) -> bool {
         policy,
         LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
             | LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+            | LifetimeHugepagePolicy::AdaptiveRuntimeProfileHugepage
             | LifetimeHugepagePolicy::CompilerInferredHugepage
             | LifetimeHugepagePolicy::CompilerInferredOrdinary
+            | LifetimeHugepagePolicy::CompilerDirectedHugepage
+            | LifetimeHugepagePolicy::CompilerDirectedOrdinary
     ) {
         LifetimePageBackend::TransparentHugepage
     } else {
@@ -3558,7 +4880,8 @@ pub fn lifetime_hugepage_configure(policy: LifetimeHugepagePolicy) -> bool {
 }
 
 /// Select placement policy and physical page backend as orthogonal controls.
-/// Changing either control while arena mappings remain live is rejected.
+/// Changing either control while arena objects remain live is rejected. Empty
+/// retained extents are trimmed before publishing the new controls.
 pub fn lifetime_hugepage_configure_with_backend(
     policy: LifetimeHugepagePolicy,
     backend: LifetimePageBackend,
@@ -3567,14 +4890,20 @@ pub fn lifetime_hugepage_configure_with_backend(
         policy,
         LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
             | LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+            | LifetimeHugepagePolicy::AdaptiveRuntimeProfileHugepage
             | LifetimeHugepagePolicy::CompilerInferredHugepage
             | LifetimeHugepagePolicy::CompilerInferredOrdinary
+            | LifetimeHugepagePolicy::CompilerDirectedHugepage
+            | LifetimeHugepagePolicy::CompilerDirectedOrdinary
     ) && backend != LifetimePageBackend::TransparentHugepage
     {
         return false;
     }
-    let state = ARENA.lock();
-    if state.live_objects != 0 || state.current_extents != 0 {
+    let mut state = ARENA.lock();
+    if state.live_objects != 0 {
+        return false;
+    }
+    if !unsafe { state.trim_retained_empty_extents() } || state.current_extents != 0 {
         return false;
     }
     if state.adaptive_force_track_all.enabled && !policy.is_adaptive() {
@@ -3585,8 +4914,41 @@ pub fn lifetime_hugepage_configure_with_backend(
     true
 }
 
+/// Enable diagnostic counters for compiler-directed policies at a quiescent
+/// point. The enable bit shares the already-loaded policy word, leaving the
+/// default performance arm free of an additional atomic read or event RMW.
+pub fn lifetime_hugepage_compiler_directed_telemetry_enable() -> bool {
+    let state = ARENA.lock();
+    if state.live_objects != 0 || !lifetime_hugepage_policy().is_compiler_directed() {
+        return false;
+    }
+    POLICY.fetch_or(POLICY_COMPILER_DIRECTED_TELEMETRY, Ordering::Release);
+    true
+}
+
+/// Disable compiler-directed diagnostics at a quiescent point.
+pub fn lifetime_hugepage_compiler_directed_telemetry_disable() -> bool {
+    let state = ARENA.lock();
+    if state.live_objects != 0 {
+        return false;
+    }
+    POLICY.fetch_and(!POLICY_COMPILER_DIRECTED_TELEMETRY, Ordering::Release);
+    true
+}
+
+#[inline]
+pub fn lifetime_hugepage_compiler_directed_telemetry_enabled() -> bool {
+    POLICY.load(Ordering::Acquire) & POLICY_COMPILER_DIRECTED_TELEMETRY != 0
+}
+
 pub fn lifetime_hugepage_stats_snapshot() -> LifetimeHugepageStatsSnapshot {
     ARENA.lock().snapshot()
+}
+
+/// Release every fully empty extent in the bounded reuse LRU. Live arena
+/// objects remain valid; false reports a kernel unmap failure.
+pub fn lifetime_hugepage_trim_retained_empty_extents() -> bool {
+    unsafe { ARENA.lock().trim_retained_empty_extents() }
 }
 
 /// Enable evaluation-only exact-layout runtime lifetime observations.
@@ -3605,7 +4967,13 @@ pub fn lifetime_hugepage_adaptive_site_recording_enable() -> bool {
 /// Disable exact-layout runtime lifetime observations at a quiescent point.
 pub fn lifetime_hugepage_adaptive_site_recording_disable() -> bool {
     let mut state = ARENA.lock();
-    if state.adaptive_live_trailers != 0 || state.adaptive_force_track_all.enabled {
+    if state.live_objects != 0
+        || state.adaptive_live_trailers != 0
+        || state.adaptive_force_track_all.enabled
+    {
+        return false;
+    }
+    if !unsafe { state.trim_retained_empty_extents() } || state.current_extents != 0 {
         return false;
     }
     state.adaptive_observation_recording = false;
@@ -3631,9 +4999,11 @@ pub fn lifetime_hugepage_adaptive_site_force_track_all_enable(
     let mut state = ARENA.lock();
     if !state.adaptive_observation_recording
         || state.live_objects != 0
-        || state.current_extents != 0
         || state.adaptive_live_trailers != 0
     {
+        return false;
+    }
+    if !unsafe { state.trim_retained_empty_extents() } || state.current_extents != 0 {
         return false;
     }
     let enabled = state
@@ -3648,7 +5018,10 @@ pub fn lifetime_hugepage_adaptive_site_force_track_all_enable(
 /// Disable evaluation-only complete observation at a quiescent point.
 pub fn lifetime_hugepage_adaptive_site_force_track_all_disable() -> bool {
     let mut state = ARENA.lock();
-    if state.live_objects != 0 || state.current_extents != 0 || state.adaptive_live_trailers != 0 {
+    if state.live_objects != 0 || state.adaptive_live_trailers != 0 {
+        return false;
+    }
+    if !unsafe { state.trim_retained_empty_extents() } || state.current_extents != 0 {
         return false;
     }
     state.adaptive_force_track_all = AdaptiveForceTrackAllState::disabled();
@@ -3751,7 +5124,10 @@ pub fn lifetime_hugepage_phase_flush_current_thread() -> usize {
 /// experiment explicitly needs to discard the learned classifier model.
 pub fn lifetime_hugepage_stats_reset() -> bool {
     let mut state = ARENA.lock();
-    if state.live_objects != 0 || state.current_extents != 0 {
+    if state.live_objects != 0 {
+        return false;
+    }
+    if !unsafe { state.trim_retained_empty_extents() } || state.current_extents != 0 {
         return false;
     }
     let preserve_adaptive_model = lifetime_hugepage_policy().is_adaptive();
@@ -3768,6 +5144,8 @@ pub fn lifetime_hugepage_stats_reset() -> bool {
     COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.store(0, Ordering::Release);
     COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.store(0, Ordering::Release);
     COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS.store(0, Ordering::Release);
+    COMPILER_DIRECTED_UNKNOWN_BYPASSES.store(0, Ordering::Release);
+    COMPILER_DIRECTED_BYPASS_REQUESTED_BYTES.store(0, Ordering::Release);
     true
 }
 
@@ -3802,11 +5180,56 @@ fn note_compiler_inferred_prelock_bypass(
     COMPILER_INFERRED_BYPASS_REQUESTED_BYTES.fetch_add(requested_bytes, Ordering::Relaxed);
 }
 
+#[inline]
+fn note_compiler_directed_prelock_bypass(telemetry: bool, requested_bytes: usize) {
+    if !telemetry {
+        return;
+    }
+    COMPILER_DIRECTED_UNKNOWN_BYPASSES.fetch_add(1, Ordering::Relaxed);
+    COMPILER_DIRECTED_BYPASS_REQUESTED_BYTES.fetch_add(requested_bytes, Ordering::Relaxed);
+}
+
+#[inline]
+fn dynamic_buffer_observation_candidate(lifetime_hint: u16) -> bool {
+    lifetime_hint == LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE
+}
+
+#[inline]
+fn dynamic_buffer_observation_layout_admitted(layout: Layout) -> bool {
+    (DYNAMIC_BUFFER_OBSERVE_MIN_BYTES..=DYNAMIC_BUFFER_OBSERVE_MAX_BYTES).contains(&layout.size())
+}
+
+#[inline]
+fn compiler_directed_long_layout_admitted(layout: Layout, lifetime_hint: u16) -> bool {
+    compiler_directed_lifetime_placement_class(lifetime_hint) == LifetimePlacementClass::LongLived
+        && (COMPILER_DIRECTED_LONG_MIN_BYTES..=COMPILER_DIRECTED_LONG_MAX_BYTES)
+            .contains(&layout.size())
+}
+
 /// Try to route one exact semantic allocation into a lifetime/size arena.
 /// `None` preserves the existing allocator path.
 pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
-    let observed_policy = LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire));
+    let observed_policy_word = POLICY.load(Ordering::Acquire);
+    let observed_policy = LifetimeHugepagePolicy::from_usize(observed_policy_word);
     if observed_policy == LifetimeHugepagePolicy::Disabled {
+        return None;
+    }
+    if observed_policy.is_compiler_directed()
+        && !compiler_directed_long_layout_admitted(layout, metadata.lifetime_hint)
+    {
+        note_compiler_directed_prelock_bypass(
+            observed_policy_word & POLICY_COMPILER_DIRECTED_TELEMETRY != 0,
+            layout.size(),
+        );
+        return None;
+    }
+    let dynamic_buffer_observation = dynamic_buffer_observation_candidate(metadata.lifetime_hint);
+    if dynamic_buffer_observation
+        && (!observed_policy.is_adaptive() || !dynamic_buffer_observation_layout_admitted(layout))
+    {
+        // The compiler tag requests bounded observation only. Out-of-band
+        // layouts and placement policies without runtime learning stay on the
+        // existing allocator path without taking ARENA's lock.
         return None;
     }
     let observed_compiler_inferred = matches!(
@@ -3821,14 +5244,27 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             return None;
         }
     }
-    let static_class = lifetime_placement_class(metadata.lifetime_hint);
     let mut state = ARENA.lock();
     // Configuration also holds ARENA while publishing BACKEND and POLICY.
     // Reload both controls after locking so a bounded-long allocation that
     // waited behind reconfiguration never combines an old policy with a new
     // backend. Pre-lock bypasses linearize at their stable policy load above.
-    let policy = lifetime_hugepage_policy();
+    let policy_word = POLICY.load(Ordering::Acquire);
+    let policy = LifetimeHugepagePolicy::from_usize(policy_word);
     if policy == LifetimeHugepagePolicy::Disabled {
+        return None;
+    }
+    let compiler_directed = policy.is_compiler_directed();
+    let compiler_directed_telemetry =
+        compiler_directed && policy_word & POLICY_COMPILER_DIRECTED_TELEMETRY != 0;
+    if compiler_directed && !compiler_directed_long_layout_admitted(layout, metadata.lifetime_hint)
+    {
+        note_compiler_directed_prelock_bypass(compiler_directed_telemetry, layout.size());
+        return None;
+    }
+    if dynamic_buffer_observation
+        && (!policy.is_adaptive() || !dynamic_buffer_observation_layout_admitted(layout))
+    {
         return None;
     }
     let backend = lifetime_hugepage_backend();
@@ -3845,6 +5281,18 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         }
         COMPILER_INFERRED_ARENA_LOCK_ACQUISITIONS.fetch_add(1, Ordering::Relaxed);
     }
+    if compiler_directed_telemetry {
+        state.compiler_directed_arena_lock_acquisitions = state
+            .compiler_directed_arena_lock_acquisitions
+            .saturating_add(1);
+    }
+    let static_class = if policy.ignores_static_lifetime_prior() {
+        LifetimePlacementClass::Unknown
+    } else if compiler_directed {
+        compiler_directed_lifetime_placement_class(metadata.lifetime_hint)
+    } else {
+        lifetime_placement_class(metadata.lifetime_hint)
+    };
     let adaptive = policy.is_adaptive();
     let force_track_pressure = if adaptive && state.adaptive_force_track_all.enabled {
         Some(state.adaptive_note_force_track_pressure(
@@ -3952,15 +5400,26 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
                 return None;
             }
         };
-    let identity = ArenaIdentity::from_metadata(metadata);
+    let identity = if policy.ignores_static_lifetime_prior() {
+        ArenaIdentity::from_metadata_without_lifetime_hint(metadata)
+    } else {
+        ArenaIdentity::from_metadata(metadata)
+    };
     let birth_epoch = state.current_epoch;
     let epoch_cohort = policy.separates_epoch_extents();
+    let prefer_fullest = policy.is_adaptive_thp()
+        && backend == LifetimePageBackend::TransparentHugepage
+        && class == LifetimePlacementClass::LongLived
+        && requested_backing == RequestedBacking::EpochCandidate;
     let available = if let Some(available) = state.find_available(
-        geometry.bucket,
+        geometry,
         requested_backing,
         identity,
+        metadata.callsite,
         birth_epoch,
         epoch_cohort,
+        prefer_fullest,
+        policy == LifetimeHugepagePolicy::CompilerDirectedHugepage,
     ) {
         available
     } else {
@@ -4006,15 +5465,19 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             requested_size: layout.size(),
             learned_prediction,
             static_hint: static_class,
+            confirmed_long_placement: class == LifetimePlacementClass::LongLived
+                && adaptive_long_confirmed,
         }
     });
     let allocated_extent_idx = available.extent_idx;
     let ptr = state.allocate_from_extent(
         available,
         identity,
+        metadata.callsite,
         class,
         birth_epoch,
         epoch_cohort,
+        policy == LifetimeHugepagePolicy::CompilerDirectedHugepage,
         adaptive_record,
     );
     if compiler_inferred {
@@ -4028,7 +5491,106 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         if policy == LifetimeHugepagePolicy::CompilerInferredHugepage
             && backend == LifetimePageBackend::TransparentHugepage
         {
-            state.promote_dense_compiler_inferred_extent(allocated_extent_idx);
+            if let Some(succeeded) = state.promote_dense_compiler_long_extent(allocated_extent_idx)
+            {
+                COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+                if succeeded {
+                    COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+    let mut compiler_directed_collapse_base = None;
+    if compiler_directed {
+        if compiler_directed_telemetry {
+            match class {
+                LifetimePlacementClass::Ephemeral => {
+                    state.compiler_directed_short_routes =
+                        state.compiler_directed_short_routes.saturating_add(1);
+                    state.compiler_directed_short_requested_bytes = state
+                        .compiler_directed_short_requested_bytes
+                        .saturating_add(layout.size());
+                    state.compiler_directed_short_slot_bytes = state
+                        .compiler_directed_short_slot_bytes
+                        .saturating_add(geometry.slot_size);
+                }
+                LifetimePlacementClass::LongLived => {
+                    state.compiler_directed_long_routes =
+                        state.compiler_directed_long_routes.saturating_add(1);
+                    state.compiler_directed_long_requested_bytes = state
+                        .compiler_directed_long_requested_bytes
+                        .saturating_add(layout.size());
+                    state.compiler_directed_long_slot_bytes = state
+                        .compiler_directed_long_slot_bytes
+                        .saturating_add(geometry.slot_size);
+                }
+                LifetimePlacementClass::Unknown => unreachable!(),
+            }
+            if !geometry.adaptive_trailer {
+                state.compiler_directed_routes_without_trailer = state
+                    .compiler_directed_routes_without_trailer
+                    .saturating_add(1);
+            }
+        }
+        if policy == LifetimeHugepagePolicy::CompilerDirectedHugepage
+            && class == LifetimePlacementClass::LongLived
+            && backend == LifetimePageBackend::TransparentHugepage
+        {
+            if let Some(prepared) =
+                state.prepare_full_compiler_directed_long_collapse(allocated_extent_idx)
+            {
+                if compiler_directed_telemetry {
+                    state.compiler_directed_density_promotion_attempts = state
+                        .compiler_directed_density_promotion_attempts
+                        .saturating_add(1);
+                    if prepared.is_err() {
+                        state.compiler_directed_density_promotion_errors = state
+                            .compiler_directed_density_promotion_errors
+                            .saturating_add(1);
+                    }
+                }
+                if let Ok(extent_base) = prepared {
+                    compiler_directed_collapse_base = Some(extent_base);
+                }
+            }
+        }
+    }
+    let adaptive_collapse_base = if policy.is_adaptive_thp()
+        && backend == LifetimePageBackend::TransparentHugepage
+        && class == LifetimePlacementClass::LongLived
+    {
+        state.prepare_dense_adaptive_long_collapse(allocated_extent_idx)
+    } else {
+        None
+    };
+    drop(state);
+    if let Some(extent_base) = adaptive_collapse_base {
+        let outcome = sys_alloc::collapse_transparent_hugepage(
+            extent_base as *mut u8,
+            LIFETIME_HUGEPAGE_EXTENT_BYTES,
+        );
+        ARENA.lock().finish_dense_thp_collapse(extent_base, outcome);
+    }
+    if let Some(extent_base) = compiler_directed_collapse_base {
+        let outcome = sys_alloc::collapse_transparent_hugepage(
+            extent_base as *mut u8,
+            LIFETIME_HUGEPAGE_EXTENT_BYTES,
+        );
+        let succeeded = outcome.is_ok();
+        let mut state = ARENA.lock();
+        state.finish_dense_thp_collapse(extent_base, outcome);
+        if compiler_directed_telemetry {
+            if succeeded {
+                state.compiler_directed_density_promotion_successes = state
+                    .compiler_directed_density_promotion_successes
+                    .saturating_add(1);
+            } else {
+                state.compiler_directed_density_promotion_errors = state
+                    .compiler_directed_density_promotion_errors
+                    .saturating_add(1);
+            }
         }
     }
     Some(ptr)
@@ -4036,7 +5598,7 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
 
 #[inline]
 pub(crate) fn owns(ptr: *mut u8) -> bool {
-    if ptr.is_null() || ACTIVE_EXTENTS.load(Ordering::Acquire) == 0 {
+    if ptr.is_null() || LIVE_ARENA_OBJECTS.load(Ordering::Acquire) == 0 {
         return false;
     }
     let base = (ptr as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
@@ -4045,7 +5607,7 @@ pub(crate) fn owns(ptr: *mut u8) -> bool {
 
 /// Return `None` for ordinary pointers and `Some(fits)` for arena pointers.
 pub(crate) fn realloc_in_place_supported(ptr: *mut u8, new_layout: Layout) -> Option<bool> {
-    if ptr.is_null() || ACTIVE_EXTENTS.load(Ordering::Acquire) == 0 {
+    if ptr.is_null() || LIVE_ARENA_OBJECTS.load(Ordering::Acquire) == 0 {
         return None;
     }
     let base = (ptr as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
@@ -4068,7 +5630,7 @@ pub(crate) fn realloc_in_place_supported(ptr: *mut u8, new_layout: Layout) -> Op
 
 /// Release an arena pointer. False means the ordinary backend owns it.
 pub(crate) unsafe fn try_deallocate(ptr: *mut u8) -> bool {
-    if ptr.is_null() || ACTIVE_EXTENTS.load(Ordering::Acquire) == 0 {
+    if ptr.is_null() || LIVE_ARENA_OBJECTS.load(Ordering::Acquire) == 0 {
         return false;
     }
     ARENA.lock().deallocate(ptr)
@@ -4078,9 +5640,10 @@ pub(crate) unsafe fn try_deallocate(ptr: *mut u8) -> bool {
 mod tests {
     use super::*;
     use crate::alloc_api::type_isolation::{
-        LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
-        LIFETIME_HINT_LONG_LIVED,
+        LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
+        LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT, LIFETIME_HINT_LONG_LIVED,
     };
+    use alloc::vec::Vec;
 
     static COMPILER_INFERRED_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -4103,6 +5666,10 @@ mod tests {
             LifetimePlacementClass::LongLived
         );
         assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE),
+            LifetimePlacementClass::Unknown
+        );
+        assert_eq!(
             compiler_bounded_lifetime_placement_class(LIFETIME_HINT_EPHEMERAL),
             LifetimePlacementClass::Unknown
         );
@@ -4114,6 +5681,250 @@ mod tests {
             compiler_bounded_lifetime_placement_class(LIFETIME_HINT_LOCAL_DROP_FACT),
             LifetimePlacementClass::Unknown
         );
+        assert_eq!(
+            compiler_bounded_lifetime_placement_class(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE),
+            LifetimePlacementClass::Unknown
+        );
+        assert!(dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(4 * 1024, 8).unwrap()
+        ));
+        assert!(dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(32 * 1024, 8).unwrap()
+        ));
+        assert!(!dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(4 * 1024 - 1, 8).unwrap()
+        ));
+        assert!(!dynamic_buffer_observation_layout_admitted(
+            Layout::from_size_align(32 * 1024 + 1, 8).unwrap()
+        ));
+        if COMPILER_DIRECTED_LONG_MAX_BYTES >= COMPILER_DIRECTED_LONG_MIN_BYTES {
+            for size in [
+                COMPILER_DIRECTED_LONG_MIN_BYTES,
+                COMPILER_DIRECTED_LONG_MAX_BYTES,
+            ] {
+                let layout = Layout::from_size_align(size, 8).unwrap();
+                assert!(compiler_directed_long_layout_admitted(
+                    layout,
+                    LIFETIME_HINT_LONG_LIVED
+                ));
+                assert!(!compiler_directed_long_layout_admitted(
+                    layout,
+                    LIFETIME_HINT_EPHEMERAL
+                ));
+                assert!(!compiler_directed_long_layout_admitted(layout, 0));
+            }
+            for size in [
+                COMPILER_DIRECTED_LONG_MIN_BYTES - 1,
+                COMPILER_DIRECTED_LONG_MAX_BYTES + 1,
+            ] {
+                assert!(!compiler_directed_long_layout_admitted(
+                    Layout::from_size_align(size, 8).unwrap(),
+                    LIFETIME_HINT_LONG_LIVED
+                ));
+            }
+        } else {
+            assert!(!compiler_directed_long_layout_admitted(
+                Layout::from_size_align(COMPILER_DIRECTED_LONG_MIN_BYTES, 8).unwrap(),
+                LIFETIME_HINT_LONG_LIVED
+            ));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dynamic_buffer_observation_stays_ordinary_until_runtime_confirms_long() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+
+        let candidate = AllocationMetadata::for_type(0xADAA_4103)
+            .with_module(0xA110_C413)
+            .with_lifetime_hint(LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE);
+
+        // Compiler candidates outside the actual 4--32 KiB Layout band never
+        // enter adaptive state or acquire an arena extent.
+        let tiny = Layout::from_size_align(1024, 8).unwrap();
+        assert!(unsafe { try_allocate(tiny, candidate.with_callsite(0x51_D0)) }.is_none());
+        let after_tiny = lifetime_hugepage_stats_snapshot();
+        assert_eq!(after_tiny.adaptive_site_count, 0);
+        assert_eq!(after_tiny.current_extents, 0);
+
+        // A short-lived borrowed Vec site receives bounded observation on
+        // ordinary pages and then becomes a sampled/bypassed Short site.
+        let short_layout = Layout::from_size_align(8 * 1024, 8).unwrap();
+        let short_metadata = candidate.with_callsite(0x51_D1);
+        for _ in 0..ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            let ptr = unsafe { try_allocate(short_layout, short_metadata) }
+                .expect("unconfirmed candidate should be sampled on ordinary pages");
+            let state = ARENA.lock();
+            let base = ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::Ordinary)
+            );
+            drop(state);
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        assert!(unsafe { try_allocate(short_layout, short_metadata) }.is_none());
+
+        // An independent candidate also trains on ordinary pages. Only the
+        // allocation after eight decisive Long outcomes enters the Long lane.
+        let long_layout = Layout::from_size_align(16 * 1024, 8).unwrap();
+        let long_metadata = candidate.with_callsite(0x51_D2);
+        for _ in 0..ADAPTIVE_MIN_DECISIVE_SAMPLES {
+            let ptr = unsafe { try_allocate(long_layout, long_metadata) }
+                .expect("unconfirmed candidate should remain observable");
+            let state = ARENA.lock();
+            let base = ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::Ordinary)
+            );
+            drop(state);
+            ARENA
+                .lock()
+                .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+
+        let confirmed_ptr = unsafe { try_allocate(long_layout, long_metadata) }
+            .expect("runtime-confirmed Long site should enter the Long lane");
+        {
+            let state = ARENA.lock();
+            let base = confirmed_ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            assert_eq!(
+                state.extents[idx].requested_backing,
+                Some(RequestedBacking::EpochCandidate)
+            );
+        }
+        let mut observations = [LifetimeAdaptiveSiteSnapshot::empty(); 2];
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut observations),
+            2
+        );
+        let short = observations
+            .iter()
+            .find(|row| row.callsite == 0x51_D1)
+            .unwrap();
+        let long = observations
+            .iter()
+            .find(|row| row.callsite == 0x51_D2)
+            .unwrap();
+        assert_eq!(short.latest_prediction, AdaptivePrediction::Short as u8);
+        assert_eq!(
+            short.latest_static_prior,
+            LifetimePlacementClass::Unknown as u8
+        );
+        assert_eq!(short.short_outcomes, ADAPTIVE_MIN_DECISIVE_SAMPLES as usize);
+        assert_eq!(long.latest_prediction, AdaptivePrediction::Long as u8);
+        assert_eq!(
+            long.latest_static_prior,
+            LifetimePlacementClass::Unknown as u8
+        );
+        assert_eq!(long.long_outcomes, ADAPTIVE_MIN_DECISIVE_SAMPLES as usize);
+
+        assert!(unsafe { try_deallocate(confirmed_ptr) });
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_profile_policy_masks_static_long_prior_and_regular_adaptive_restores_it() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        let layout = Layout::from_size_align(16 * 1024, 8).unwrap();
+        let metadata = AllocationMetadata::for_type(0xADAA_4111)
+            .with_module(0xA110_C421)
+            .with_callsite(0x51_E1)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeProfileHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+        let runtime_only = unsafe { try_allocate(layout, metadata) }
+            .expect("runtime-profile policy should cold-track the exact site");
+        {
+            let state = ARENA.lock();
+            let base = runtime_only as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            let region_idx =
+                (runtime_only as usize - base) / LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+            assert_eq!(
+                state.extents[idx].regions[region_idx]
+                    .identity
+                    .lifetime_hint,
+                0
+            );
+        }
+        let mut runtime_only_rows = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut runtime_only_rows),
+            1
+        );
+        assert_eq!(
+            runtime_only_rows[0].latest_static_prior,
+            LifetimePlacementClass::Unknown as u8
+        );
+        assert_eq!(
+            runtime_only_rows[0].latest_prediction,
+            AdaptivePrediction::Cold as u8
+        );
+        assert!(unsafe { try_deallocate(runtime_only) });
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+        let adaptive_with_prior = unsafe { try_allocate(layout, metadata) }
+            .expect("regular adaptive policy should use the static prior");
+        {
+            let state = ARENA.lock();
+            let base = adaptive_with_prior as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            let region_idx =
+                (adaptive_with_prior as usize - base) / LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+            assert_eq!(
+                state.extents[idx].regions[region_idx]
+                    .identity
+                    .lifetime_hint,
+                LIFETIME_HINT_LONG_LIVED
+            );
+        }
+        let mut prior_rows = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+        assert_eq!(lifetime_hugepage_adaptive_site_snapshot(&mut prior_rows), 1);
+        assert_eq!(
+            prior_rows[0].latest_static_prior,
+            LifetimePlacementClass::LongLived as u8
+        );
+        assert_eq!(
+            prior_rows[0].latest_prediction,
+            AdaptivePrediction::Cold as u8
+        );
+        assert!(unsafe { try_deallocate(adaptive_with_prior) });
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
     }
 
     #[test]
@@ -4183,6 +5994,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn compiler_inferred_policy_bypasses_prelock_and_routes_long_without_trailers() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::CompilerInferredHugepage
@@ -4268,7 +6080,12 @@ mod tests {
             assert!(unsafe { try_deallocate(ptr) });
         }
         let released = lifetime_hugepage_stats_snapshot();
-        assert!(released.all_mappings_released);
+        if routed.compiler_inferred_density_promotion_successes == 1 {
+            assert!(released.all_mappings_released);
+        } else {
+            assert_eq!(released.current_retained_empty_extents, 1);
+            assert!(!released.all_mappings_released);
+        }
         assert_eq!(
             released.compiler_inferred_direct_long_deallocations,
             ROUTES_TO_DENSITY_THRESHOLD
@@ -4286,6 +6103,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn compiler_inferred_ordinary_matches_admission_and_disables_thp() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::CompilerInferredOrdinary
@@ -4355,7 +6173,8 @@ mod tests {
             assert!(unsafe { try_deallocate(ptr) });
         }
         let released = lifetime_hugepage_stats_snapshot();
-        assert!(released.all_mappings_released);
+        assert_eq!(released.current_retained_empty_extents, 1);
+        assert!(!released.all_mappings_released);
         assert_eq!(
             released.compiler_inferred_direct_long_deallocations,
             MATCHED_ROUTES
@@ -4365,6 +6184,437 @@ mod tests {
             LifetimeHugepagePolicy::Disabled
         ));
         assert!(lifetime_hugepage_stats_reset());
+    }
+
+    fn retention_test_extent(
+        requested_backing: RequestedBacking,
+        backing: ActualBacking,
+    ) -> Extent {
+        Extent {
+            base: LIFETIME_HUGEPAGE_EXTENT_BYTES,
+            slot_size: 4096,
+            payload_capacity: 4096,
+            region_capacity: LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / 4096,
+            live: 0,
+            adaptive_confirmed_long_live: 0,
+            bucket: 0,
+            regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
+            lifetime_class: LifetimePlacementClass::LongLived,
+            cohort_epoch: 0,
+            requested_backing: Some(requested_backing),
+            backing,
+            promoted_reuse_identity: None,
+            promoted_reuse_cycle_full: false,
+            adaptive_trailer: false,
+            available_prev: NONE,
+            available_next: NONE,
+            on_available_list: false,
+            retained_empty_prev: NONE,
+            retained_empty_next: NONE,
+            on_retained_empty_list: false,
+            next_free_descriptor: NONE,
+        }
+    }
+
+    #[test]
+    fn empty_extent_retention_requires_exact_policy_and_successful_backing() {
+        let ordinary = retention_test_extent(RequestedBacking::Ordinary, ActualBacking::Ordinary);
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::SegregatedOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+            &ordinary
+        ));
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::SegregatedOrdinary,
+            LifetimePageBackend::ExplicitHugeTLB,
+            &ordinary
+        ));
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerInferredOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+            &ordinary
+        ));
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::LongLivedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &ordinary
+        ));
+
+        let mut adaptive_ordinary = ordinary;
+        adaptive_ordinary.adaptive_trailer = true;
+        adaptive_ordinary.lifetime_class = LifetimePlacementClass::Ephemeral;
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_ordinary
+        ));
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_ordinary
+        ));
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::SegregatedOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_ordinary
+        ));
+
+        let eager_thp = retention_test_extent(
+            RequestedBacking::LargePage,
+            ActualBacking::ThpAdvisedUnverified,
+        );
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::LongLivedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &eager_thp
+        ));
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerInferredHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &eager_thp
+        ));
+
+        let candidate = retention_test_extent(
+            RequestedBacking::EpochCandidate,
+            ActualBacking::ThpCandidateNoHugepage,
+        );
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerInferredHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &candidate
+        ));
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerDirectedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &candidate
+        ));
+        let mut adaptive_candidate = candidate;
+        adaptive_candidate.adaptive_trailer = true;
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_candidate
+        ));
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerInferredHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_candidate
+        ));
+        adaptive_candidate.adaptive_confirmed_long_live = 1;
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &adaptive_candidate
+        ));
+        for promoted in [
+            ActualBacking::ThpAdvisedUnverified,
+            ActualBacking::ThpCollapseSucceededPointInTime,
+        ] {
+            let mut promoted_candidate =
+                retention_test_extent(RequestedBacking::EpochCandidate, promoted);
+            assert!(!empty_extent_retention_eligible(
+                LifetimeHugepagePolicy::CompilerInferredHugepage,
+                LifetimePageBackend::TransparentHugepage,
+                &promoted_candidate
+            ));
+            promoted_candidate.adaptive_trailer = true;
+            assert!(!empty_extent_retention_eligible(
+                LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+                LifetimePageBackend::TransparentHugepage,
+                &promoted_candidate
+            ));
+        }
+
+        let mut keyed_promoted = retention_test_extent(
+            RequestedBacking::EpochCandidate,
+            ActualBacking::ThpCollapseSucceededPointInTime,
+        );
+        keyed_promoted.promoted_reuse_identity = Some(PromotedReuseIdentity {
+            arena: ArenaIdentity {
+                type_id: 1,
+                module_id: 2,
+                flags: 0,
+                lifetime_hint: LIFETIME_HINT_LONG_LIVED,
+                placement_hint: 0,
+            },
+            callsite: 3,
+        });
+        keyed_promoted.promoted_reuse_cycle_full = true;
+        assert!(empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerDirectedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &keyed_promoted
+        ));
+        keyed_promoted.promoted_reuse_cycle_full = false;
+        assert!(!empty_extent_retention_eligible(
+            LifetimeHugepagePolicy::CompilerDirectedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+            &keyed_promoted
+        ));
+
+        for failed in [
+            ActualBacking::ThpAdviceFailed,
+            ActualBacking::ThpCandidateNoHugepageAdviceFailed,
+            ActualBacking::Hugetlb,
+            ActualBacking::HugetlbFallback,
+        ] {
+            let extent = retention_test_extent(RequestedBacking::LargePage, failed);
+            assert!(!empty_extent_retention_eligible(
+                LifetimeHugepagePolicy::LongLivedHugepage,
+                LifetimePageBackend::TransparentHugepage,
+                &extent
+            ));
+            let mut adaptive_extent =
+                retention_test_extent(RequestedBacking::EpochCandidate, failed);
+            adaptive_extent.adaptive_trailer = true;
+            assert!(!empty_extent_retention_eligible(
+                LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+                LifetimePageBackend::TransparentHugepage,
+                &adaptive_extent
+            ));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_empty_lru_bounds_reuses_and_trims_static_ordinary_extents() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure_with_backend(
+            LifetimeHugepagePolicy::SegregatedOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(24 * 1024, 64).unwrap();
+        let geometry = slot_geometry(layout, LifetimePlacementClass::LongLived, false).unwrap();
+        let extent_capacity = geometry.region_capacity * IDENTITY_REGIONS_PER_EXTENT;
+        let extent_count = LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY + 1;
+        let allocation_count = extent_count * extent_capacity;
+        let long_metadata = AllocationMetadata::for_type(0xE11E_0001)
+            .with_module(0xE11E_1001)
+            .with_callsite(0xE11E_2001)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+        let mut pointers = Vec::with_capacity(allocation_count);
+        for _ in 0..allocation_count {
+            pointers.push(unsafe { try_allocate(layout, long_metadata) }.unwrap());
+        }
+        for ptr in pointers.drain(..) {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+
+        let retained = lifetime_hugepage_stats_snapshot();
+        assert_eq!(retained.ordinary_extent_mappings, extent_count);
+        assert_eq!(
+            retained.current_extents,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY
+        );
+        assert_eq!(
+            retained.current_retained_empty_extents,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY
+        );
+        assert_eq!(
+            retained.current_retained_empty_bytes,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY * LIFETIME_HUGEPAGE_EXTENT_BYTES
+        );
+        assert_eq!(retained.retained_empty_extent_evictions, 1);
+        assert_eq!(
+            retained.peak_retained_empty_extents,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY
+        );
+        assert_eq!(retained.extent_unmaps, 1);
+        assert_eq!(LIVE_ARENA_OBJECTS.load(Ordering::Acquire), 0);
+        assert!(!retained.all_mappings_released);
+
+        for _ in 0..extent_capacity {
+            pointers.push(unsafe { try_allocate(layout, long_metadata) }.unwrap());
+        }
+        let reused = lifetime_hugepage_stats_snapshot();
+        assert_eq!(reused.ordinary_extent_mappings, extent_count);
+        assert_eq!(reused.retained_empty_extent_reuse_hits, 1);
+        assert_eq!(
+            reused.current_retained_empty_extents,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY - 1
+        );
+        for ptr in pointers.drain(..) {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+
+        assert!(lifetime_hugepage_trim_retained_empty_extents());
+        let trimmed = lifetime_hugepage_stats_snapshot();
+        assert_eq!(trimmed.current_retained_empty_extents, 0);
+        assert_eq!(
+            trimmed.retained_empty_extent_trims,
+            LIFETIME_EMPTY_EXTENT_RETENTION_CAPACITY
+        );
+        assert_eq!(trimmed.current_extents, 0);
+        assert!(trimmed.all_mappings_released);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failed_unmap_keeps_detached_epoch_cohort_off_available_list() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure_with_backend(
+            LifetimeHugepagePolicy::EpochCohortHugepage,
+            LifetimePageBackend::TransparentHugepage,
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let long_metadata = AllocationMetadata::for_type(0xE11E_0002)
+            .with_module(0xE11E_1002)
+            .with_callsite(0xE11E_2002)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+        let ptr = unsafe { try_allocate(layout, long_metadata) }.unwrap();
+        let base = (ptr as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        assert_eq!(lifetime_hugepage_advance_epoch(), 2);
+
+        TEST_UNMAP_FAILURE_BASE.store(base, Ordering::Release);
+        let released = unsafe { try_deallocate(ptr) };
+        TEST_UNMAP_FAILURE_BASE.store(0, Ordering::Release);
+        assert!(released);
+
+        {
+            let mut state = ARENA.lock();
+            let idx = state
+                .lookup_extent(base)
+                .expect("failed unmap keeps lookup provenance");
+            assert_eq!(state.extents[idx].cohort_epoch, 1);
+            assert!(!state.extents[idx].on_available_list);
+            assert!(!state.extents[idx].on_retained_empty_list);
+            assert_eq!(state.extent_unmap_failures, 1);
+            assert!(unsafe { state.unmap_empty_extent(idx) });
+        }
+        assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_retained_empty_extents_reuse_trailer_geometry_and_exact_backing() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let arms = [
+            (
+                LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary,
+                AllocationMetadata::for_type(0xE11E_A001)
+                    .with_module(0xE11E_A101)
+                    .with_callsite(0xE11E_A201),
+                false,
+            ),
+            (
+                LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+                AllocationMetadata::for_type(0xE11E_A002)
+                    .with_module(0xE11E_A102)
+                    .with_callsite(0xE11E_A202)
+                    .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED),
+                true,
+            ),
+        ];
+
+        for (policy, metadata, expect_thp) in arms {
+            assert!(lifetime_hugepage_configure(policy));
+            assert!(lifetime_hugepage_stats_reset());
+
+            let first = unsafe { try_allocate(layout, metadata) }.unwrap();
+            if expect_thp {
+                ARENA
+                    .lock()
+                    .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            }
+            assert!(unsafe { try_deallocate(first) });
+            let retained = lifetime_hugepage_stats_snapshot();
+            assert_eq!(retained.current_retained_empty_extents, 1);
+            assert_eq!(retained.adaptive_live_trailers, 0);
+            assert_eq!(retained.retained_empty_extent_insertions, 1);
+            assert_eq!(retained.ordinary_extent_mappings, usize::from(!expect_thp));
+            assert_eq!(retained.thp_extent_mappings, usize::from(expect_thp));
+            assert_eq!(retained.nohugepage_advice_failures, 0);
+
+            let second = unsafe { try_allocate(layout, metadata) }.unwrap();
+            let reused = lifetime_hugepage_stats_snapshot();
+            assert_eq!(
+                reused.retained_empty_extent_reuse_hits, 1,
+                "policy={policy:?} stats={reused:?}"
+            );
+            assert_eq!(reused.current_retained_empty_extents, 0);
+            assert_eq!(reused.ordinary_extent_mappings, usize::from(!expect_thp));
+            assert_eq!(reused.thp_extent_mappings, usize::from(expect_thp));
+            if expect_thp {
+                ARENA
+                    .lock()
+                    .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            }
+            assert!(unsafe { try_deallocate(second) });
+
+            assert!(lifetime_hugepage_trim_retained_empty_extents());
+            let trimmed = lifetime_hugepage_stats_snapshot();
+            assert_eq!(trimmed.current_retained_empty_extents, 0);
+            assert_eq!(trimmed.retained_empty_extent_trims, 1);
+            assert!(trimmed.all_mappings_released);
+        }
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn retained_empty_extents_are_trimmed_before_backing_reconfiguration_and_reset() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let long_metadata = AllocationMetadata::for_type(0xE11E_0002)
+            .with_module(0xE11E_1002)
+            .with_callsite(0xE11E_2002)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+
+        assert!(lifetime_hugepage_configure_with_backend(
+            LifetimeHugepagePolicy::SegregatedOrdinary,
+            LifetimePageBackend::TransparentHugepage,
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        let ordinary = unsafe { try_allocate(layout, long_metadata) }.unwrap();
+        assert!(unsafe { try_deallocate(ordinary) });
+        assert_eq!(
+            lifetime_hugepage_stats_snapshot().current_retained_empty_extents,
+            1
+        );
+
+        assert!(lifetime_hugepage_configure_with_backend(
+            LifetimeHugepagePolicy::LongLivedHugepage,
+            LifetimePageBackend::TransparentHugepage,
+        ));
+        let reconfigured = lifetime_hugepage_stats_snapshot();
+        assert_eq!(reconfigured.current_extents, 0);
+        assert_eq!(reconfigured.retained_empty_extent_trims, 1);
+        let thp = unsafe { try_allocate(layout, long_metadata) }.unwrap();
+        assert!(unsafe { try_deallocate(thp) });
+        let separate_backing = lifetime_hugepage_stats_snapshot();
+        assert_eq!(separate_backing.ordinary_extent_mappings, 1);
+        assert_eq!(separate_backing.thp_extent_mappings, 1);
+
+        assert!(lifetime_hugepage_stats_reset());
+        let reset = lifetime_hugepage_stats_snapshot();
+        assert_eq!(reset.current_extents, 0);
+        assert_eq!(reset.current_retained_empty_extents, 0);
+        assert_eq!(reset.ordinary_extent_mappings, 0);
+        assert_eq!(reset.thp_extent_mappings, 0);
+        assert!(reset.all_mappings_released);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
     }
 
     #[test]
@@ -4433,16 +6683,22 @@ mod tests {
             payload_capacity: size_of::<usize>(),
             region_capacity: LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / size_of::<usize>(),
             live: 1,
+            adaptive_confirmed_long_live: 0,
             bucket: 0,
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: LifetimePlacementClass::LongLived,
             cohort_epoch: 1,
             requested_backing: Some(RequestedBacking::EpochCandidate),
             backing: ActualBacking::ThpCandidateNoHugepage,
+            promoted_reuse_identity: None,
+            promoted_reuse_cycle_full: false,
             adaptive_trailer: false,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
+            retained_empty_prev: NONE,
+            retained_empty_next: NONE,
+            on_retained_empty_list: false,
             next_free_descriptor: NONE,
         };
 
@@ -4464,6 +6720,136 @@ mod tests {
         );
     }
 
+    #[test]
+    fn adaptive_thp_promotion_counts_only_confirmed_long_slot_bytes() {
+        let slot_size = 4096;
+        let threshold_slots = ADAPTIVE_THP_PROMOTION_MIN_CONFIRMED_LIVE_BYTES / slot_size;
+        let mut extent = Extent {
+            base: LIFETIME_HUGEPAGE_EXTENT_BYTES,
+            slot_size,
+            payload_capacity: slot_size - size_of::<AdaptiveSlotTrailer>(),
+            region_capacity: LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / slot_size,
+            live: threshold_slots,
+            adaptive_confirmed_long_live: 0,
+            bucket: 0,
+            regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
+            lifetime_class: LifetimePlacementClass::LongLived,
+            cohort_epoch: 0,
+            requested_backing: Some(RequestedBacking::EpochCandidate),
+            backing: ActualBacking::ThpCandidateNoHugepage,
+            promoted_reuse_identity: None,
+            promoted_reuse_cycle_full: false,
+            adaptive_trailer: true,
+            available_prev: NONE,
+            available_next: NONE,
+            on_available_list: false,
+            retained_empty_prev: NONE,
+            retained_empty_next: NONE,
+            on_retained_empty_list: false,
+            next_free_descriptor: NONE,
+        };
+
+        assert_eq!(
+            adaptive_thp_promotion_eligibility(&extent),
+            ThpPromotionEligibility::LowOccupancy
+        );
+        extent.adaptive_confirmed_long_live = threshold_slots - 1;
+        assert_eq!(
+            adaptive_thp_promotion_eligibility(&extent),
+            ThpPromotionEligibility::LowOccupancy
+        );
+        extent.adaptive_confirmed_long_live = threshold_slots;
+        assert_eq!(
+            adaptive_thp_promotion_eligibility(&extent),
+            ThpPromotionEligibility::Eligible
+        );
+        extent.backing = ActualBacking::ThpAdvisedUnverified;
+        assert_eq!(
+            adaptive_thp_promotion_eligibility(&extent),
+            ThpPromotionEligibility::Ineligible
+        );
+    }
+
+    #[test]
+    fn adaptive_fullness_selection_packs_denser_compatible_extents() {
+        assert!(fullness_candidate_is_better(12, false, Some((3, true))));
+        assert!(fullness_candidate_is_better(12, true, Some((12, false))));
+        assert!(!fullness_candidate_is_better(3, true, Some((12, false))));
+        assert!(!fullness_candidate_is_better(12, false, Some((12, true))));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_fullness_search_chooses_denser_extent_over_list_head() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let geometry = slot_geometry(layout, LifetimePlacementClass::LongLived, true).unwrap();
+        let extent_capacity = geometry.region_capacity * IDENTITY_REGIONS_PER_EXTENT;
+        let second_extent_live = extent_capacity * 3 / 4;
+        let sparse_survivors = 8;
+        let metadata = AllocationMetadata::for_type(0xADAA_1909)
+            .with_module(0xA110_C199)
+            .with_callsite(0x51_AA)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+
+        for _ in 0..ADAPTIVE_PRIOR_VALIDATION_SAMPLES {
+            let training_ptr = unsafe { try_allocate(layout, metadata) }
+                .expect("a pending Long prior should remain tracked");
+            ARENA
+                .lock()
+                .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            assert!(unsafe { try_deallocate(training_ptr) });
+        }
+
+        let mut pointers = Vec::with_capacity(extent_capacity + second_extent_live);
+        for _ in 0..(extent_capacity + second_extent_live) {
+            pointers.push(
+                unsafe { try_allocate(layout, metadata) }
+                    .expect("confirmed Long slots should create two candidate extents"),
+            );
+        }
+        let first_base = pointers[0] as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        let second_base =
+            pointers[extent_capacity] as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        assert_ne!(first_base, second_base);
+
+        ARENA
+            .lock()
+            .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+        for pointer in &pointers[..extent_capacity - sparse_survivors] {
+            assert!(unsafe { try_deallocate(*pointer) });
+        }
+
+        let selected = unsafe { try_allocate(layout, metadata) }
+            .expect("the fullness search should find reusable storage");
+        let selected_base = selected as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        assert_eq!(selected_base, second_base);
+
+        assert!(unsafe { try_deallocate(selected) });
+        for pointer in &pointers[extent_capacity - sparse_survivors..] {
+            assert!(unsafe { try_deallocate(*pointer) });
+        }
+        assert!(lifetime_hugepage_trim_retained_empty_extents());
+        assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[test]
+    fn adaptive_corrupt_trailer_resets_confirmed_long_promotion_credit() {
+        assert_eq!(confirmed_long_live_after_deallocation(12, Some(true)), 11);
+        assert_eq!(confirmed_long_live_after_deallocation(12, Some(false)), 12);
+        assert_eq!(confirmed_long_live_after_deallocation(12, None), 0);
+    }
+
     fn adaptive_test_key(callsite: u64, type_id: u64) -> AdaptiveSiteKey {
         AdaptiveSiteKey {
             callsite,
@@ -4477,7 +6863,7 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_policy_maps_cold_short_ordinary_and_long_thp() {
+    fn adaptive_thp_long_placements_share_density_gated_candidates() {
         assert_eq!(
             LifetimeHugepagePolicy::AdaptiveRuntimeHugepage.requested_backing(
                 AdaptivePrediction::Cold.placement_class(),
@@ -4497,7 +6883,25 @@ mod tests {
                 AdaptivePrediction::Long.placement_class(),
                 LifetimePageBackend::TransparentHugepage,
             ),
-            Some(RequestedBacking::LargePage)
+            Some(RequestedBacking::EpochCandidate)
+        );
+        assert_eq!(
+            requested_backing_for_allocation(
+                LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+                false,
+            ),
+            Some(RequestedBacking::EpochCandidate)
+        );
+        assert_eq!(
+            requested_backing_for_allocation(
+                LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+                true,
+            ),
+            Some(RequestedBacking::EpochCandidate)
         );
         for prediction in [
             AdaptivePrediction::Cold,
@@ -4517,6 +6921,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn adaptive_runtime_ordinary_reuses_force_track_pressure_and_reset() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
@@ -4573,6 +6978,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn adaptive_provisional_long_prior_segregates_without_premature_thp() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
@@ -4595,14 +7001,16 @@ mod tests {
         .expect("a Long prior should use the adaptive Long cohort");
 
         let routed = lifetime_hugepage_stats_snapshot();
-        assert_eq!(routed.ordinary_extent_mappings, 2);
-        assert_eq!(routed.thp_extent_mappings, 0);
+        assert_eq!(routed.ordinary_extent_mappings, 1);
+        assert_eq!(routed.thp_extent_mappings, 1);
+        assert_eq!(routed.thp_candidate_extent_mappings, 1);
         assert_eq!(routed.thp_advice_attempts, 0);
         assert_eq!(routed.live_ephemeral_objects, 1);
         assert_eq!(routed.live_long_lived_objects, 1);
 
         assert!(unsafe { try_deallocate(cold_ptr) });
         assert!(unsafe { try_deallocate(provisional_long_ptr) });
+        assert!(lifetime_hugepage_trim_retained_empty_extents());
         assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::Disabled
@@ -4612,7 +7020,8 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn adaptive_confirmed_long_does_not_reuse_provisional_ordinary_extent() {
+    fn adaptive_confirmed_long_reuses_provisional_candidate_without_early_promotion() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
@@ -4644,9 +7053,13 @@ mod tests {
                 .expect("the provisional ordinary extent must remain live");
             assert_eq!(
                 state.extents[provisional_idx].requested_backing,
-                Some(RequestedBacking::Ordinary)
+                Some(RequestedBacking::EpochCandidate)
             );
             assert_eq!(state.extents[provisional_idx].live, 1);
+            assert_eq!(
+                state.extents[provisional_idx].adaptive_confirmed_long_live,
+                0
+            );
         }
         let confirmed = lifetime_hugepage_stats_snapshot();
         assert_eq!(confirmed.adaptive_long_sites, 1);
@@ -4662,26 +7075,31 @@ mod tests {
                 .expect("the provisional ordinary extent must remain live");
             let confirmed_idx = state
                 .lookup_extent(confirmed_base)
-                .expect("the confirmed THP-requested extent must be indexed");
-            assert_ne!(confirmed_idx, provisional_idx);
-            assert_ne!(confirmed_base, provisional_base);
+                .expect("the shared THP candidate extent must be indexed");
+            assert_eq!(confirmed_idx, provisional_idx);
+            assert_eq!(confirmed_base, provisional_base);
             assert_eq!(
                 state.extents[provisional_idx].requested_backing,
-                Some(RequestedBacking::Ordinary)
+                Some(RequestedBacking::EpochCandidate)
             );
-            assert_eq!(
-                state.extents[confirmed_idx].requested_backing,
-                Some(RequestedBacking::LargePage)
-            );
+            assert_eq!(state.extents[confirmed_idx].adaptive_confirmed_long_live, 1);
+            assert!(matches!(
+                state.extents[confirmed_idx].backing,
+                ActualBacking::ThpCandidateNoHugepage
+                    | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+            ));
         }
 
         let routed = lifetime_hugepage_stats_snapshot();
-        assert_eq!(routed.ordinary_extent_mappings, 1);
+        assert_eq!(routed.ordinary_extent_mappings, 0);
         assert_eq!(routed.thp_extent_mappings, 1);
-        assert_eq!(routed.current_extents, 2);
+        assert_eq!(routed.thp_candidate_extent_mappings, 1);
+        assert_eq!(routed.thp_advice_attempts, 0);
+        assert_eq!(routed.current_extents, 1);
 
         assert!(unsafe { try_deallocate(confirmed_ptr) });
         assert!(unsafe { try_deallocate(provisional_ptr) });
+        assert!(lifetime_hugepage_trim_retained_empty_extents());
         assert!(lifetime_hugepage_stats_snapshot().all_mappings_released);
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::Disabled
@@ -4691,7 +7109,275 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn adaptive_thp_promotes_at_confirmed_long_density_threshold() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let geometry = slot_geometry(layout, LifetimePlacementClass::LongLived, true).unwrap();
+        let threshold_slots =
+            (ADAPTIVE_THP_PROMOTION_MIN_CONFIRMED_LIVE_BYTES + geometry.slot_size - 1)
+                / geometry.slot_size;
+        let metadata = AllocationMetadata::for_type(0xADAA_1908)
+            .with_module(0xA110_C198)
+            .with_callsite(0x51_A9)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+        let provisional_ptr = unsafe { try_allocate(layout, metadata) }
+            .expect("a provisional Long prior should enter a THP candidate");
+
+        for _ in 0..ADAPTIVE_PRIOR_VALIDATION_SAMPLES {
+            let training_ptr = unsafe { try_allocate(layout, metadata) }
+                .expect("a pending Long prior should remain tracked");
+            ARENA
+                .lock()
+                .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+            assert!(unsafe { try_deallocate(training_ptr) });
+        }
+
+        let mut confirmed = Vec::with_capacity(threshold_slots);
+        for _ in 0..(threshold_slots - 1) {
+            confirmed.push(
+                unsafe { try_allocate(layout, metadata) }
+                    .expect("confirmed Long slots should fill the shared candidate"),
+            );
+        }
+        assert_eq!(lifetime_hugepage_stats_snapshot().thp_advice_attempts, 0);
+
+        confirmed.push(
+            unsafe { try_allocate(layout, metadata) }
+                .expect("the density-crossing Long slot should remain routable"),
+        );
+        let promoted = lifetime_hugepage_stats_snapshot();
+        assert_eq!(promoted.current_extents, 1);
+        assert_eq!(promoted.thp_candidate_extent_mappings, 1);
+        assert_eq!(promoted.thp_advice_attempts, 1);
+        assert_eq!(
+            promoted.thp_advice_successes + promoted.thp_advice_errors,
+            1
+        );
+        if promoted.thp_advice_successes == 1 {
+            assert_eq!(promoted.thp_collapse_attempts, 1);
+            assert_eq!(
+                promoted.thp_collapse_successes + promoted.thp_collapse_errors,
+                1
+            );
+            assert_eq!(
+                promoted.current_thp_collapse_confirmed_extents,
+                promoted.thp_collapse_successes
+            );
+        }
+
+        for ptr in confirmed {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        assert!(unsafe { try_deallocate(provisional_ptr) });
+        let released = lifetime_hugepage_stats_snapshot();
+        assert!(released.all_mappings_released);
+        assert_eq!(released.current_thp_collapse_confirmed_extents, 0);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_live_survival_promotes_before_drop_without_retroactive_density_credit() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let metadata = AllocationMetadata::for_type(0xADAA_3001)
+            .with_module(0xA110_C301)
+            .with_callsite(0x51_C1)
+            .with_lifetime_hint(LIFETIME_HINT_LONG_LIVED);
+        let mut survivors = [core::ptr::null_mut(); ADAPTIVE_PRIOR_VALIDATION_SAMPLES as usize];
+        for ptr in &mut survivors {
+            *ptr = unsafe { try_allocate(layout, metadata) }
+                .expect("a pending Long prior should be sampled");
+        }
+        let candidate_base = survivors[0] as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        {
+            let state = ARENA.lock();
+            let idx = state.lookup_extent(candidate_base).unwrap();
+            assert_eq!(state.extents[idx].adaptive_confirmed_long_live, 0);
+        }
+
+        ARENA
+            .lock()
+            .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+        let promoted = lifetime_hugepage_stats_snapshot();
+        assert_eq!(promoted.adaptive_live_survival_registrations, 4);
+        assert_eq!(promoted.adaptive_live_survival_registration_bypasses, 0);
+        assert_eq!(promoted.adaptive_live_survival_scans, 1);
+        assert_eq!(promoted.adaptive_live_survival_slots_examined, 4);
+        assert_eq!(promoted.adaptive_live_survival_observations, 4);
+        assert_eq!(promoted.adaptive_live_survival_promotions, 1);
+        assert_eq!(promoted.adaptive_long_observations, 4);
+        assert_eq!(promoted.adaptive_long_sites, 1);
+        assert_eq!(promoted.adaptive_long_routed_allocations, 0);
+        assert_eq!(promoted.runtime_validated_objects, 4);
+        {
+            let state = ARENA.lock();
+            let idx = state.lookup_extent(candidate_base).unwrap();
+            assert_eq!(state.extents[idx].adaptive_confirmed_long_live, 0);
+        }
+
+        let mut observations = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut observations),
+            1
+        );
+        assert_eq!(observations[0].live_survival_observations, 4);
+        assert_eq!(observations[0].current_live_survival_inflight, 4);
+        assert_eq!(observations[0].completed_outcomes, 0);
+        assert_eq!(observations[0].tracked_inflight, 4);
+        assert_eq!(
+            observations[0].latest_prediction,
+            AdaptivePrediction::Long as u8
+        );
+
+        let future = unsafe { try_allocate(layout, metadata) }
+            .expect("the next allocation should use the learned Long route");
+        assert_eq!(
+            future as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1),
+            candidate_base
+        );
+        let future_routed = lifetime_hugepage_stats_snapshot();
+        assert_eq!(future_routed.adaptive_long_routed_allocations, 1);
+        {
+            let state = ARENA.lock();
+            let idx = state.lookup_extent(candidate_base).unwrap();
+            assert_eq!(state.extents[idx].adaptive_confirmed_long_live, 1);
+        }
+
+        for ptr in survivors {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        let after_completed_survivors = lifetime_hugepage_stats_snapshot();
+        assert_eq!(after_completed_survivors.adaptive_long_observations, 4);
+        assert_eq!(after_completed_survivors.runtime_validated_objects, 4);
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut observations),
+            1
+        );
+        assert_eq!(observations[0].long_outcomes, 4);
+        assert_eq!(observations[0].current_live_survival_inflight, 0);
+        assert_eq!(observations[0].tracked_inflight, 1);
+        assert_eq!(observations[0].completed_outcomes, 4);
+        assert_eq!(
+            observations[0].tracked_allocations,
+            observations[0].completed_outcomes + observations[0].tracked_inflight
+        );
+
+        assert!(unsafe { try_deallocate(future) });
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_live_survival_abstains_below_long_threshold() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        assert!(lifetime_hugepage_adaptive_site_recording_enable());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let metadata = AllocationMetadata::for_type(0xADAA_3002)
+            .with_module(0xA110_C302)
+            .with_callsite(0x51_C2);
+        let ptr = unsafe { try_allocate(layout, metadata) }.unwrap();
+        ARENA
+            .lock()
+            .adaptive_note_pressure((ADAPTIVE_LONG_AGE_BYTES - 1) as usize);
+        let before_drop = lifetime_hugepage_stats_snapshot();
+        assert_eq!(before_drop.adaptive_live_survival_scans, 0);
+        assert_eq!(before_drop.adaptive_live_survival_observations, 0);
+        assert_eq!(before_drop.adaptive_long_sites, 0);
+
+        assert!(unsafe { try_deallocate(ptr) });
+        let after_drop = lifetime_hugepage_stats_snapshot();
+        assert_eq!(after_drop.adaptive_long_observations, 0);
+        assert_eq!(after_drop.adaptive_censored_observations, 1);
+        let mut observations = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+        assert_eq!(
+            lifetime_hugepage_adaptive_site_snapshot(&mut observations),
+            1
+        );
+        assert_eq!(observations[0].live_survival_observations, 0);
+        assert_eq!(observations[0].censored_outcomes, 1);
+        assert_eq!(observations[0].tracked_inflight, 0);
+
+        assert!(lifetime_hugepage_adaptive_site_recording_disable());
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_corrupt_trailer_removes_live_sample_before_slot_reuse() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let metadata = AllocationMetadata::for_type(0xADAA_3003)
+            .with_module(0xA110_C303)
+            .with_callsite(0x51_C3);
+        let ptr = unsafe { try_allocate(layout, metadata) }.unwrap();
+        let payload_capacity = {
+            let state = ARENA.lock();
+            let base = ptr as usize & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+            let idx = state.lookup_extent(base).unwrap();
+            state.extents[idx].payload_capacity
+        };
+        unsafe {
+            let trailer_ptr = ptr.add(payload_capacity).cast::<AdaptiveSlotTrailer>();
+            let mut trailer = trailer_ptr.read();
+            trailer.site_index = u32::MAX;
+            trailer.checksum ^= 1;
+            trailer_ptr.write(trailer);
+        }
+        assert!(unsafe { try_deallocate(ptr) });
+        ARENA
+            .lock()
+            .adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+        let stats = lifetime_hugepage_stats_snapshot();
+        assert_eq!(stats.adaptive_trailer_corruptions, 1);
+        assert_eq!(stats.adaptive_live_survival_observations, 0);
+        assert_eq!(stats.adaptive_long_observations, 0);
+
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn adaptive_pending_prior_stays_out_of_learned_prediction_telemetry() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
         let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
         assert!(lifetime_hugepage_configure(
             LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
@@ -4731,7 +7417,7 @@ mod tests {
         );
         assert_eq!(
             observations[0].latest_prediction,
-            AdaptivePrediction::Cold as u8
+            AdaptivePrediction::Long as u8
         );
         assert_eq!(
             observations[0].latest_static_prior,
@@ -4799,7 +7485,7 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_provisional_long_prior_uses_long_cohort_on_ordinary_pages() {
+    fn adaptive_provisional_and_confirmed_long_share_thp_candidate_backing() {
         let mut site =
             AdaptiveSiteState::new(adaptive_test_key(23, 33), LifetimePlacementClass::LongLived);
         assert_eq!(site.routing_prediction(), AdaptivePrediction::Long);
@@ -4812,7 +7498,7 @@ mod tests {
                 LifetimePageBackend::TransparentHugepage,
                 site.long_placement_confirmed(),
             ),
-            Some(RequestedBacking::Ordinary)
+            Some(RequestedBacking::EpochCandidate)
         );
         for _ in 0..4 {
             let _ = site.observe(Some(true));
@@ -4825,7 +7511,7 @@ mod tests {
                 LifetimePageBackend::TransparentHugepage,
                 site.long_placement_confirmed(),
             ),
-            Some(RequestedBacking::LargePage)
+            Some(RequestedBacking::EpochCandidate)
         );
     }
 
@@ -4860,6 +7546,45 @@ mod tests {
         assert_eq!(guard.maximum_requested_bytes, 128);
         assert_eq!(guard.admitted_allocations, 0);
         assert_eq!(guard.guard_bypasses, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn adaptive_live_survival_due_scan_abstains_from_stale_unmapped_pointer() {
+        let _semantic_guard = crate::alloc_api::type_isolation::semantic_test_guard();
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        {
+            let mut state = ARENA.lock();
+            let site_idx = state
+                .adaptive_site_slot(adaptive_test_key(24, 34), LifetimePlacementClass::Unknown)
+                .unwrap();
+            state.adaptive_live_survivor_register(
+                site_idx,
+                LIFETIME_HUGEPAGE_EXTENT_BYTES as *mut u8,
+                0,
+                AdaptivePrediction::Cold,
+            );
+            state.adaptive_note_pressure(ADAPTIVE_LONG_AGE_BYTES as usize);
+
+            assert_eq!(state.adaptive_live_survival_scans, 1);
+            assert_eq!(state.adaptive_live_survival_slots_examined, 1);
+            assert_eq!(state.adaptive_live_survival_stale_abstentions, 1);
+            assert_eq!(state.adaptive_live_survival_observations, 0);
+            assert!(state.adaptive_live_survivors[site_idx].is_empty());
+            assert_eq!(
+                state.adaptive_live_survivor_active_sites[site_idx / u64::BITS as usize],
+                0
+            );
+            assert_eq!(state.adaptive_live_survivor_next_due_pressure, u64::MAX);
+        }
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
     }
 
     #[test]
@@ -5016,12 +7741,15 @@ mod tests {
         let ptr = storage.as_mut_ptr();
         let trailer = AdaptiveSlotTrailer::new(
             ptr,
-            99,
-            101,
-            3,
-            layout.size(),
-            AdaptivePrediction::Long,
-            LifetimePlacementClass::Ephemeral,
+            AdaptiveAllocationRecord {
+                birth_pressure: 99,
+                site_fingerprint: 101,
+                site_index: 3,
+                requested_size: layout.size(),
+                learned_prediction: AdaptivePrediction::Long,
+                static_hint: LifetimePlacementClass::Ephemeral,
+                confirmed_long_placement: false,
+            },
         );
         assert!(trailer.is_valid(ptr, geometry.payload_capacity));
         assert!(!trailer.is_valid(unsafe { ptr.add(1) }, geometry.payload_capacity));
@@ -5079,9 +7807,28 @@ mod tests {
             AdaptivePrediction::Short,
             LifetimePlacementClass::Ephemeral,
         );
-        observation.note_deallocation(100, ADAPTIVE_EPOCH_BYTES - 1, Some(false));
-        observation.note_deallocation(200, ADAPTIVE_LONG_AGE_BYTES, Some(true));
-        observation.note_deallocation(300, ADAPTIVE_EPOCH_BYTES, None);
+        observation.note_live_survival(ADAPTIVE_LONG_AGE_BYTES, predictor.payload_capacity);
+        observation.note_deallocation(
+            100,
+            ADAPTIVE_EPOCH_BYTES - 1,
+            Some(false),
+            false,
+            predictor.payload_capacity,
+        );
+        observation.note_deallocation(
+            200,
+            ADAPTIVE_LONG_AGE_BYTES,
+            Some(true),
+            true,
+            predictor.payload_capacity,
+        );
+        observation.note_deallocation(
+            300,
+            ADAPTIVE_EPOCH_BYTES,
+            None,
+            false,
+            predictor.payload_capacity,
+        );
 
         let snapshot = observation.snapshot(ADAPTIVE_LONG_AGE_BYTES + 400);
         assert_eq!(snapshot.allocation_count, 5);
@@ -5092,6 +7839,13 @@ mod tests {
         assert_eq!(snapshot.long_outcomes, 1);
         assert_eq!(snapshot.censored_outcomes, 1);
         assert_eq!(snapshot.tracked_inflight, 1);
+        assert_eq!(snapshot.live_survival_observations, 1);
+        assert_eq!(snapshot.current_live_survival_inflight, 0);
+        assert_eq!(snapshot.live_survival_requested_bytes, key.requested_size);
+        assert_eq!(
+            snapshot.live_survival_payload_bytes,
+            predictor.payload_capacity
+        );
         assert_eq!(
             snapshot.inflight_age_lower_bound_bytes,
             ADAPTIVE_LONG_AGE_BYTES

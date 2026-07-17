@@ -106,13 +106,13 @@ const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
 #[cfg(feature = "fixed_heap")]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
-/// Exact-count negative filters for process-visible semantic pointer state.
+/// Exact-count negative filter for process-visible semantic pointer state.
 ///
-/// Global recovery records and retained T/D ownership use separate arrays so
-/// test-only resets cannot erase the other domain. A zero counter proves that
-/// no pointer with the same full-address hash is present; a nonzero counter is
-/// only a conservative slow-path hint. Counters publish before their record and
-/// retire after it, so collisions can add work but can never hide an owner.
+/// Global recovery records and retained T/D ownership contribute to the same
+/// counter array. A zero counter proves that no pointer with the same
+/// full-address hash is present; a nonzero counter is only a conservative
+/// slow-path hint. Counters publish before their record and retire after it, so
+/// collisions can add work but can never hide an owner.
 #[cfg(not(feature = "fixed_heap"))]
 const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 8192;
 #[cfg(feature = "fixed_heap")]
@@ -431,6 +431,18 @@ pub const LIFETIME_HINT_LOCAL_DROP_FACT: u16 = 0xA101;
 /// or forgotten on every accepted path. This value supports controlled routing
 /// experiments; real-program Long classification comes from runtime outcomes.
 pub const LIFETIME_HINT_BOUNDED_PROCESS_LONG: u16 = 0xA102;
+
+/// Compiler-authenticated request to observe an exact dynamic Global Vec or
+/// String buffer site. Covered scopes are borrowed `Vec::reserve*` and owned
+/// `Vec/String::with_capacity` with an existing Return/Escape ownership proof.
+/// This tag carries no placement class: adaptive runtime policy may sample an
+/// admitted 4--32 KiB allocation on ordinary pages, and only a runtime-
+/// confirmed Long prediction may later select Long placement.
+pub const LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE: u16 = 0xA103;
+
+/// Compatibility alias for the first compiler rule that emitted the generic
+/// dynamic-buffer observation tag.
+pub const LIFETIME_HINT_BORROWED_VEC_RESERVE_OBSERVE: u16 = LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE;
 
 /// Compatibility name for the reserved local-Drop fact. The value classifies
 /// as `Unknown` and must not authorize ephemeral placement.
@@ -1150,7 +1162,7 @@ impl SemanticStats {
     fn record_type_cache_wrong_identity_denial(
         &self,
         requested: AllocationMetadata,
-        retained: TypeCacheIdentity,
+        retained: TypeCacheWrongIdentityCandidate,
         layout: Layout,
     ) {
         self.typed_cache_wrong_identity_denials
@@ -1158,17 +1170,18 @@ impl SemanticStats {
         self.last_wrong_identity_requested_type_id
             .store(requested.type_id, Ordering::Relaxed);
         self.last_wrong_identity_retained_type_id
-            .store(retained.type_id, Ordering::Relaxed);
+            .store(retained.identity.type_id, Ordering::Relaxed);
         self.last_wrong_identity_requested_module_id
             .store(requested.module_id, Ordering::Relaxed);
         self.last_wrong_identity_retained_module_id
-            .store(retained.module_id, Ordering::Relaxed);
+            .store(retained.identity.module_id, Ordering::Relaxed);
         self.last_wrong_identity_requested_callsite
             .store(requested.callsite, Ordering::Relaxed);
         self.last_wrong_identity_size
             .store(layout.size(), Ordering::Relaxed);
         self.last_wrong_identity_align
             .store(layout.align(), Ordering::Relaxed);
+        store_last_wrong_identity_retained_ptr(retained.ptr as usize);
     }
 
     #[inline]
@@ -1254,6 +1267,7 @@ impl SemanticStats {
             .store(0, Ordering::Relaxed);
         self.last_wrong_identity_size.store(0, Ordering::Relaxed);
         self.last_wrong_identity_align.store(0, Ordering::Relaxed);
+        store_last_wrong_identity_retained_ptr(0);
         self.delayed_free_enqueues.store(0, Ordering::Relaxed);
         self.delayed_free_flushes.store(0, Ordering::Relaxed);
         self.metadata_pac_auth_signs.store(0, Ordering::Relaxed);
@@ -1725,6 +1739,20 @@ pub struct SemanticScopeDepthSnapshot {
 }
 
 pub static SEMANTIC_STATS: SemanticStats = SemanticStats::new();
+/// ABI-neutral companion for the last stats-only wrong-identity denial.
+///
+/// The public `SemanticStatsSnapshot` remains unchanged. Evaluation reporters
+/// read this value through `semantic_stats_last_wrong_identity_retained_ptr`.
+#[cfg(feature = "stats")]
+static LAST_WRONG_IDENTITY_RETAINED_PTR: AtomicUsize = AtomicUsize::new(0);
+
+#[inline]
+fn store_last_wrong_identity_retained_ptr(ptr: usize) {
+    #[cfg(feature = "stats")]
+    LAST_WRONG_IDENTITY_RETAINED_PTR.store(ptr, Ordering::Relaxed);
+    #[cfg(not(feature = "stats"))]
+    let _ = ptr;
+}
 pub static SEMANTIC_FALLBACK_ATTRIBUTION: SemanticFallbackAttribution =
     SemanticFallbackAttribution::new();
 pub static SEMANTIC_METADATA_VALIDATION: SemanticMetadataValidation =
@@ -2036,6 +2064,25 @@ struct TypeCacheIdentity {
     flags: u32,
     lifetime_hint: u16,
     placement_hint: u16,
+}
+
+/// One authenticated same-layout owner selected by stats-only diagnostics.
+///
+/// This companion keeps the pointer out of `TypeCacheIdentity` and all cache
+/// entries, so enabling the proof signal does not change cache layout or the
+/// production lookup policy.
+#[derive(Clone, Copy)]
+struct TypeCacheWrongIdentityCandidate {
+    identity: TypeCacheIdentity,
+    ptr: *mut u8,
+}
+
+impl TypeCacheWrongIdentityCandidate {
+    #[inline]
+    fn new(identity: TypeCacheIdentity, ptr: *mut u8) -> Self {
+        debug_assert!(!ptr.is_null());
+        Self { identity, ptr }
+    }
 }
 
 impl TypeCacheIdentity {
@@ -2673,7 +2720,11 @@ impl TypeCacheDepotShard {
         cache_key: u64,
         policy_key: u32,
         key_start: usize,
-    ) -> (Option<SegregatedTypeCacheEntry>, Option<TypeCacheIdentity>) {
+        record_foreign: bool,
+    ) -> (
+        Option<SegregatedTypeCacheEntry>,
+        Option<TypeCacheWrongIdentityCandidate>,
+    ) {
         let mut foreign = None;
         let mut offset = 0usize;
         while offset < TYPE_CACHE_DEPOT_KEY_PROBE_LIMIT {
@@ -2700,14 +2751,26 @@ impl TypeCacheDepotShard {
                 self.retained_bytes = self.retained_bytes.saturating_sub(entry.retained_bytes());
                 return (Some(entry), foreign);
             }
-            if foreign.is_none()
+            if record_foreign
+                && foreign.is_none()
                 && key.active
                 && key.size == layout.size()
                 && key.align == layout.align()
                 && key.policy_key == policy_key
                 && key.identity != identity
             {
-                foreign = Some(key.identity);
+                let entry_idx = key.head;
+                if key.count == 0 || entry_idx >= TYPE_CACHE_DEPOT_SHARD_SLOTS {
+                    panic!("type-cache depot directory corrupt");
+                }
+                let entry = self.entries[entry_idx];
+                if !entry.matches_cached_key(layout, key.identity, key.cache_key, key.policy_key) {
+                    panic!("type-cache depot directory corrupt");
+                }
+                foreign = Some(TypeCacheWrongIdentityCandidate::new(
+                    key.identity,
+                    entry.ptr,
+                ));
             }
             offset += 1;
         }
@@ -3804,6 +3867,10 @@ static TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES: AtomicUsize = AtomicUsize::new
 static TEST_RETAINED_FILTER_PUBLICATION_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_POINTER_FILTER_SLOW_PATH_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_POINTER_FILTER_FIRST_ZERO_PTR: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_POINTER_FILTER_FIRST_ZERO_PHASE: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 fn pause_after_retained_filter_publication_for_test() {
@@ -3824,6 +3891,21 @@ fn pause_after_pointer_filter_slow_path_for_test() {
         .is_ok()
     {
         while TEST_POINTER_FILTER_SLOW_PATH_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+#[cfg(test)]
+fn pause_after_pointer_filter_first_zero_for_test(ptr: *mut u8) {
+    if TEST_POINTER_FILTER_FIRST_ZERO_PTR.load(Ordering::Acquire) != ptr as usize {
+        return;
+    }
+    if TEST_POINTER_FILTER_FIRST_ZERO_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_POINTER_FILTER_FIRST_ZERO_PHASE.load(Ordering::Acquire) == 2 {
             core::hint::spin_loop();
         }
     }
@@ -4185,9 +4267,19 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
     Mutex::new(GlobalAutoAllocationRecordTable::empty()),
 ];
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
-static GLOBAL_RECOVERY_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+static GLOBAL_SEMANTIC_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
     [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
-static GLOBAL_RETAINED_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+// Isolated unit tests can reset one authority domain while intentionally
+// retaining fixtures from the other. Production has only the combined filter;
+// these shadows record each test domain's exact contribution so a reset can
+// subtract it without erasing the other domain.
+#[cfg(test)]
+static TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS: [AtomicUsize;
+    GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
+#[cfg(test)]
+static TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS: [AtomicUsize;
+    GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
     [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
 #[cfg(test)]
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
@@ -4436,7 +4528,7 @@ unsafe fn current_thread_fast_recovery_maybe_tracks_pointer(ptr: *mut u8) -> boo
 /// Pointer-specific deallocation/reallocation gate.
 ///
 /// A positive result preserves the complete semantic path. A negative result
-/// requires every exact-count recovery/retained filter to be empty for this
+/// requires the exact-count recovery/retained filter to be empty for this
 /// address hash and is therefore safe for the ordinary raw backend path.
 #[inline]
 pub(crate) unsafe fn semantic_runtime_slow_path_enabled_for_pointer(ptr: *mut u8) -> bool {
@@ -5782,9 +5874,9 @@ fn clear_auto_allocation_records() {
         *table = GlobalAutoAllocationRecordTable::empty();
     }
     AUTO_ALLOCATION_RECORD_COUNT.store(0, Ordering::Relaxed);
-    for count in GLOBAL_RECOVERY_POINTER_FILTER.iter() {
-        count.store(0, Ordering::Release);
-    }
+    clear_semantic_pointer_filter_contributions_for_test(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+    );
     AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
     #[cfg(not(feature = "fixed_heap"))]
     AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(false, Ordering::Release);
@@ -9618,7 +9710,11 @@ unsafe fn record_small_exact_type_cache_wrong_identity_denial_if_present(
             && entry.align == layout.align()
             && entry.identity != requested
         {
-            record_stats_type_cache_wrong_identity_denial(metadata, entry.identity, layout);
+            record_stats_type_cache_wrong_identity_denial(
+                metadata,
+                TypeCacheWrongIdentityCandidate::new(entry.identity, entry.ptr),
+                layout,
+            );
             return;
         }
         idx += 1;
@@ -9652,7 +9748,7 @@ unsafe fn push_inline_type_cache_eligible_with_key(
 unsafe fn plain_type_cache_wrong_identity_candidate(
     layout: Layout,
     metadata: AllocationMetadata,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let requested = TypeCacheIdentity::from_metadata(metadata);
     let inline = INLINE_TYPE_CACHE_ENTRY;
     if !inline.is_empty()
@@ -9660,7 +9756,10 @@ unsafe fn plain_type_cache_wrong_identity_candidate(
         && inline.align == layout.align()
         && inline.identity != requested
     {
-        return Some(inline.identity);
+        return Some(TypeCacheWrongIdentityCandidate::new(
+            inline.identity,
+            inline.ptr,
+        ));
     }
 
     let mut slot_idx = 0usize;
@@ -9671,7 +9770,10 @@ unsafe fn plain_type_cache_wrong_identity_candidate(
             && !slot.is_corrupt()
             && (slot.head as usize) & (layout.align() - 1) == 0
         {
-            return Some(slot.identity);
+            return Some(TypeCacheWrongIdentityCandidate::new(
+                slot.identity,
+                slot.head,
+            ));
         }
         slot_idx += 1;
     }
@@ -9943,7 +10045,7 @@ fn segregated_type_cache_entry_wrong_identity_candidate(
     layout: Layout,
     requested: TypeCacheIdentity,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     if entry.is_empty() {
         return None;
     }
@@ -9957,7 +10059,7 @@ fn segregated_type_cache_entry_wrong_identity_candidate(
         && entry.policy_key == policy_key
         && retained != requested
     {
-        Some(retained)
+        Some(TypeCacheWrongIdentityCandidate::new(retained, entry.ptr))
     } else {
         None
     }
@@ -9969,7 +10071,7 @@ unsafe fn segregated_type_cache_wrong_identity_candidate_in_inline_domain(
     requested: TypeCacheIdentity,
     policy_key: u32,
     cache_domain: u8,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let mut index = 0usize;
     while index < inline_segregated_type_cache_capacity(cache_domain) {
         let entry = *inline_segregated_type_cache_entry_at(cache_domain, index);
@@ -9989,7 +10091,7 @@ fn segregated_type_cache_wrong_identity_candidate_in_buckets(
     layout: Layout,
     requested: TypeCacheIdentity,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let mut bucket_index = 0usize;
     while bucket_index < TYPE_CACHE_SLOTS {
         let bucket = cache[bucket_index];
@@ -10014,7 +10116,7 @@ unsafe fn segregated_type_cache_wrong_identity_candidate(
     layout: Layout,
     metadata: AllocationMetadata,
     policy_key: u32,
-) -> Option<TypeCacheIdentity> {
+) -> Option<TypeCacheWrongIdentityCandidate> {
     let requested = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     let candidate = {
@@ -10295,10 +10397,18 @@ unsafe fn pop_type_cache_depot_with_key(
     if TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].load(Ordering::Acquire) == 0 {
         return None;
     }
+    let record_foreign = semantic_stats_recording_flags() & SLOW_PATH_STATS != 0;
     let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
     let old_entries = shard.count;
     let old_bytes = shard.retained_bytes;
-    let (entry, foreign) = shard.pop(layout, identity, cache_key, policy_key, slot);
+    let (entry, foreign) = shard.pop(
+        layout,
+        identity,
+        cache_key,
+        policy_key,
+        slot,
+        record_foreign,
+    );
     if entry.is_some() {
         note_type_cache_depot_occupancy_change(
             old_entries,
@@ -12989,18 +13099,18 @@ fn global_semantic_pointer_filter_index(ptr: *mut u8) -> usize {
 }
 
 #[inline]
-fn increment_semantic_pointer_filter(
-    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
-    ptr: *mut u8,
-) {
+fn increment_semantic_pointer_filter(ptr: *mut u8) {
     if ptr.is_null() {
         panic!("semantic pointer filter cannot publish null");
     }
-    // Every count corresponds to an authoritative recovery or retained-owner
-    // record. Hosted overflow mappings are bounded by `isize::MAX`, while the
-    // fixed-heap and retained-owner tables have much smaller hard capacities,
-    // so a valid live set cannot reach `usize::MAX`.
-    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::AcqRel);
+    // Every count corresponds to an authoritative recovery/retained-owner
+    // record or to its bounded pre-publication interval. Each of the eight
+    // hosted overflow mappings is capped at `isize::MAX` bytes and stores a
+    // multi-word AutoAllocationRecord, while inline/fixed-heap and retained
+    // tables have small fixed capacities. Even if every record hashes here,
+    // their combined valid live set cannot reach `usize::MAX`.
+    let previous = GLOBAL_SEMANTIC_POINTER_FILTER[global_semantic_pointer_filter_index(ptr)]
+        .fetch_add(1, Ordering::AcqRel);
     assert_ne!(
         previous,
         usize::MAX,
@@ -13009,35 +13119,102 @@ fn increment_semantic_pointer_filter(
 }
 
 #[inline]
-fn decrement_semantic_pointer_filter(
-    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
-    ptr: *mut u8,
-) {
+fn decrement_semantic_pointer_filter(ptr: *mut u8) {
     if ptr.is_null() {
         panic!("semantic pointer filter cannot retire null");
     }
-    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::AcqRel);
+    let previous = GLOBAL_SEMANTIC_POINTER_FILTER[global_semantic_pointer_filter_index(ptr)]
+        .fetch_sub(1, Ordering::AcqRel);
     assert_ne!(previous, 0, "semantic pointer filter count underflow");
+}
+
+#[cfg(test)]
+#[inline]
+fn increment_test_semantic_pointer_filter_contribution(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    let previous =
+        contributions[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::Relaxed);
+    assert_ne!(
+        previous,
+        usize::MAX,
+        "test semantic pointer filter contribution exhausted"
+    );
+}
+
+#[cfg(test)]
+#[inline]
+fn decrement_test_semantic_pointer_filter_contribution(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    let previous =
+        contributions[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::Relaxed);
+    assert_ne!(
+        previous, 0,
+        "test semantic pointer filter contribution underflow"
+    );
+}
+
+#[cfg(test)]
+fn clear_semantic_pointer_filter_contributions_for_test(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+) {
+    for (combined, domain) in GLOBAL_SEMANTIC_POINTER_FILTER
+        .iter()
+        .zip(contributions.iter())
+    {
+        let contribution = domain.swap(0, Ordering::AcqRel);
+        if contribution == 0 {
+            continue;
+        }
+        let previous = combined.fetch_sub(contribution, Ordering::AcqRel);
+        assert!(
+            previous >= contribution,
+            "test semantic pointer filter reset underflow"
+        );
+    }
 }
 
 #[inline]
 fn increment_global_recovery_pointer_filter(ptr: *mut u8) {
-    increment_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+    increment_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    increment_test_semantic_pointer_filter_contribution(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn decrement_global_recovery_pointer_filter(ptr: *mut u8) {
-    decrement_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+    decrement_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    decrement_test_semantic_pointer_filter_contribution(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn increment_global_retained_pointer_filter(ptr: *mut u8) {
-    increment_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+    increment_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    increment_test_semantic_pointer_filter_contribution(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn decrement_global_retained_pointer_filter(ptr: *mut u8) {
-    decrement_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+    decrement_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    decrement_test_semantic_pointer_filter_contribution(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
@@ -13046,8 +13223,66 @@ fn global_semantic_pointer_maybe_tracked(ptr: *mut u8) -> bool {
         return false;
     }
     let idx = global_semantic_pointer_filter_index(ptr);
-    GLOBAL_RECOVERY_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
-        || GLOBAL_RETAINED_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+    let count = &GLOBAL_SEMANTIC_POINTER_FILTER[idx];
+    // Recheck an observed zero once. The former split-domain gate also made
+    // two acquire observations on its common negative path; retaining that
+    // budget gives a concurrent publisher another chance to conservatively
+    // select exact lookup without restoring a second 64 KiB counter array.
+    #[cfg(test)]
+    {
+        let first = count.load(Ordering::Acquire);
+        if first == 0 {
+            pause_after_pointer_filter_first_zero_for_test(ptr);
+        }
+        first != 0 || count.load(Ordering::Acquire) != 0
+    }
+    #[cfg(not(test))]
+    {
+        count.load(Ordering::Acquire) != 0 || count.load(Ordering::Acquire) != 0
+    }
+}
+
+#[cfg(feature = "typeiso_pointer_filter_bench")]
+#[doc(hidden)]
+pub fn __unialloc_typeiso_pointer_filter_bench_index(ptr: usize, _retained: bool) -> usize {
+    global_semantic_pointer_filter_index(ptr as *mut u8)
+}
+
+#[cfg(feature = "typeiso_pointer_filter_bench")]
+#[doc(hidden)]
+pub fn __unialloc_typeiso_pointer_filter_bench_count(ptr: usize, _retained: bool) -> usize {
+    GLOBAL_SEMANTIC_POINTER_FILTER[global_semantic_pointer_filter_index(ptr as *mut u8)]
+        .load(Ordering::Acquire)
+}
+
+#[cfg(feature = "typeiso_pointer_filter_bench")]
+#[doc(hidden)]
+pub fn __unialloc_typeiso_pointer_filter_bench_round_trip(
+    ptr: usize,
+    retained: bool,
+    iterations: usize,
+) {
+    assert_ne!(ptr, 0, "benchmark pointer must be non-null");
+    for _ in 0..iterations {
+        if retained {
+            increment_global_retained_pointer_filter(ptr as *mut u8);
+            decrement_global_retained_pointer_filter(ptr as *mut u8);
+        } else {
+            increment_global_recovery_pointer_filter(ptr as *mut u8);
+            decrement_global_recovery_pointer_filter(ptr as *mut u8);
+        }
+    }
+}
+
+#[cfg(feature = "typeiso_pointer_filter_bench")]
+#[doc(hidden)]
+pub fn __unialloc_typeiso_pointer_filter_bench_query(ptr: usize, iterations: usize) -> usize {
+    assert_ne!(ptr, 0, "benchmark pointer must be non-null");
+    let mut hits = 0usize;
+    for _ in 0..iterations {
+        hits += usize::from(global_semantic_pointer_maybe_tracked(ptr as *mut u8));
+    }
+    hits
 }
 
 #[inline]
@@ -13796,9 +14031,9 @@ fn clear_global_type_cache_ownership_for_test() {
         *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
         shard_idx += 1;
     }
-    for count in GLOBAL_RETAINED_POINTER_FILTER.iter() {
-        count.store(0, Ordering::Release);
-    }
+    clear_semantic_pointer_filter_contributions_for_test(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+    );
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
 }
 
@@ -16605,6 +16840,23 @@ pub fn semantic_stats_snapshot() -> SemanticStatsSnapshot {
     SEMANTIC_STATS.snapshot()
 }
 
+/// Return the exact retained address selected by the latest wrong-identity
+/// denial recorded while aggregate semantic stats were enabled.
+///
+/// Zero means that no such event has been recorded since the latest stats
+/// reset. Keeping this proof value in a companion atomic preserves the
+/// size-negotiated `SemanticStatsSnapshot` ABI.
+pub fn semantic_stats_last_wrong_identity_retained_ptr() -> usize {
+    #[cfg(feature = "stats")]
+    {
+        LAST_WRONG_IDENTITY_RETAINED_PTR.load(Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "stats"))]
+    {
+        0
+    }
+}
+
 pub fn semantic_fallback_attribution_snapshot() -> SemanticFallbackAttributionSnapshot {
     SEMANTIC_FALLBACK_ATTRIBUTION.snapshot()
 }
@@ -17061,7 +17313,7 @@ fn record_stats_type_cache_bypass(metadata: AllocationMetadata) {
 #[inline]
 fn record_stats_type_cache_wrong_identity_denial(
     requested: AllocationMetadata,
-    retained: TypeCacheIdentity,
+    retained: TypeCacheWrongIdentityCandidate,
     layout: Layout,
 ) {
     let flags = semantic_stats_recording_flags();
@@ -18757,6 +19009,7 @@ mod tests {
     use core::alloc::GlobalAlloc;
     use core::mem::{align_of, size_of, size_of_val, MaybeUninit};
     use std::boxed::Box;
+    use std::sync::Barrier;
     use std::thread;
     use std::vec::Vec;
 
@@ -19049,6 +19302,46 @@ mod tests {
     impl Drop for RetainedOnlyLifecycleOverride {
         fn drop(&mut self) {
             TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.store(false, Ordering::Release);
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    struct PointerFilterFirstZeroHookGuard;
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl PointerFilterFirstZeroHookGuard {
+        fn arm(ptr: *mut u8) -> Self {
+            assert!(!ptr.is_null());
+            assert_eq!(
+                TEST_POINTER_FILTER_FIRST_ZERO_PTR.swap(ptr as usize, Ordering::AcqRel),
+                0,
+                "pointer-filter first-zero hook target must start idle"
+            );
+            assert!(
+                TEST_POINTER_FILTER_FIRST_ZERO_PHASE
+                    .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok(),
+                "pointer-filter first-zero hook phase must start idle"
+            );
+            Self
+        }
+
+        fn wait_for_first_zero(&self) {
+            while TEST_POINTER_FILTER_FIRST_ZERO_PHASE.load(Ordering::Acquire) != 2 {
+                core::hint::spin_loop();
+            }
+        }
+
+        fn release_query(&self) {
+            TEST_POINTER_FILTER_FIRST_ZERO_PHASE.store(3, Ordering::Release);
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl Drop for PointerFilterFirstZeroHookGuard {
+        fn drop(&mut self) {
+            TEST_POINTER_FILTER_FIRST_ZERO_PHASE.store(0, Ordering::Release);
+            TEST_POINTER_FILTER_FIRST_ZERO_PTR.store(0, Ordering::Release);
         }
     }
 
@@ -23334,6 +23627,262 @@ mod tests {
         assert!(!global_semantic_pointer_maybe_tracked(first));
     }
 
+    #[cfg(not(feature = "reclaim_checks"))]
+    #[test]
+    fn semantic_pointer_filter_second_acquire_observes_publication_after_first_zero() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _retained_only = RetainedOnlyLifecycleOverride::active();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F118)
+            .with_module(0xC0DE_F118)
+            .with_callsite(0xA110_F118)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let ptr = 0x2000usize as *mut u8;
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+
+        let hook = PointerFilterFirstZeroHookGuard::arm(ptr);
+        let ptr_addr = ptr as usize;
+        let query = thread::spawn(move || unsafe {
+            semantic_runtime_slow_path_enabled_for_pointer(ptr_addr as *mut u8)
+        });
+        hook.wait_for_first_zero();
+        let recorded = unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) };
+        hook.release_query();
+        let selected_slow_path = query.join().expect("pointer-filter slow-path query");
+
+        assert!(recorded, "concurrent recovery publication must succeed");
+        assert!(
+            selected_slow_path,
+            "the second acquire must observe publication after the first zero"
+        );
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(ptr, layout, true),
+            Some(metadata)
+        );
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_refcounts_mixed_authority_colliders() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F119)
+            .with_module(0xC0DE_F119)
+            .with_callsite(0xA110_F119)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let recovery_ptr = 0x3000usize as *mut u8;
+        let filter_idx = global_semantic_pointer_filter_index(recovery_ptr);
+        let mut candidate = 0x3008usize;
+        let retained_ptr = loop {
+            let ptr = candidate as *mut u8;
+            if global_semantic_pointer_filter_index(ptr) == filter_idx {
+                break ptr;
+            }
+            candidate = candidate.checked_add(8).unwrap();
+        };
+        let combined_count = || GLOBAL_SEMANTIC_POINTER_FILTER[filter_idx].load(Ordering::Acquire);
+
+        assert_eq!(combined_count(), 0);
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(combined_count(), 1);
+        assert_eq!(
+            register_global_type_cache_ownership(retained_ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 2);
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, true),
+            Some(metadata)
+        );
+        assert_eq!(combined_count(), 1);
+        assert!(global_semantic_pointer_maybe_tracked(recovery_ptr));
+
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(combined_count(), 2);
+        assert!(unregister_global_type_cache_ownership(retained_ptr));
+        assert_eq!(combined_count(), 1);
+        assert!(global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, true),
+            Some(metadata)
+        );
+        assert_eq!(combined_count(), 0);
+        assert!(!global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(
+            register_global_type_cache_ownership(retained_ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 2);
+        clear_auto_allocation_records();
+        assert_eq!(
+            combined_count(),
+            1,
+            "resetting recovery fixtures must preserve retained contributions"
+        );
+        clear_global_type_cache_ownership_for_test();
+        assert_eq!(combined_count(), 0);
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_preserves_concurrent_cross_domain_swaps() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F120)
+            .with_module(0xC0DE_F120)
+            .with_callsite(0xA110_F120)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let recovery_ptr = 0x4000usize as *mut u8;
+        let filter_idx = global_semantic_pointer_filter_index(recovery_ptr);
+        let mut candidate = 0x4008usize;
+        let retained_ptr = loop {
+            let ptr = candidate as *mut u8;
+            if global_semantic_pointer_filter_index(ptr) == filter_idx {
+                break ptr;
+            }
+            candidate = candidate.checked_add(8).unwrap();
+        };
+        let combined_count = || GLOBAL_SEMANTIC_POINTER_FILTER[filter_idx].load(Ordering::Acquire);
+
+        assert_eq!(
+            register_global_type_cache_ownership(retained_ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 1);
+
+        let first_swap_barrier = Barrier::new(3);
+        let (recovery_inserted, retained_removed) = thread::scope(|scope| {
+            let recovery_barrier = &first_swap_barrier;
+            let retained_barrier = &first_swap_barrier;
+            let recovery_addr = recovery_ptr as usize;
+            let retained_addr = retained_ptr as usize;
+            let recovery = scope.spawn(move || {
+                recovery_barrier.wait();
+                let result = unsafe {
+                    record_global_auto_allocation_metadata(
+                        recovery_addr as *mut u8,
+                        layout,
+                        metadata,
+                    )
+                };
+                recovery_barrier.wait();
+                result
+            });
+            let retained = scope.spawn(move || {
+                retained_barrier.wait();
+                let result = unregister_global_type_cache_ownership(retained_addr as *mut u8);
+                retained_barrier.wait();
+                result
+            });
+            first_swap_barrier.wait();
+            first_swap_barrier.wait();
+            (
+                recovery.join().expect("recovery publication worker"),
+                retained.join().expect("retained retirement worker"),
+            )
+        });
+
+        assert!(recovery_inserted);
+        assert!(retained_removed);
+        assert_eq!(combined_count(), 1);
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, false),
+            Some(metadata)
+        );
+        assert!(!global_type_cache_contains_ptr(retained_ptr));
+        assert!(global_semantic_pointer_maybe_tracked(recovery_ptr));
+        assert!(global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        let second_swap_barrier = Barrier::new(3);
+        let (recovery_removed, retained_inserted) = thread::scope(|scope| {
+            let recovery_barrier = &second_swap_barrier;
+            let retained_barrier = &second_swap_barrier;
+            let recovery_addr = recovery_ptr as usize;
+            let retained_addr = retained_ptr as usize;
+            let recovery = scope.spawn(move || {
+                recovery_barrier.wait();
+                let result = recover_global_auto_allocation_record_metadata(
+                    recovery_addr as *mut u8,
+                    layout,
+                    true,
+                );
+                recovery_barrier.wait();
+                result
+            });
+            let retained = scope.spawn(move || {
+                retained_barrier.wait();
+                let result = register_global_type_cache_ownership(retained_addr as *mut u8);
+                retained_barrier.wait();
+                result
+            });
+            second_swap_barrier.wait();
+            second_swap_barrier.wait();
+            (
+                recovery.join().expect("recovery retirement worker"),
+                retained.join().expect("retained publication worker"),
+            )
+        });
+
+        assert_eq!(recovery_removed, Some(metadata));
+        assert_eq!(
+            retained_inserted,
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 1);
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, false),
+            None
+        );
+        assert!(global_type_cache_contains_ptr(retained_ptr));
+        assert!(global_semantic_pointer_maybe_tracked(recovery_ptr));
+        assert!(global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        assert!(unregister_global_type_cache_ownership(retained_ptr));
+        assert_eq!(combined_count(), 0);
+        assert!(!global_semantic_pointer_maybe_tracked(recovery_ptr));
+        assert!(!global_semantic_pointer_maybe_tracked(retained_ptr));
+    }
+
     #[test]
     fn global_semantic_pointer_filter_tracks_retained_ownership_until_release() {
         let _guard = test_guard();
@@ -27038,11 +27587,17 @@ mod tests {
             "module identity must authorize small reuse"
         );
         #[cfg(feature = "stats")]
-        assert_eq!(
-            semantic_stats_snapshot().typed_cache_wrong_identity_denials,
-            1,
-            "a same-layout foreign request should retain denial evidence"
-        );
+        {
+            assert_eq!(
+                semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+                1,
+                "a same-layout foreign request should retain denial evidence"
+            );
+            assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+        }
         let policy_mismatch = exact.with_flags(FLAG_TYPE_ISOLATED | FLAG_FORCE_INITIALIZE);
         let policy_ptr = unsafe { alloc.alloc_with_metadata(layout, policy_mismatch) };
         assert!(!policy_ptr.is_null());
@@ -27717,6 +28272,54 @@ mod tests {
             alloc.dealloc_raw(exact_ptr, layout);
             clear_type_cache_for_test();
         }
+    }
+
+    #[cfg(all(feature = "stats", not(feature = "fixed_heap")))]
+    #[test]
+    fn hosted_type_cache_depot_wrong_identity_candidate_carries_authenticated_head() {
+        let _guard = test_guard();
+        semantic_stats_reset();
+
+        let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+        let layout = Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+        let retained = AllocationMetadata::for_type(0xC003_D311)
+            .with_module(0xC0DE_D311)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let requested = AllocationMetadata::for_type(0xC003_D312)
+            .with_module(0xC0DE_D312)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = storage.as_mut_ptr() as *mut u8;
+        let entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(retained),
+            segregated_type_cache_policy_key(retained),
+            ptr,
+            layout,
+            retained,
+        );
+        let key_start = type_cache_depot_slot_for_entry(entry);
+        let mut shard = TypeCacheDepotShard::empty();
+        assert!(shard.push(entry, key_start).unwrap().is_none());
+
+        let (hit, candidate) = shard.pop(
+            layout,
+            TypeCacheIdentity::from_metadata(requested),
+            type_cache_identity_key(requested),
+            segregated_type_cache_policy_key(requested),
+            key_start,
+            true,
+        );
+        assert!(hit.is_none());
+        let candidate = candidate.expect("same-layout foreign depot head");
+        assert_eq!(
+            candidate.identity,
+            TypeCacheIdentity::from_metadata(retained)
+        );
+        assert_eq!(candidate.ptr, ptr);
+        record_stats_type_cache_wrong_identity_denial(requested, candidate, layout);
+        assert_eq!(
+            semantic_stats_last_wrong_identity_retained_ptr(),
+            ptr as usize
+        );
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -38305,6 +38908,10 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_size, layout.size());
             assert_eq!(snap.last_wrong_identity_align, layout.align());
             assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(
                 pop_semantic_type_cache(layout, retained),
                 Some(ptr),
                 "a denied wrong-identity reuse must preserve the retained object for its exact owner"
@@ -38357,10 +38964,48 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_size, layout.size());
             assert_eq!(snap.last_wrong_identity_align, layout.align());
             assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(
                 pop_semantic_type_cache(layout, retained),
                 Some(ptr),
                 "a segregated denial must preserve the retained object for its exact owner"
             );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn linked_plain_type_cache_reports_exact_retained_head_pointer() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D071)
+                .with_module(0xC0DE_D071)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let requested = AllocationMetadata::for_type(0xC002_D072)
+                .with_module(0xC0DE_D072)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(ptr, layout, retained));
+            assert_eq!(pop_semantic_type_cache(layout, requested), None);
+            assert_eq!(
+                semantic_stats_last_wrong_identity_retained_ptr(),
+                ptr as usize
+            );
+            assert_eq!(pop_semantic_type_cache(layout, retained), Some(ptr));
         }
     }
 
@@ -38484,6 +39129,7 @@ mod tests {
             assert_eq!(snap.last_wrong_identity_requested_callsite, 0);
             assert_eq!(snap.last_wrong_identity_size, 0);
             assert_eq!(snap.last_wrong_identity_align, 0);
+            assert_eq!(semantic_stats_last_wrong_identity_retained_ptr(), 0);
 
             assert_eq!(pop_semantic_type_cache(layout, retained), Some(ptr));
         }

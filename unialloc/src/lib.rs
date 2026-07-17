@@ -48,6 +48,8 @@ mod sc;
 mod size_class;
 #[cfg(not(feature = "fixed_heap"))]
 mod sync;
+#[cfg(test)]
+mod test_support;
 mod zone;
 
 include!(concat!(env!("OUT_DIR"), "/consts.rs"));
@@ -95,20 +97,22 @@ pub use alloc_api::{
     semantic_auto_metadata_type_id_basis, semantic_fallback_attribution_snapshot,
     semantic_layout_id, semantic_metadata_validation_snapshot,
     semantic_ownership_transfer_snapshot, semantic_runtime_slow_path_enabled,
-    semantic_scope_depth_snapshot, semantic_stats_recording_disable,
-    semantic_stats_recording_enable, semantic_stats_recording_enabled, semantic_stats_reset,
-    semantic_stats_snapshot, semantic_type_id, semantic_type_stats_recording_disable,
-    semantic_type_stats_recording_enable, semantic_type_stats_recording_enabled,
-    semantic_type_stats_snapshot, type_cache_admission_stats_reset,
-    type_cache_admission_stats_snapshot, type_isolation_side_cache_snapshot,
-    with_rust_type_metadata_at, with_semantic_metadata, AllocationMetadata, DelayedFreeSnapshot,
-    LifetimePlacementClass, MetadataPointerAuthRuntimeProbe, MetadataSegregationSideCacheSnapshot,
-    SemanticAlloc, SemanticAllocationLayoutValidationSnapshot, SemanticFallbackAttributionSnapshot,
+    semantic_scope_depth_snapshot, semantic_stats_last_wrong_identity_retained_ptr,
+    semantic_stats_recording_disable, semantic_stats_recording_enable,
+    semantic_stats_recording_enabled, semantic_stats_reset, semantic_stats_snapshot,
+    semantic_type_id, semantic_type_stats_recording_disable, semantic_type_stats_recording_enable,
+    semantic_type_stats_recording_enabled, semantic_type_stats_snapshot,
+    type_cache_admission_stats_reset, type_cache_admission_stats_snapshot,
+    type_isolation_side_cache_snapshot, with_rust_type_metadata_at, with_semantic_metadata,
+    AllocationMetadata, DelayedFreeSnapshot, LifetimePlacementClass,
+    MetadataPointerAuthRuntimeProbe, MetadataSegregationSideCacheSnapshot, SemanticAlloc,
+    SemanticAllocationLayoutValidationSnapshot, SemanticFallbackAttributionSnapshot,
     SemanticMetadataValidationSnapshot, SemanticOwnershipTransferSnapshot,
     SemanticScopeDepthSnapshot, SemanticStatsSnapshot, SemanticTypeStatsSnapshot,
     TypeCacheAdmissionCounterSnapshot, TypeCacheAdmissionStatsSnapshot,
     TypeIsolationSideCacheSnapshot, AUTO_LAYOUT_MODULE_ID, FLAG_DELAYED_FREE,
-    FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_BOUNDED_PROCESS_LONG,
+    FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_BORROWED_VEC_RESERVE_OBSERVE,
+    LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_DYNAMIC_BUFFER_OBSERVE,
     LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT, LIFETIME_HINT_LONG_LIVED,
     LIFETIME_HINT_PROVEN_EPHEMERAL, LIFETIME_HINT_PROVEN_LONG_LIVED,
     SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
@@ -128,13 +132,16 @@ pub use alloc_api::{
     lifetime_hugepage_adaptive_site_recording_disable,
     lifetime_hugepage_adaptive_site_recording_enable,
     lifetime_hugepage_adaptive_site_recording_enabled, lifetime_hugepage_adaptive_site_snapshot,
-    lifetime_hugepage_advance_epoch, lifetime_hugepage_backend, lifetime_hugepage_configure,
+    lifetime_hugepage_advance_epoch, lifetime_hugepage_backend,
+    lifetime_hugepage_compiler_directed_telemetry_disable,
+    lifetime_hugepage_compiler_directed_telemetry_enable,
+    lifetime_hugepage_compiler_directed_telemetry_enabled, lifetime_hugepage_configure,
     lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
     lifetime_hugepage_policy, lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
-    LifetimeAdaptiveSiteSnapshot, LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot,
-    LifetimePageBackend, LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION,
-    LIFETIME_ADAPTIVE_SITE_SNAPSHOT_CAPACITY, LIFETIME_HUGEPAGE_EXTENT_BYTES,
-    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
+    lifetime_hugepage_trim_retained_empty_extents, LifetimeAdaptiveSiteSnapshot,
+    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LifetimePageBackend,
+    LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION, LIFETIME_ADAPTIVE_SITE_SNAPSHOT_CAPACITY,
+    LIFETIME_HUGEPAGE_EXTENT_BYTES, LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 pub use cache::RustAllocator as UniAlloc;
 pub use pal::arch::*;
@@ -611,6 +618,19 @@ mod fixed_heap_c_abi_tests {
     #[cfg(feature = "stats")]
     #[test]
     fn constrained_boot_sample_abi_reports_fixed_heap_and_allocator_counters() {
+        const CHILD_ENV: &str = "UNIALLOC_CONSTRAINED_BOOT_SAMPLE_STATS_CHILD";
+        const TEST_NAME: &str = concat!(
+            "fixed_heap_c_abi_tests::",
+            "constrained_boot_sample_abi_reports_fixed_heap_and_allocator_counters"
+        );
+
+        // The exported sample intentionally reads process-wide counters. Give
+        // its reset/workload/snapshot interval exclusive process ownership so a
+        // parallel stats test cannot reset or disable recording between events.
+        if crate::test_support::run_test_in_fresh_process(CHILD_ENV, TEST_NAME) {
+            return;
+        }
+
         unsafe {
             let _fixed_heap_guard = ensure_ready();
             semantic_stats_reset();

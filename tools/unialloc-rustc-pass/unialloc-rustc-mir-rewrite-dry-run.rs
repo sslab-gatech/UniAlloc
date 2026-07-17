@@ -50,8 +50,8 @@ use rustc_interface::interface;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, Body, CastKind, Local, LocalDecl, Location, Operand, Place, Rvalue,
-    SourceInfo, StatementKind, Terminator, TerminatorKind, RETURN_PLACE,
+    BasicBlock, BasicBlockData, BinOp, Body, CastKind, Local, LocalDecl, Location, Operand, Place,
+    ProjectionElem, Rvalue, SourceInfo, StatementKind, Terminator, TerminatorKind, RETURN_PLACE,
 };
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::{CallSource, UnwindAction, UnwindTerminateReason};
@@ -108,6 +108,11 @@ const LIFETIME_PROFILE_BINDING: &str = "exact(callsite,type_id,module_id)";
 const LIFETIME_PROFILE_DIGEST_ALGORITHM: &str = "fnv1a64-raw-bytes";
 const LIFETIME_HINT_EPHEMERAL: u16 = 1;
 const LIFETIME_HINT_LONG_LIVED: u16 = 2;
+// Compiler-directed Long placement targets the allocator's page-backed
+// small-object range. Keep this explicit pass-side contract synchronized with
+// `unialloc::size_class::tc_size_class::MAX_SIZE`.
+const COMPILER_DIRECTED_LONG_MIN_REQUESTED_BYTES: u64 = 4 * 1024;
+const COMPILER_DIRECTED_LONG_MAX_REQUESTED_BYTES: u64 = 28_032;
 /// Bounded process-long oracle used only for exact `mem::forget`/`Box::leak`
 /// smoke patterns. This tag is deliberately outside real-program Long claims.
 const LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE: u16 = 0xA102;
@@ -261,6 +266,7 @@ enum AutomaticHeapLifetimeDecision {
 enum AutomaticRustLifetimePriorDecision {
     AllPathLocalReleaseShort,
     ReceiverOwnedShort,
+    BorrowedVecReserveLong,
     ReturnLong,
     EscapeLong,
     CleanupOrUnwindUnknown,
@@ -325,6 +331,7 @@ struct SemanticLifetimeFeatureExport {
     function_has_yield_or_await: bool,
     reachable_yield_or_await: bool,
     receiver_owned_allocation: bool,
+    borrowed_vec_reserve_prior_eligible: bool,
     exact_drop_path: bool,
     conditional_drop_path: bool,
     cleanup_drop_path: bool,
@@ -1137,6 +1144,14 @@ fn automatic_rust_lifetime_prior_decision(
         return Some(AutomaticRustLifetimePriorDecision::CleanupOrUnwindUnknown);
     }
 
+    // An exact Global Vec reserve on a direct mutable argument allocates only
+    // caller-owned backing storage. That storage necessarily survives this
+    // call boundary. The semantic scope carries Long to the allocator, where
+    // the actual runtime Layout admits only 4 KiB..=28,032-byte allocations.
+    if features.borrowed_vec_reserve_prior_eligible {
+        return Some(AutomaticRustLifetimePriorDecision::BorrowedVecReserveLong);
+    }
+
     // A moved owner that reaches the return place or an opaque consuming call
     // escapes the current function's local release region. Carrier propagation
     // includes aggregate/projected stores, so this is a Rust ownership-flow
@@ -1213,6 +1228,11 @@ fn automatic_rust_lifetime_prior_selection(
             confidence: RUST_LIFETIME_PRIOR_SHORT_CONFIDENCE,
             basis: "automatic_rust_lifetime_prior_receiver_owned_short",
         },
+        AutomaticRustLifetimePriorDecision::BorrowedVecReserveLong => LifetimeHintSelection {
+            hint: LIFETIME_HINT_LONG_LIVED,
+            confidence: RUST_LIFETIME_PRIOR_LONG_CONFIDENCE,
+            basis: "automatic_rust_lifetime_prior_borrowed_vec_reserve_long",
+        },
         AutomaticRustLifetimePriorDecision::ReturnLong => LifetimeHintSelection {
             hint: LIFETIME_HINT_LONG_LIVED,
             confidence: RUST_LIFETIME_PRIOR_LONG_CONFIDENCE,
@@ -1242,11 +1262,37 @@ fn automatic_rust_lifetime_prior_joinable_layout(features: &SemanticLifetimeFeat
     // when the compiler audit can name the same exact-layout cohort that the
     // runtime observer will validate. The ownership facts remain exported for
     // ground-truth analysis when this deployment gate abstains.
-    matches!(features.requested_size_bytes, Some(size) if size > 0)
-        && matches!(
+    (features.borrowed_vec_reserve_prior_eligible
+        && features.requested_layout_basis == "exact_borrowed_vec_reserve_runtime_layout"
+        && features.requested_size_bytes.is_none()
+        && features.requested_align_bytes.is_none())
+        || (matches!(features.requested_size_bytes, Some(size) if size > 0)
+            && matches!(
+                features.requested_align_bytes,
+                Some(align) if align.is_power_of_two()
+            ))
+}
+
+fn automatic_rust_lifetime_prior_direct_long_layout_admitted(
+    features: &SemanticLifetimeFeatureExport,
+) -> bool {
+    (features.borrowed_vec_reserve_prior_eligible
+        && features.requested_layout_basis == "exact_borrowed_vec_reserve_runtime_layout"
+        && features.requested_size_bytes.is_none()
+        && features.requested_align_bytes.is_none())
+        || (matches!(
+            features.requested_layout_basis,
+            "exact_box_new_payload_layout" | "exact_vec_with_capacity_requested_layout"
+        ) && matches!(
+            features.requested_size_bytes,
+            Some(size)
+                if (COMPILER_DIRECTED_LONG_MIN_REQUESTED_BYTES
+                    ..=COMPILER_DIRECTED_LONG_MAX_REQUESTED_BYTES)
+                    .contains(&size)
+        ) && matches!(
             features.requested_align_bytes,
             Some(align) if align.is_power_of_two()
-        )
+        ))
 }
 
 fn automatic_rust_lifetime_prior_unjoinable_layout_selection(
@@ -1264,6 +1310,25 @@ fn automatic_rust_lifetime_prior_unjoinable_layout_selection(
         }
         "automatic_rust_lifetime_prior_escape_long" => {
             "automatic_rust_lifetime_prior_escape_long_unjoinable_layout_unknown"
+        }
+        _ => return selection,
+    };
+    LifetimeHintSelection {
+        hint: 0,
+        confidence: 0,
+        basis,
+    }
+}
+
+fn automatic_rust_lifetime_prior_out_of_band_long_layout_selection(
+    selection: LifetimeHintSelection,
+) -> LifetimeHintSelection {
+    let basis = match selection.basis {
+        "automatic_rust_lifetime_prior_return_long" => {
+            "automatic_rust_lifetime_prior_return_long_out_of_band_layout_unknown"
+        }
+        "automatic_rust_lifetime_prior_escape_long" => {
+            "automatic_rust_lifetime_prior_escape_long_out_of_band_layout_unknown"
         }
         _ => return selection,
     };
@@ -1321,11 +1386,15 @@ fn select_lifetime_hint_with_heap_inference(
             lifetime_features,
         ) {
             let selection = automatic_rust_lifetime_prior_selection(decision);
+            let features = lifetime_features.expect("Rust lifetime prior requires feature export");
             let selection = if selection.hint != 0
-                && !automatic_rust_lifetime_prior_joinable_layout(
-                    lifetime_features.expect("Rust lifetime prior requires feature export"),
-                ) {
+                && !automatic_rust_lifetime_prior_joinable_layout(features)
+            {
                 automatic_rust_lifetime_prior_unjoinable_layout_selection(selection)
+            } else if selection.hint == LIFETIME_HINT_LONG_LIVED
+                && !automatic_rust_lifetime_prior_direct_long_layout_admitted(features)
+            {
+                automatic_rust_lifetime_prior_out_of_band_long_layout_selection(selection)
             } else {
                 selection
             };
@@ -1389,7 +1458,9 @@ fn automatic_rust_lifetime_prior_short_basis(basis: &str) -> bool {
 fn automatic_rust_lifetime_prior_long_basis(basis: &str) -> bool {
     matches!(
         basis,
-        "automatic_rust_lifetime_prior_return_long" | "automatic_rust_lifetime_prior_escape_long"
+        "automatic_rust_lifetime_prior_return_long"
+            | "automatic_rust_lifetime_prior_escape_long"
+            | "automatic_rust_lifetime_prior_borrowed_vec_reserve_long"
     )
 }
 
@@ -2267,6 +2338,23 @@ fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecor
         "        \"requested_layout_basis\": \"{}\",",
         features.requested_layout_basis
     );
+    if features.borrowed_vec_reserve_prior_eligible {
+        json.push_str("        \"runtime_layout_subcohort_contract\": \"authenticated-semantic-scope-runtime-layout-4k-through-28032\",\n");
+        let _ = writeln!(
+            json,
+            "        \"runtime_observation_min_requested_bytes\": {},",
+            COMPILER_DIRECTED_LONG_MIN_REQUESTED_BYTES
+        );
+        let _ = writeln!(
+            json,
+            "        \"runtime_observation_max_requested_bytes\": {},",
+            COMPILER_DIRECTED_LONG_MAX_REQUESTED_BYTES
+        );
+    } else {
+        json.push_str("        \"runtime_layout_subcohort_contract\": null,\n");
+        json.push_str("        \"runtime_observation_min_requested_bytes\": null,\n");
+        json.push_str("        \"runtime_observation_max_requested_bytes\": null,\n");
+    }
     match &features.owner_place {
         Some(owner) => {
             let _ = writeln!(json, "        \"owner_place\": \"{}\",", json_escape(owner));
@@ -2307,6 +2395,15 @@ fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecor
         (
             "receiver_owned_allocation",
             features.receiver_owned_allocation,
+        ),
+        (
+            "borrowed_vec_reserve_prior_eligible",
+            features.borrowed_vec_reserve_prior_eligible,
+        ),
+        (
+            "runtime_layout_captured_by_semantic_scope",
+            features.borrowed_vec_reserve_prior_eligible
+                && record.rewrite_status.ends_with("_applied"),
         ),
         ("exact_drop_path", features.exact_drop_path),
         ("conditional_drop_path", features.conditional_drop_path),
@@ -4250,6 +4347,21 @@ fn exact_alloc_vec_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool 
     })
 }
 
+fn exact_alloc_vec_borrowed_reserve_def_path(path: &str) -> bool {
+    VEC_BORROWED_RESERVE_METHODS.iter().any(|method| {
+        callee_contains_current_impl_method(path, "alloc::vec", method)
+            || ["alloc::vec::Vec", "std::vec::Vec"]
+                .iter()
+                .any(|receiver| callee_contains_named_receiver_method(path, receiver, method))
+    })
+}
+
+fn exact_alloc_vec_borrowed_reserve_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_alloc_crate_def_id(tcx, def_id)
+        && tcx.trait_item_of(def_id).is_none()
+        && exact_alloc_vec_borrowed_reserve_def_path(&tcx.def_path_str(def_id))
+}
+
 fn exact_alloc_arc_def_path(path: &str) -> bool {
     matches!(
         strip_rustc_crate_disambiguators(path).as_str(),
@@ -5811,6 +5923,59 @@ fn box_new_runtime_identity_owner_ty<'tcx>(
     }
     let payload_ty = exact_global_box_payload(tcx, destination_ty)?;
     (payload_ty == argument_tys[0]).then_some(destination_ty)
+}
+
+fn vec_with_capacity_runtime_identity_owner_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<Ty<'tcx>> {
+    if !exact_alloc_vec_with_capacity_def_id(tcx, callee_def_id)
+        || argument_tys.len() != 1
+        || !matches!(argument_tys[0].kind(), ty::Uint(ty::UintTy::Usize))
+    {
+        return None;
+    }
+    let (owner_def, owner_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, owner_def.did())
+        || owner_def.did().krate != callee_def_id.krate
+        || !matches!(owner_args.len(), 1 | 2)
+    {
+        return None;
+    }
+
+    let element_ty = generic_arg_type(owner_args.get(0)?)?;
+    let allocator_ty = if owner_args.len() == 2 {
+        let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+        let (allocator_def, allocator_args) = match allocator_ty.kind() {
+            ty::Adt(def, args) => (def, args),
+            _ => return None,
+        };
+        if !allocator_args.is_empty()
+            || allocator_def.did().krate != owner_def.did().krate
+            || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        {
+            return None;
+        }
+        Some(allocator_ty)
+    } else {
+        None
+    };
+
+    match callee_generic_types {
+        [callee_element] if *callee_element == element_ty => {}
+        [callee_element, callee_allocator]
+            if *callee_element == element_ty && allocator_ty == Some(*callee_allocator) => {}
+        _ => return None,
+    }
+
+    Some(destination_ty)
 }
 
 fn type_is_structurally_drop_inert<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, depth: usize) -> bool {
@@ -9395,6 +9560,13 @@ const VEC_CAPACITY_ONLY_METHODS: &[&str] = &[
     "shrink_to_fit",
 ];
 
+const VEC_BORROWED_RESERVE_METHODS: &[&str] = &[
+    "reserve",
+    "reserve_exact",
+    "try_reserve",
+    "try_reserve_exact",
+];
+
 #[cfg(test)]
 fn semantic_scope_capacity_only_vec_receiver_call(callee: &str) -> bool {
     VEC_CAPACITY_ONLY_METHODS.iter().any(|method| {
@@ -10774,6 +10946,90 @@ fn terminator_exact_bounded_process_long_decision<'tcx>(
     }
 }
 
+fn exact_borrowed_vec_reserve_semantic_scope<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    let (func, args) = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return false,
+    };
+    let def_id = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, _) => *def_id,
+        _ => return false,
+    };
+    if !exact_alloc_vec_borrowed_reserve_def_id(tcx, def_id)
+        || args.len() != 2
+        || !matches!(
+            args[1].ty(&body.local_decls, tcx).kind(),
+            ty::Uint(ty::UintTy::Usize)
+        )
+    {
+        return false;
+    }
+
+    let receiver_place = match operand_exact_place(&args[0]) {
+        Some(place) if place.projection.is_empty() => place,
+        _ => return false,
+    };
+    if !receiver_is_direct_mut_argument_or_reborrow(body, receiver_place) {
+        return false;
+    }
+    let receiver_ty = receiver_place.ty(&body.local_decls, tcx).ty;
+    let owner_ty = match receiver_ty.kind() {
+        ty::Ref(_, owner_ty, rustc_ast::Mutability::Mut) => *owner_ty,
+        _ => return false,
+    };
+    candidate.feature_owner == Some(receiver_place)
+        && candidate.feature_owner_basis == "exact_receiver_operand"
+        && direct_outer_vec_receiver_owner(tcx, receiver_ty).as_deref()
+            == Some(candidate.semantic_object_type.as_str())
+        && compiler_semantic_type_id(tcx, owner_ty) == candidate.compiler_type_id
+}
+
+fn receiver_is_direct_mut_argument_or_reborrow<'tcx>(
+    body: &Body<'tcx>,
+    receiver: Place<'tcx>,
+) -> bool {
+    if body.args_iter().any(|argument| argument == receiver.local) {
+        return true;
+    }
+
+    let mut source_argument = None;
+    let mut definition_count = 0usize;
+    for data in body_basic_blocks!(body).iter() {
+        for statement in &data.statements {
+            let (destination, rvalue) = match &statement.kind {
+                StatementKind::Assign(assigned) => &**assigned,
+                _ => continue,
+            };
+            if !destination.projection.is_empty() || destination.local != receiver.local {
+                continue;
+            }
+            definition_count += 1;
+            let candidate_argument = match rvalue {
+                Rvalue::Ref(_, _, source)
+                    if source.projection.len() == 1
+                        && matches!(source.projection[0], ProjectionElem::Deref)
+                        && body.args_iter().any(|argument| argument == source.local)
+                        && body.local_decls[source.local].ty
+                            == body.local_decls[receiver.local].ty =>
+                {
+                    Some(source.local)
+                }
+                _ => None,
+            };
+            match (source_argument, candidate_argument) {
+                (None, Some(argument)) => source_argument = Some(argument),
+                (Some(existing), Some(argument)) if existing == argument => {}
+                _ => return false,
+            }
+        }
+    }
+    definition_count == 1 && source_argument.is_some()
+}
+
 #[cfg(unialloc_rustc_current)]
 fn exact_box_new_requested_layout<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -10812,6 +11068,264 @@ fn exact_box_new_requested_layout<'tcx>(
 
 #[cfg(not(unialloc_rustc_current))]
 fn exact_box_new_requested_layout<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    _body: &Body<'tcx>,
+    _candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    None
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_const_usize_operand_value<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    operand: &Operand<'tcx>,
+) -> Option<u64> {
+    let constant = match operand {
+        Operand::Constant(constant) => constant,
+        _ => return None,
+    };
+    constant
+        .const_
+        .try_eval_target_usize(tcx, body.typing_env(tcx))
+}
+
+#[cfg(unialloc_rustc_current)]
+fn single_assignment_rvalue_for_local<'a, 'tcx>(
+    body: &'a Body<'tcx>,
+    local: Local,
+    use_location: Location,
+) -> Option<(Location, &'a Rvalue<'tcx>)> {
+    if local == RETURN_PLACE || body.args_iter().any(|argument| argument == local) {
+        return None;
+    }
+
+    let mut definition = None;
+    let mut definition_count = 0usize;
+    for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            let (destination, rvalue) = match &statement.kind {
+                StatementKind::Assign(assigned) => &**assigned,
+                _ => continue,
+            };
+            if destination.local != local {
+                continue;
+            }
+            definition_count += 1;
+            if destination.projection.is_empty() {
+                definition = Some((
+                    Location {
+                        block: bb,
+                        statement_index,
+                    },
+                    rvalue,
+                ));
+            }
+        }
+        if matches!(
+            &data.terminator.as_ref()?.kind,
+            TerminatorKind::Call { destination, .. }
+                if destination.local == local
+        ) {
+            definition_count += 1;
+        }
+    }
+    if definition_count != 1 {
+        return None;
+    }
+    let (definition_location, rvalue) = definition?;
+    let blocks = body_basic_blocks!(body);
+    let ordered_before_use = if definition_location.block == use_location.block {
+        definition_location.statement_index < use_location.statement_index
+    } else {
+        blocks
+            .dominators()
+            .dominates(definition_location.block, use_location.block)
+    };
+    if !ordered_before_use {
+        return None;
+    }
+    let (natural_loop_blocks, _) = natural_loop_blocks_and_backedges(body);
+    if natural_loop_blocks.contains(&definition_location.block) {
+        return None;
+    }
+    Some((definition_location, rvalue))
+}
+
+#[cfg(unialloc_rustc_current)]
+fn checked_usize_binary_value<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    op: BinOp,
+    operands: &(Operand<'tcx>, Operand<'tcx>),
+    use_location: Location,
+    visiting: &mut BTreeSet<Local>,
+) -> Option<u64> {
+    let left = exact_single_assignment_usize_operand_value(
+        tcx,
+        body,
+        &operands.0,
+        use_location,
+        visiting,
+    )?;
+    let right = exact_single_assignment_usize_operand_value(
+        tcx,
+        body,
+        &operands.1,
+        use_location,
+        visiting,
+    )?;
+    match op {
+        BinOp::Add | BinOp::AddWithOverflow => left.checked_add(right),
+        BinOp::Mul | BinOp::MulWithOverflow => left.checked_mul(right),
+        _ => None,
+    }
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_single_assignment_usize_place_value<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    place: Place<'tcx>,
+    use_location: Location,
+    visiting: &mut BTreeSet<Local>,
+) -> Option<u64> {
+    if !visiting.insert(place.local) {
+        return None;
+    }
+    let result = (|| {
+        let (definition_location, rvalue) =
+            single_assignment_rvalue_for_local(body, place.local, use_location)?;
+        if place.projection.is_empty() {
+            if body.local_decls[place.local].ty != tcx.types.usize {
+                return None;
+            }
+            return match rvalue {
+                Rvalue::Use(operand, _) => exact_single_assignment_usize_operand_value(
+                    tcx,
+                    body,
+                    operand,
+                    definition_location,
+                    visiting,
+                ),
+                Rvalue::BinaryOp(op, operands) => {
+                    checked_usize_binary_value(
+                        tcx,
+                        body,
+                        *op,
+                        operands,
+                        definition_location,
+                        visiting,
+                    )
+                }
+                _ => None,
+            };
+        }
+
+        if place.projection.len() != 1
+            || !matches!(
+                place.projection[0],
+                ProjectionElem::Field(field, field_ty)
+                    if field.as_usize() == 0 && field_ty == tcx.types.usize
+            )
+        {
+            return None;
+        }
+        match rvalue {
+            Rvalue::BinaryOp(op, operands) => checked_usize_binary_value(
+                tcx,
+                body,
+                *op,
+                operands,
+                definition_location,
+                visiting,
+            ),
+            _ => None,
+        }
+    })();
+    visiting.remove(&place.local);
+    result
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_single_assignment_usize_operand_value<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    operand: &Operand<'tcx>,
+    use_location: Location,
+    visiting: &mut BTreeSet<Local>,
+) -> Option<u64> {
+    exact_const_usize_operand_value(tcx, body, operand).or_else(|| match operand {
+        Operand::Move(place) | Operand::Copy(place) => exact_single_assignment_usize_place_value(
+            tcx,
+            body,
+            *place,
+            use_location,
+            visiting,
+        ),
+        _ => None,
+    })
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_vec_with_capacity_requested_layout<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    let (func, args) = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return None,
+    };
+    let (def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, args) => (*def_id, args.types().collect::<Vec<Ty<'tcx>>>()),
+        _ => return None,
+    };
+    let argument_tys = args
+        .iter()
+        .map(|argument| argument.ty(&body.local_decls, tcx))
+        .collect::<Vec<_>>();
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    let owner_ty = vec_with_capacity_runtime_identity_owner_ty(
+        tcx,
+        def_id,
+        &callee_generic_types,
+        destination_ty,
+        &argument_tys,
+    )?;
+    let element_ty = match owner_ty.kind() {
+        ty::Adt(_, owner_args) => generic_arg_type(owner_args.get(0)?)?,
+        _ => return None,
+    };
+    if clone_result_has_unresolved_params(element_ty) {
+        return None;
+    }
+    let capacity_operand = args.first()?;
+    // At post-borrowck pre-optimization MIR, checked source expressions such
+    // as `BLOCK_LEN * 2` are represented by one `MulWithOverflow` temporary,
+    // a field-0 extraction, and then the Vec call. Follow only exact,
+    // dominating, single-assignment Add/Mul chains. Parameters, loop-carried
+    // values, reassignments, unsupported operations, and arithmetic overflow
+    // retain the dynamic/unproven abstention path.
+    let capacity = exact_single_assignment_usize_operand_value(
+        tcx,
+        body,
+        capacity_operand,
+        Location {
+            block: candidate.bb,
+            statement_index: body[candidate.bb].statements.len(),
+        },
+        &mut BTreeSet::new(),
+    )?;
+    let element_layout = tcx
+        .layout_of(body.typing_env(tcx).as_query_input(element_ty))
+        .ok()?;
+    let requested_size = capacity.checked_mul(element_layout.size.bytes())?;
+    (requested_size > 0).then_some((requested_size, element_layout.align.abi.bytes()))
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn exact_vec_with_capacity_requested_layout<'tcx>(
     _tcx: TyCtxt<'tcx>,
     _body: &Body<'tcx>,
     _candidate: &SemanticScopeCandidate<'tcx>,
@@ -11263,10 +11777,22 @@ fn semantic_lifetime_feature_export<'tcx>(
         && escape_sink_blocks.is_empty()
         && store_sink_blocks.is_empty();
     let conditional_drop_path = !exact_drop_path && !normal_drop_blocks.is_empty();
+    let borrowed_vec_reserve_prior_eligible =
+        exact_borrowed_vec_reserve_semantic_scope(tcx, body, candidate);
     let (requested_size_bytes, requested_align_bytes, requested_layout_basis) =
         match exact_box_new_requested_layout(tcx, body, candidate) {
             Some((size, align)) => (Some(size), Some(align), "exact_box_new_payload_layout"),
-            None => (None, None, "dynamic_or_unproven_requested_layout"),
+            None => match exact_vec_with_capacity_requested_layout(tcx, body, candidate) {
+                Some((size, align)) => (
+                    Some(size),
+                    Some(align),
+                    "exact_vec_with_capacity_requested_layout",
+                ),
+                None if borrowed_vec_reserve_prior_eligible => {
+                    (None, None, "exact_borrowed_vec_reserve_runtime_layout")
+                }
+                None => (None, None, "dynamic_or_unproven_requested_layout"),
+            },
         };
     let (normal_successor_count, cleanup_successor_count) = candidate
         .original_terminator
@@ -11306,6 +11832,7 @@ fn semantic_lifetime_feature_export<'tcx>(
         function_has_yield_or_await,
         reachable_yield_or_await,
         receiver_owned_allocation: candidate.receiver_owned_allocation,
+        borrowed_vec_reserve_prior_eligible,
         exact_drop_path,
         conditional_drop_path,
         cleanup_drop_path: !cleanup_drop_blocks.is_empty(),
@@ -13248,7 +13775,18 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             };
         let runtime_identity_owner_ty = callee_def_id
             .and_then(|def_id| {
-                box_new_runtime_identity_owner_ty(tcx, def_id, destination_ty, &argument_tys)
+                vec_with_capacity_runtime_identity_owner_ty(
+                    tcx,
+                    def_id,
+                    &callee_generic_types,
+                    destination_ty,
+                    &argument_tys,
+                )
+            })
+            .or_else(|| {
+                callee_def_id.and_then(|def_id| {
+                    box_new_runtime_identity_owner_ty(tcx, def_id, destination_ty, &argument_tys)
+                })
             })
             .or_else(|| {
                 callee_def_id.and_then(|def_id| {
@@ -13385,15 +13923,16 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             call_arguments.join("\0")
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        // Every exact Global Box constructor/reclaim route uses this runtime
-        // identity path. Generic definition-level MIR never hashes textual
-        // `K`/`V`/`T` placeholders, and concrete MIR cannot split the same Box
-        // into the older textual compiler-hash namespace.
-        let (type_id, type_id_basis) = if runtime_identity_owner_ty.is_some() {
-            (0, "monomorphized_compiler_type_id_runtime")
-        } else {
-            semantic_scope_type_id(compiler_type_id)
-        };
+        // Rewrites still use the monomorphized runtime helper. A concrete owner
+        // Ty can also expose its runtime-equivalent compiler identity to the
+        // audit key; generic definition-level MIR remains neutral until
+        // monomorphization supplies that exact type.
+        let (type_id, type_id_basis) =
+            if runtime_identity_owner_ty.is_some() && compiler_type_id.is_none() {
+                (0, "monomorphized_compiler_type_id_runtime")
+            } else {
+                semantic_scope_type_id(compiler_type_id)
+            };
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
@@ -14018,13 +14557,14 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             function_name, basic_block, source_span, drop_place, semantic_object_type
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (type_id, type_id_basis) = if runtime_identity_owner_ty.is_some() {
-            (0, "monomorphized_compiler_type_id_runtime")
-        } else if recovery_only_exact_box_drop || recovery_only_effectful_owner_drop {
-            (0, "authenticated_allocation_recovery_record")
-        } else {
-            semantic_scope_type_id(compiler_type_id)
-        };
+        let (type_id, type_id_basis) =
+            if runtime_identity_owner_ty.is_some() && compiler_type_id.is_none() {
+                (0, "monomorphized_compiler_type_id_runtime")
+            } else if recovery_only_exact_box_drop || recovery_only_effectful_owner_drop {
+                (0, "authenticated_allocation_recovery_record")
+            } else {
+                semantic_scope_type_id(compiler_type_id)
+            };
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
         if recovery_only_exact_box_drop || recovery_only_effectful_owner_drop {

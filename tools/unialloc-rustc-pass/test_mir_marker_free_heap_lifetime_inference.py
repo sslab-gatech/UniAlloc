@@ -35,6 +35,12 @@ RUST_PRIOR_RETURN_LONG_BASIS = "automatic_rust_lifetime_prior_return_long"
 RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS = (
     "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown"
 )
+RUST_PRIOR_RETURN_OUT_OF_BAND_LAYOUT_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_return_long_out_of_band_layout_unknown"
+)
+RUST_PRIOR_BORROWED_VEC_RESERVE_LONG_BASIS = (
+    "automatic_rust_lifetime_prior_borrowed_vec_reserve_long"
+)
 RUST_PRIOR_RECEIVER_LAYOUT_UNKNOWN_BASIS = (
     "automatic_rust_lifetime_prior_receiver_owned_short_unjoinable_layout_unknown"
 )
@@ -444,6 +450,39 @@ fn main() {
             encoding="utf-8",
         )
 
+        cls.measured_box_long_fixture = (
+            cls.tmp / "rust_lifetime_prior_measured_box_long.rs"
+        )
+        cls.measured_box_long_fixture.write_text(
+            """extern crate unialloc;
+
+#[inline(never)]
+fn convex_sized_box() -> Box<[u8; 6_000]> {
+    Box::new([1_u8; 6_000])
+}
+
+#[inline(never)]
+fn lume_roaring_bedrock_sized_box() -> Box<[u8; 8_192]> {
+    Box::new([2_u8; 8_192])
+}
+
+#[inline(never)]
+fn datafusion_sized_box() -> Box<[u8; 16_384]> {
+    Box::new([3_u8; 16_384])
+}
+
+fn main() {
+    drop(convex_sized_box());
+    drop(lume_roaring_bedrock_sized_box());
+    drop(datafusion_sized_box());
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed & 0b1000, 0b1000);
+}
+""",
+            encoding="utf-8",
+        )
+
         cls.generic_prior_transport_fixture = (
             cls.tmp / "rust_lifetime_prior_generic_transport.rs"
         )
@@ -461,6 +500,145 @@ fn main() {
     let observed = unialloc::observed_hints();
     println!("observed_hints={observed}");
     assert_eq!(observed, 0);
+}
+""",
+            encoding="utf-8",
+        )
+
+        cls.constant_vec_layout_fixture = cls.tmp / "rust_lifetime_prior_vec_layout.rs"
+        cls.constant_vec_layout_fixture.write_text(
+            """extern crate unialloc;
+
+const ROWS_PER_BATCH: usize = 3072;
+const DIRECT_LONG_MIN_BYTES: usize = 4096;
+const DIRECT_LONG_MAX_BYTES: usize = 28032;
+const BELOW_DIRECT_LONG_MIN_BYTES: usize = 4095;
+const ABOVE_DIRECT_LONG_MAX_BYTES: usize = 28033;
+const TANTIVY_SSTABLE_BLOCK_LEN: usize = 4_000;
+
+#[inline(never)]
+fn zeroed_u64_column() -> Vec<u64> {
+    let mut values = Vec::with_capacity(ROWS_PER_BATCH);
+    values.resize(ROWS_PER_BATCH, 0_u64);
+    values
+}
+
+#[inline(never)]
+fn lower_boundary_column() -> Vec<u8> {
+    Vec::with_capacity(DIRECT_LONG_MIN_BYTES)
+}
+
+#[inline(never)]
+fn upper_boundary_column() -> Vec<u8> {
+    Vec::with_capacity(DIRECT_LONG_MAX_BYTES)
+}
+
+#[inline(never)]
+fn below_boundary_column() -> Vec<u8> {
+    Vec::with_capacity(BELOW_DIRECT_LONG_MIN_BYTES)
+}
+
+#[inline(never)]
+fn above_boundary_column() -> Vec<u8> {
+    Vec::with_capacity(ABOVE_DIRECT_LONG_MAX_BYTES)
+}
+
+#[inline(never)]
+fn dynamic_capacity_column(capacity: usize) -> Vec<u8> {
+    Vec::with_capacity(capacity)
+}
+
+#[inline(never)]
+fn tantivy_sstable_const_mul_capacity() -> Vec<u8> {
+    Vec::with_capacity(TANTIVY_SSTABLE_BLOCK_LEN * 2)
+}
+
+#[inline(never)]
+fn single_assignment_const_add_capacity() -> Vec<u8> {
+    Vec::with_capacity(TANTIVY_SSTABLE_BLOCK_LEN + 4_096)
+}
+
+#[inline(never)]
+fn parameter_mul_capacity(capacity: usize) -> Vec<u8> {
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn multiply_reassigned_local(mut replace: bool) -> Vec<u8> {
+    let mut capacity = TANTIVY_SSTABLE_BLOCK_LEN;
+    if std::hint::black_box(replace) {
+        capacity = 4_096;
+    }
+    replace = !replace;
+    std::hint::black_box(replace);
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn multiply_loop_phi(mut iterations: usize) -> Vec<u8> {
+    let mut capacity = TANTIVY_SSTABLE_BLOCK_LEN;
+    while std::hint::black_box(iterations) > 0 {
+        capacity += 1;
+        iterations -= 1;
+    }
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn tiny_box() -> Box<[u8; 128]> {
+    Box::new([0_u8; 128])
+}
+
+fn main() {
+    drop(zeroed_u64_column());
+    drop(lower_boundary_column());
+    drop(upper_boundary_column());
+    drop(below_boundary_column());
+    drop(above_boundary_column());
+    drop(dynamic_capacity_column(ROWS_PER_BATCH));
+    drop(tantivy_sstable_const_mul_capacity());
+    drop(single_assignment_const_add_capacity());
+    drop(parameter_mul_capacity(TANTIVY_SSTABLE_BLOCK_LEN));
+    drop(multiply_reassigned_local(false));
+    drop(multiply_loop_phi(0));
+    drop(tiny_box());
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed & 0b1000, 0b1000);
+}
+""",
+            encoding="utf-8",
+        )
+
+        cls.borrowed_vec_reserve_fixture = (
+            cls.tmp / "rust_lifetime_prior_borrowed_vec_reserve.rs"
+        )
+        cls.borrowed_vec_reserve_fixture.write_text(
+            """extern crate unialloc;
+
+const TANTIVY_RESERVE_BYTES: usize = 15_360;
+
+#[inline(never)]
+fn tantivy_borrowed_reserve(owner: &mut Vec<u8>) {
+    owner.reserve_exact(TANTIVY_RESERVE_BYTES);
+    std::hint::black_box(owner.capacity());
+}
+
+#[inline(never)]
+fn local_borrowed_reserve_must_abstain() {
+    let mut owner: Vec<u8> = Vec::new();
+    let borrowed = &mut owner;
+    borrowed.reserve_exact(TANTIVY_RESERVE_BYTES);
+    std::hint::black_box(borrowed.capacity());
+}
+
+fn main() {
+    let mut owner: Vec<u8> = Vec::new();
+    tantivy_borrowed_reserve(&mut owner);
+    local_borrowed_reserve_must_abstain();
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed & 0b1000, 0b1000);
 }
 """,
             encoding="utf-8",
@@ -1071,6 +1249,77 @@ fn main() {
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=", completed.stdout)
 
+    def test_measured_box_long_parity_kernel(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-measured-box-long",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.measured_box_long_fixture,
+            panic_abort=True,
+        )
+
+        for function, requested_size in (
+            ("convex_sized_box", 6_000),
+            ("lume_roaring_bedrock_sized_box", 8_192),
+            ("datafusion_sized_box", 16_384),
+        ):
+            row = self.assert_hint(
+                audit,
+                function,
+                2,
+                70,
+                RUST_PRIOR_RETURN_LONG_BASIS,
+            )
+            self.assertEqual(
+                row["rewrite_status"],
+                "actual_semantic_scope_generic_type_rewrite_applied",
+                row,
+            )
+            self.assertEqual(
+                row["replacement_symbol"],
+                "__unialloc_semantic_scope_push_for_rust_type_hints",
+                row,
+            )
+            self.assertEqual(
+                row["replacement_resolution_status"],
+                "resolved_unialloc_semantic_scope_push_for_rust_type_hints_pop",
+                row,
+            )
+            self.assertEqual(
+                row["metadata_pairing_contract"],
+                "semantic_scope_monomorphized_runtime_type_metadata",
+                row,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertTrue(features["classification_rule_applied"], row)
+            self.assertTrue(features["runtime_join_key_complete"], row)
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "exact_box_new_payload_layout",
+                row,
+            )
+            self.assertEqual(
+                features["runtime_join_key"]["requested_size_bytes"],
+                requested_size,
+                row,
+            )
+            self.assertEqual(
+                features["runtime_join_key"]["requested_align_bytes"],
+                1,
+                row,
+            )
+
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-measured-box-long")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=8", completed.stdout)
+
     def test_rust_lifetime_prior_abstains_before_unjoinable_generic_transport(
         self,
     ) -> None:
@@ -1106,6 +1355,217 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=0", completed.stdout)
+
+    def test_direct_long_requires_exact_in_band_vec_or_box_layout(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-direct-long-layout-gate",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.constant_vec_layout_fixture,
+            panic_abort=True,
+        )
+
+        for function, requested_size in (
+            ("zeroed_u64_column", 24_576),
+            ("lower_boundary_column", 4_096),
+            ("upper_boundary_column", 28_032),
+        ):
+            row = self.assert_hint(
+                audit,
+                function,
+                2,
+                70,
+                RUST_PRIOR_RETURN_LONG_BASIS,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "exact_vec_with_capacity_requested_layout",
+                row,
+            )
+            self.assertEqual(
+                features["runtime_join_key"]["requested_size_bytes"],
+                requested_size,
+                row,
+            )
+            self.assertNotEqual(row["type_id"], 0, row)
+
+        for function, requested_size in (
+            ("below_boundary_column", 4_095),
+            ("above_boundary_column", 28_033),
+        ):
+            row = self.assert_hint(
+                audit,
+                function,
+                0,
+                0,
+                RUST_PRIOR_RETURN_OUT_OF_BAND_LAYOUT_UNKNOWN_BASIS,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertEqual(
+                features["runtime_join_key"]["requested_size_bytes"],
+                requested_size,
+                row,
+            )
+            self.assertFalse(features["classification_rule_applied"], row)
+
+        dynamic = self.assert_hint(
+            audit,
+            "dynamic_capacity_column",
+            0,
+            0,
+            RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS,
+        )
+        dynamic_features = dynamic["lifetime_analysis_features"]
+        self.assertEqual(
+            dynamic_features["requested_layout_basis"],
+            "dynamic_or_unproven_requested_layout",
+            dynamic,
+        )
+        self.assertFalse(dynamic_features["runtime_join_key_complete"], dynamic)
+
+        for function, requested_size in (
+            ("tantivy_sstable_const_mul_capacity", 8_000),
+            ("single_assignment_const_add_capacity", 8_096),
+        ):
+            row = self.assert_hint(
+                audit,
+                function,
+                2,
+                70,
+                RUST_PRIOR_RETURN_LONG_BASIS,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "exact_vec_with_capacity_requested_layout",
+                row,
+            )
+            self.assertEqual(
+                features["runtime_join_key"]["requested_size_bytes"],
+                requested_size,
+                row,
+            )
+
+        for function in (
+            "parameter_mul_capacity",
+            "multiply_reassigned_local",
+            "multiply_loop_phi",
+        ):
+            row = self.assert_hint(
+                audit,
+                function,
+                0,
+                0,
+                RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS,
+            )
+            features = row["lifetime_analysis_features"]
+            self.assertEqual(
+                features["requested_layout_basis"],
+                "dynamic_or_unproven_requested_layout",
+                row,
+            )
+            self.assertFalse(features["runtime_join_key_complete"], row)
+
+        tiny_box = self.assert_hint(
+            audit,
+            "tiny_box",
+            0,
+            0,
+            RUST_PRIOR_RETURN_OUT_OF_BAND_LAYOUT_UNKNOWN_BASIS,
+        )
+        tiny_box_features = tiny_box["lifetime_analysis_features"]
+        self.assertEqual(
+            tiny_box_features["requested_layout_basis"],
+            "exact_box_new_payload_layout",
+            tiny_box,
+        )
+        self.assertEqual(
+            tiny_box_features["runtime_join_key"]["requested_size_bytes"],
+            128,
+            tiny_box,
+        )
+
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-direct-long-layout-gate")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=8", completed.stdout)
+
+    def test_borrowed_vec_reserve_uses_runtime_layout_long_gate(self) -> None:
+        audit = self.run_pass(
+            "rust-prior-borrowed-vec-reserve-long",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.borrowed_vec_reserve_fixture,
+            panic_abort=True,
+        )
+        reserve_rows = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and "reserve_exact" in str(row.get("callee") or "")
+        ]
+        positive = [
+            row
+            for row in reserve_rows
+            if str(row.get("mir_function") or "").endswith("tantivy_borrowed_reserve")
+        ]
+        self.assertEqual(len(positive), 1, positive)
+        row = positive[0]
+        self.assertEqual(row["lifetime_hint"], 2, row)
+        self.assertEqual(row["lifetime_hint_confidence"], 70, row)
+        self.assertEqual(
+            row["lifetime_hint_basis"],
+            RUST_PRIOR_BORROWED_VEC_RESERVE_LONG_BASIS,
+            row,
+        )
+        self.assertNotEqual(row["type_id"], 0, row)
+        self.assertTrue(str(row["rewrite_status"]).endswith("_applied"), row)
+        features = row["lifetime_analysis_features"]
+        self.assertTrue(features["borrowed_vec_reserve_prior_eligible"], row)
+        self.assertTrue(features["classification_rule_applied"], row)
+        self.assertTrue(features["runtime_layout_captured_by_semantic_scope"], row)
+        self.assertEqual(
+            features["requested_layout_basis"],
+            "exact_borrowed_vec_reserve_runtime_layout",
+            row,
+        )
+        self.assertFalse(features["runtime_join_key_complete"], row)
+        self.assertEqual(features["runtime_observation_min_requested_bytes"], 4_096)
+        self.assertEqual(features["runtime_observation_max_requested_bytes"], 28_032)
+
+        local = [
+            candidate
+            for candidate in reserve_rows
+            if str(candidate.get("mir_function") or "").endswith(
+                "local_borrowed_reserve_must_abstain"
+            )
+        ]
+        self.assertEqual(len(local), 1, local)
+        self.assertNotEqual(local[0]["lifetime_hint"], 2, local[0])
+        self.assertFalse(
+            local[0]["lifetime_analysis_features"][
+                "borrowed_vec_reserve_prior_eligible"
+            ],
+            local[0],
+        )
+
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-borrowed-vec-reserve-long")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=8", completed.stdout)
 
 
 if __name__ == "__main__":
