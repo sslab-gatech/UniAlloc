@@ -10349,6 +10349,9 @@ fn exact_const_usize_operand_value<'tcx>(
     body: &Body<'tcx>,
     operand: &Operand<'tcx>,
 ) -> Option<u64> {
+    if operand.ty(&body.local_decls, tcx) != tcx.types.usize {
+        return None;
+    }
     let constant = match operand {
         Operand::Constant(constant) => constant,
         _ => return None,
@@ -10359,12 +10362,50 @@ fn exact_const_usize_operand_value<'tcx>(
 }
 
 #[cfg(unialloc_rustc_current)]
+struct ConstantChainLocalExposureVisitor {
+    local: Local,
+    exposed: bool,
+}
+
+#[cfg(unialloc_rustc_current)]
+impl<'tcx> Visitor<'tcx> for ConstantChainLocalExposureVisitor {
+    fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, _location: Location) {
+        if self.exposed || place.local != self.local {
+            return;
+        }
+        self.exposed = matches!(
+            context,
+            PlaceContext::MutatingUse(
+                MutatingUseContext::Borrow
+                    | MutatingUseContext::RawBorrow
+                    | MutatingUseContext::SetDiscriminant
+                    | MutatingUseContext::AsmOutput
+                    | MutatingUseContext::Yield
+            ) | PlaceContext::NonMutatingUse(NonMutatingUseContext::RawBorrow)
+        );
+    }
+}
+
+#[cfg(unialloc_rustc_current)]
+fn constant_chain_local_has_mutation_exposure<'tcx>(body: &Body<'tcx>, local: Local) -> bool {
+    let mut visitor = ConstantChainLocalExposureVisitor {
+        local,
+        exposed: false,
+    };
+    visitor.visit_body(body);
+    visitor.exposed
+}
+
+#[cfg(unialloc_rustc_current)]
 fn single_assignment_rvalue_for_local<'a, 'tcx>(
     body: &'a Body<'tcx>,
     local: Local,
     use_location: Location,
 ) -> Option<(Location, &'a Rvalue<'tcx>)> {
-    if local == RETURN_PLACE || body.args_iter().any(|argument| argument == local) {
+    if local == RETURN_PLACE
+        || body.args_iter().any(|argument| argument == local)
+        || constant_chain_local_has_mutation_exposure(body, local)
+    {
         return None;
     }
 
@@ -10421,6 +10462,30 @@ fn single_assignment_rvalue_for_local<'a, 'tcx>(
 }
 
 #[cfg(unialloc_rustc_current)]
+fn target_usize_max_for_pointer_bits(pointer_bits: u64) -> Option<u64> {
+    match pointer_bits {
+        0 => None,
+        bits if bits < u64::BITS as u64 => Some((1_u64 << bits) - 1),
+        _ => Some(u64::MAX),
+    }
+}
+
+#[cfg(unialloc_rustc_current)]
+fn checked_binary_for_target_usize(
+    op: BinOp,
+    left: u64,
+    right: u64,
+    pointer_bits: u64,
+) -> Option<u64> {
+    let value = match op {
+        BinOp::Add | BinOp::AddWithOverflow => left.checked_add(right),
+        BinOp::Mul | BinOp::MulWithOverflow => left.checked_mul(right),
+        _ => None,
+    }?;
+    (value <= target_usize_max_for_pointer_bits(pointer_bits)?).then_some(value)
+}
+
+#[cfg(unialloc_rustc_current)]
 fn checked_usize_binary_value<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
@@ -10429,6 +10494,12 @@ fn checked_usize_binary_value<'tcx>(
     use_location: Location,
     visiting: &mut BTreeSet<Local>,
 ) -> Option<u64> {
+    if !matches!(
+        op,
+        BinOp::Add | BinOp::AddWithOverflow | BinOp::Mul | BinOp::MulWithOverflow
+    ) {
+        return None;
+    }
     let left = exact_single_assignment_usize_operand_value(
         tcx,
         body,
@@ -10443,11 +10514,7 @@ fn checked_usize_binary_value<'tcx>(
         use_location,
         visiting,
     )?;
-    match op {
-        BinOp::Add | BinOp::AddWithOverflow => left.checked_add(right),
-        BinOp::Mul | BinOp::MulWithOverflow => left.checked_mul(right),
-        _ => None,
-    }
+    checked_binary_for_target_usize(op, left, right, tcx.data_layout.pointer_size().bits())
 }
 
 #[cfg(unialloc_rustc_current)]
@@ -10458,7 +10525,8 @@ fn exact_single_assignment_usize_place_value<'tcx>(
     use_location: Location,
     visiting: &mut BTreeSet<Local>,
 ) -> Option<u64> {
-    if !visiting.insert(place.local) {
+    const MAX_CHAIN_LOCALS: usize = 64;
+    if visiting.len() >= MAX_CHAIN_LOCALS || !visiting.insert(place.local) {
         return None;
     }
     let result = (|| {
@@ -10476,16 +10544,14 @@ fn exact_single_assignment_usize_place_value<'tcx>(
                     definition_location,
                     visiting,
                 ),
-                Rvalue::BinaryOp(op, operands) => {
-                    checked_usize_binary_value(
-                        tcx,
-                        body,
-                        *op,
-                        operands,
-                        definition_location,
-                        visiting,
-                    )
-                }
+                Rvalue::BinaryOp(op, operands) => checked_usize_binary_value(
+                    tcx,
+                    body,
+                    *op,
+                    operands,
+                    definition_location,
+                    visiting,
+                ),
                 _ => None,
             };
         }
@@ -10500,14 +10566,9 @@ fn exact_single_assignment_usize_place_value<'tcx>(
             return None;
         }
         match rvalue {
-            Rvalue::BinaryOp(op, operands) => checked_usize_binary_value(
-                tcx,
-                body,
-                *op,
-                operands,
-                definition_location,
-                visiting,
-            ),
+            Rvalue::BinaryOp(op, operands) => {
+                checked_usize_binary_value(tcx, body, *op, operands, definition_location, visiting)
+            }
             _ => None,
         }
     })();
@@ -10524,13 +10585,9 @@ fn exact_single_assignment_usize_operand_value<'tcx>(
     visiting: &mut BTreeSet<Local>,
 ) -> Option<u64> {
     exact_const_usize_operand_value(tcx, body, operand).or_else(|| match operand {
-        Operand::Move(place) | Operand::Copy(place) => exact_single_assignment_usize_place_value(
-            tcx,
-            body,
-            *place,
-            use_location,
-            visiting,
-        ),
+        Operand::Move(place) | Operand::Copy(place) => {
+            exact_single_assignment_usize_place_value(tcx, body, *place, use_location, visiting)
+        }
         _ => None,
     })
 }
@@ -16519,5 +16576,32 @@ pub(crate) fn run(pass_mode: PassMode) {
     if let Err(err) = result {
         eprintln!("rustc_driver failed: {:?}", err);
         process::exit(1);
+    }
+}
+
+#[cfg(all(test, unialloc_rustc_current))]
+mod target_usize_tests {
+    use super::*;
+
+    #[test]
+    fn checked_binary_respects_target_pointer_width() {
+        assert_eq!(target_usize_max_for_pointer_bits(32), Some(u32::MAX as u64));
+        assert_eq!(target_usize_max_for_pointer_bits(64), Some(u64::MAX));
+        assert_eq!(
+            checked_binary_for_target_usize(BinOp::Add, u32::MAX as u64, 1, 32),
+            None
+        );
+        assert_eq!(
+            checked_binary_for_target_usize(BinOp::Mul, 1_u64 << 31, 2, 32),
+            None
+        );
+        assert_eq!(
+            checked_binary_for_target_usize(BinOp::Add, u32::MAX as u64, 1, 64),
+            Some(1_u64 << 32)
+        );
+        assert_eq!(
+            checked_binary_for_target_usize(BinOp::Sub, 8_001, 1, 64),
+            None
+        );
     }
 }

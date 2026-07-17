@@ -604,6 +604,47 @@ fn multiply_loop_phi(mut iterations: usize) -> Vec<u8> {
 }
 
 #[inline(never)]
+fn mutably_borrowed_capacity() -> Vec<u8> {
+    let mut capacity = TANTIVY_SSTABLE_BLOCK_LEN;
+    let alias = &mut capacity;
+    *alias += 1;
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn mutate_capacity(capacity: &mut usize) {
+    *capacity += 1;
+}
+
+#[inline(never)]
+fn capacity_mutated_by_call() -> Vec<u8> {
+    let mut capacity = TANTIVY_SSTABLE_BLOCK_LEN;
+    mutate_capacity(&mut capacity);
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn raw_mutated_capacity() -> Vec<u8> {
+    let mut capacity = TANTIVY_SSTABLE_BLOCK_LEN;
+    let alias = &raw mut capacity;
+    unsafe {
+        *alias += 1;
+    }
+    Vec::with_capacity(capacity * 2)
+}
+
+#[inline(never)]
+fn unsupported_shift_capacity() -> Vec<u8> {
+    Vec::with_capacity(TANTIVY_SSTABLE_BLOCK_LEN << 1)
+}
+
+#[allow(arithmetic_overflow)]
+#[inline(never)]
+fn overflowing_const_add_capacity() -> Vec<u8> {
+    Vec::with_capacity(usize::MAX + 1)
+}
+
+#[inline(never)]
 fn tiny_box() -> Box<[u8; 128]> {
     Box::new([0_u8; 128])
 }
@@ -620,6 +661,10 @@ fn main() {
     drop(parameter_mul_capacity(TANTIVY_SSTABLE_BLOCK_LEN));
     drop(multiply_reassigned_local(false));
     drop(multiply_loop_phi(0));
+    drop(mutably_borrowed_capacity());
+    drop(capacity_mutated_by_call());
+    drop(raw_mutated_capacity());
+    drop(unsupported_shift_capacity());
     drop(tiny_box());
     let observed = unialloc::observed_hints();
     println!("observed_hints={observed}");
@@ -1674,6 +1719,11 @@ fn main() {
             "parameter_mul_capacity",
             "multiply_reassigned_local",
             "multiply_loop_phi",
+            "mutably_borrowed_capacity",
+            "capacity_mutated_by_call",
+            "raw_mutated_capacity",
+            "unsupported_shift_capacity",
+            "overflowing_const_add_capacity",
         ):
             row = self.assert_hint(
                 audit,
@@ -1719,6 +1769,48 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=8", completed.stdout)
+
+    def test_checked_const_target_usize_arithmetic_contract(self) -> None:
+        unit_driver = self.tmp / "unialloc-rustc-pass-unit-tests"
+        env = os.environ.copy()
+        env["RUSTC_BOOTSTRAP"] = "1"
+        library_path = str(self.sysroot / "lib")
+        env["LD_LIBRARY_PATH"] = library_path
+        env["DYLD_LIBRARY_PATH"] = library_path
+        compiled = subprocess.run(
+            [
+                self.rustc,
+                f"+{TOOLCHAIN}",
+                "--cfg",
+                "unialloc_rustc_current",
+                "--test",
+                str(PASS_SOURCE),
+                "-o",
+                str(unit_driver),
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(compiled.returncode, 0, compiled.stderr)
+        completed = subprocess.run(
+            [
+                str(unit_driver),
+                "--exact",
+                "engine::target_usize_tests::checked_binary_respects_target_pointer_width",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("1 passed", completed.stdout)
 
     def test_borrowed_vec_reserve_uses_runtime_layout_long_gate(self) -> None:
         audit = self.run_pass(
