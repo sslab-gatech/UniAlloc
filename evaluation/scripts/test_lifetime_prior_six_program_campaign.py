@@ -437,6 +437,37 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                     campaign.ARM_BY_NAME["adaptive-ordinary-all-unknown"], summary
                 )
 
+    def test_borrowed_vec_reserve_long_basis_obeys_contract(self) -> None:
+        basis = "automatic_rust_lifetime_prior_borrowed_vec_reserve_long"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis=basis,
+                hint=2,
+                confidence=70,
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            self.assertEqual({basis: 1}, summary["prior_basis_counts"])
+            self.assertEqual(1, summary["classified_candidate_count"])
+            self.assertEqual(1, summary["applied_prior_hinted_candidate_count"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis=basis,
+                hint=2,
+                confidence=85,
+            )
+            with self.assertRaisesRegex(
+                campaign.CampaignContractError,
+                "lifetime-prior basis contract changed",
+            ):
+                campaign.summarize_compiler_prior_audits(root)
+
     def test_generic_and_numeric_scope_rewrites_share_applied_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

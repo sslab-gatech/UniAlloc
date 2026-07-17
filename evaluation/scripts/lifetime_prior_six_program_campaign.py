@@ -99,6 +99,7 @@ PRIOR_CLASSIFIED_BASIS_CONTRACT = {
     "automatic_rust_lifetime_prior_receiver_owned_short": (1, 85),
     "automatic_rust_lifetime_prior_return_long": (2, 70),
     "automatic_rust_lifetime_prior_escape_long": (2, 70),
+    "automatic_rust_lifetime_prior_borrowed_vec_reserve_long": (2, 70),
 }
 APPLIED_ALLOCATION_SCOPE_STATUSES = frozenset(
     {
