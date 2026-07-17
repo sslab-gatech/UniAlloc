@@ -1,0 +1,60 @@
+{
+  "A_strict_source": [
+    {
+      "function": "safe_checked_mul",
+      "hint": 2,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_return_long",
+      "requested_size": 8000,
+      "requested_align": 1,
+      "requested_layout_basis": "exact_vec_with_capacity_requested_layout"
+    },
+    {
+      "function": "mutably_borrowed_capacity",
+      "hint": 41219,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_dynamic_buffer_observe",
+      "requested_size": null,
+      "requested_align": null,
+      "requested_layout_basis": "exact_dynamic_global_buffer_with_capacity_runtime_layout"
+    },
+    {
+      "function": "raw_mutated_capacity",
+      "hint": 41219,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_dynamic_buffer_observe",
+      "requested_size": null,
+      "requested_align": null,
+      "requested_layout_basis": "exact_dynamic_global_buffer_with_capacity_runtime_layout"
+    }
+  ],
+  "B_lifetime_aware_source": [
+    {
+      "function": "safe_checked_mul",
+      "hint": 2,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_return_long",
+      "requested_size": 8000,
+      "requested_align": 1,
+      "requested_layout_basis": "exact_vec_with_capacity_requested_layout"
+    },
+    {
+      "function": "mutably_borrowed_capacity",
+      "hint": 2,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_return_long",
+      "requested_size": 8000,
+      "requested_align": 1,
+      "requested_layout_basis": "exact_vec_with_capacity_requested_layout"
+    },
+    {
+      "function": "raw_mutated_capacity",
+      "hint": 2,
+      "confidence": 70,
+      "basis": "automatic_rust_lifetime_prior_return_long",
+      "requested_size": 8000,
+      "requested_align": 1,
+      "requested_layout_basis": "exact_vec_with_capacity_requested_layout"
+    }
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "A": {
+    "confusion_bytes": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 32
+      },
+      "other": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 0,
+        "long": 21489,
+        "short": 5664
+      }
+    },
+    "confusion_objects": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 4
+      },
+      "other": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 0,
+        "long": 257,
+        "short": 32
+      }
+    },
+    "exact_layout": 9,
+    "long_fn_including_abstention": 257,
+    "long_fp": 4,
+    "long_precision": 0.0,
+    "long_recall_including_abstention": 0.0,
+    "long_tp": 0,
+    "matched_sites": 12,
+    "non_unknown_details": [
+      {
+        "basis": "automatic_rust_lifetime_prior_escape_long",
+        "confidence": 70,
+        "mir_function": "cli::build_command",
+        "prediction": "long",
+        "runtime_key": {
+          "align": 8,
+          "callsite": 5238189096944300544,
+          "module_id": 2129437896608481382,
+          "requested_size": 8,
+          "type_id": 2129825223903789779
+        },
+        "truth_bytes": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 8
+        },
+        "truth_objects": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 1
+        }
+      },
+      {
+        "basis": "automatic_rust_lifetime_prior_escape_long",
+        "confidence": 70,
+        "mir_function": "cli::build_command",
+        "prediction": "long",
+        "runtime_key": {
+          "align": 8,
+          "callsite": 10391557098892703240,
+          "module_id": 2129437896608481382,
+          "requested_size": 8,
+          "type_id": 2129825223903789779
+        },
+        "truth_bytes": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 8
+        },
+        "truth_objects": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 1
+        }
+      },
+      {
+        "basis": "automatic_rust_lifetime_prior_escape_long",
+        "confidence": 70,
+        "mir_function": "cli::build_command",
+        "prediction": "long",
+        "runtime_key": {
+          "align": 8,
+          "callsite": 11063427705439161753,
+          "module_id": 2129437896608481382,
+          "requested_size": 8,
+          "type_id": 15730751914263917776
+        },
+        "truth_bytes": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 8
+        },
+        "truth_objects": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 1
+        }
+      },
+      {
+        "basis": "automatic_rust_lifetime_prior_escape_long",
+        "confidence": 70,
+        "mir_function": "cli::build_command",
+        "prediction": "long",
+        "runtime_key": {
+          "align": 8,
+          "callsite": 13144233855722068488,
+          "module_id": 2129437896608481382,
+          "requested_size": 8,
+          "type_id": 15730751914263917776
+        },
+        "truth_bytes": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 8
+        },
+        "truth_objects": {
+          "indeterminate": 0,
+          "long": 0,
+          "short": 1
+        }
+      }
+    ],
+    "non_unknown_object_coverage": 0.013651877133105802,
+    "runtime_sites": 12,
+    "short_fn_including_abstention": 36,
+    "short_fp": 0,
+    "short_precision": null,
+    "short_recall_including_abstention": 0.0,
+    "short_tp": 0,
+    "site_prediction_counts": {
+      "long": 4,
+      "unknown": 8
+    }
+  },
+  "B": {
+    "confusion_bytes": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "other": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 0,
+        "long": 21489,
+        "short": 5696
+      }
+    },
+    "confusion_objects": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "other": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 0,
+        "long": 257,
+        "short": 36
+      }
+    },
+    "exact_layout": 9,
+    "long_fn_including_abstention": 257,
+    "long_fp": 0,
+    "long_precision": null,
+    "long_recall_including_abstention": 0.0,
+    "long_tp": 0,
+    "matched_sites": 12,
+    "non_unknown_details": [],
+    "non_unknown_object_coverage": 0.0,
+    "runtime_sites": 12,
+    "short_fn_including_abstention": 36,
+    "short_fp": 0,
+    "short_precision": null,
+    "short_recall_including_abstention": 0.0,
+    "short_tp": 0,
+    "site_prediction_counts": {
+      "unknown": 12
+    }
+  }
+}

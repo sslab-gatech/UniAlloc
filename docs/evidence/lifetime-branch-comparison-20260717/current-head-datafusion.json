@@ -1,0 +1,219 @@
+{
+  "branches": {
+    "A-strict": {
+      "allocator_snapshot_revision": null,
+      "binary": "/tmp/unialloc-head-smoke/a/datafusion-current-head/build/cargo-target/release/unialloc-lifetime-resident-datafusion",
+      "binary_sha256": "f747f265c2febe5ada192c113ada630c140368c9c3c00fe5afeea88a56230916",
+      "compiler_audit_applied_allocation_candidate_count": 19,
+      "compiler_audit_classified_candidate_count": 19,
+      "compiler_audit_digest": "a5f8a2334e59402c447ee47aef24a7354afb112f7a6ded75403e482d46812dcc",
+      "compiler_environment": {
+        "actual_allocator_call_rewrite": false,
+        "automatic_rust_lifetime_prior": null,
+        "cargo_profile_release_strip": "false",
+        "compiler_directed_lifetime": "1",
+        "compiler_directed_profile": null,
+        "compiler_directed_profile_sha256": null,
+        "marker_free_preoptimization_required": true,
+        "release_symbols_retained": true,
+        "rustflags": "--cfg unialloc_lifetime_prior_compiler_directed",
+        "source": "unialloc-stage-a-compiler-build-environment-v1"
+      },
+      "head": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+      "median_peak_rss_change_percent": 0.9853797342089721,
+      "median_query_speedup_percent": 2.1578410227223004,
+      "pairs": [
+        {
+          "backing_gate": {
+            "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+            "ordinary_peak_anon_hugepages_kib": 0,
+            "ordinary_positive_backing_sample_count": 0,
+            "ordinary_routed_allocations": 786432,
+            "ordinary_sample_count": 133,
+            "ordinary_thp_advice_attempts": 0,
+            "ordinary_thp_advice_successes": 0,
+            "ordinary_thp_collapse_successes": 0,
+            "ordinary_thp_extent_mappings": 0,
+            "passed": false,
+            "reasons": [
+              "compiler-directed backing failure counter is nonzero: thp_collapse_errors"
+            ],
+            "thp_advice_attempts": 17,
+            "thp_advice_successes": 17,
+            "thp_collapse_successes": 16,
+            "thp_extent_mappings": 17,
+            "thp_peak_anon_hugepages_kib": 32768,
+            "thp_positive_backing_sample_count": 132,
+            "thp_routed_allocations": 786432,
+            "thp_sample_count": 132
+          },
+          "order": "forward",
+          "ordinary_peak_rss_kib": 255492,
+          "ordinary_query_seconds": 24.001623272,
+          "thp_peak_rss_change_percent": 1.7096425719787705,
+          "thp_peak_rss_kib": 259860,
+          "thp_query_seconds": 23.558845173,
+          "thp_query_speedup_percent": 1.8447839714097072
+        },
+        {
+          "backing_gate": {
+            "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+            "ordinary_peak_anon_hugepages_kib": 0,
+            "ordinary_positive_backing_sample_count": 0,
+            "ordinary_routed_allocations": 786432,
+            "ordinary_sample_count": 126,
+            "ordinary_thp_advice_attempts": 0,
+            "ordinary_thp_advice_successes": 0,
+            "ordinary_thp_collapse_successes": 0,
+            "ordinary_thp_extent_mappings": 0,
+            "passed": true,
+            "reasons": [],
+            "thp_advice_attempts": 16,
+            "thp_advice_successes": 16,
+            "thp_collapse_successes": 16,
+            "thp_extent_mappings": 16,
+            "thp_peak_anon_hugepages_kib": 32768,
+            "thp_positive_backing_sample_count": 125,
+            "thp_routed_allocations": 786432,
+            "thp_sample_count": 125
+          },
+          "order": "reverse",
+          "ordinary_peak_rss_kib": 257356,
+          "ordinary_query_seconds": 22.94261386,
+          "thp_peak_rss_change_percent": 0.26111689643917374,
+          "thp_peak_rss_kib": 258028,
+          "thp_query_seconds": 22.375725256,
+          "thp_query_speedup_percent": 2.4708980740348934
+        }
+      ]
+    },
+    "B-lifetime-aware": {
+      "allocator_snapshot_revision": null,
+      "binary": "/tmp/unialloc-head-smoke/b/datafusion-current-head/build/cargo-target/release/unialloc-lifetime-resident-datafusion",
+      "binary_sha256": "ba3372f14a062595a10ba4bcb6d7643fdcee162bc12374eb2241f136685f2744",
+      "compiler_audit_applied_allocation_candidate_count": 2290,
+      "compiler_audit_classified_candidate_count": 19,
+      "compiler_audit_digest": "f4397efcc82fc4b5d2e26ee992d4865bd56eb55107aaf992e67e73fac81278d4",
+      "compiler_environment": {
+        "actual_allocator_call_rewrite": false,
+        "automatic_rust_lifetime_prior": "1",
+        "cargo_profile_release_strip": "false",
+        "marker_free_preoptimization_required": true,
+        "release_symbols_retained": true,
+        "rustflags": "--cfg unialloc_lifetime_prior_compiler_prior",
+        "source": "unialloc-stage-a-compiler-build-environment-v1"
+      },
+      "head": "547787321dce74b15d65875539c22ed3fa122fa8",
+      "median_peak_rss_change_percent": -0.46691678704827116,
+      "median_query_speedup_percent": 0.28556674549735533,
+      "pairs": [
+        {
+          "backing_gate": {
+            "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+            "ordinary_peak_anon_hugepages_kib": 0,
+            "ordinary_positive_backing_sample_count": 0,
+            "ordinary_routed_allocations": 786432,
+            "ordinary_sample_count": 128,
+            "ordinary_thp_advice_attempts": 0,
+            "ordinary_thp_advice_successes": 0,
+            "ordinary_thp_collapse_successes": 0,
+            "ordinary_thp_extent_mappings": 0,
+            "passed": true,
+            "reasons": [],
+            "thp_advice_attempts": 16,
+            "thp_advice_successes": 16,
+            "thp_collapse_successes": 16,
+            "thp_extent_mappings": 16,
+            "thp_peak_anon_hugepages_kib": 32768,
+            "thp_positive_backing_sample_count": 129,
+            "thp_routed_allocations": 786432,
+            "thp_sample_count": 129
+          },
+          "order": "forward",
+          "ordinary_peak_rss_kib": 262384,
+          "ordinary_query_seconds": 22.991412523,
+          "thp_peak_rss_change_percent": -1.7912677602292824,
+          "thp_peak_rss_kib": 257684,
+          "thp_query_seconds": 22.873127873,
+          "thp_query_speedup_percent": 0.5144731750677382
+        },
+        {
+          "backing_gate": {
+            "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+            "ordinary_peak_anon_hugepages_kib": 0,
+            "ordinary_positive_backing_sample_count": 0,
+            "ordinary_routed_allocations": 786432,
+            "ordinary_sample_count": 128,
+            "ordinary_thp_advice_attempts": 0,
+            "ordinary_thp_advice_successes": 0,
+            "ordinary_thp_collapse_successes": 0,
+            "ordinary_thp_extent_mappings": 0,
+            "passed": true,
+            "reasons": [],
+            "thp_advice_attempts": 16,
+            "thp_advice_successes": 16,
+            "thp_collapse_successes": 16,
+            "thp_extent_mappings": 16,
+            "thp_peak_anon_hugepages_kib": 32768,
+            "thp_positive_backing_sample_count": 130,
+            "thp_routed_allocations": 786432,
+            "thp_sample_count": 130
+          },
+          "order": "reverse",
+          "ordinary_peak_rss_kib": 258912,
+          "ordinary_query_seconds": 23.014245132,
+          "thp_peak_rss_change_percent": 0.85743418613274,
+          "thp_peak_rss_kib": 261132,
+          "thp_query_seconds": 23.001205188,
+          "thp_query_speedup_percent": 0.05666031592697247
+        }
+      ]
+    }
+  },
+  "classification": "current-head-balanced-directional-smoke",
+  "cpu_affinity": "120-123",
+  "schedule": [
+    [
+      "A-strict",
+      "forward-ordinary",
+      "compiler-directed-ordinary-compiler-prior"
+    ],
+    [
+      "A-strict",
+      "forward-thp",
+      "compiler-directed-hugepage-compiler-prior"
+    ],
+    [
+      "B-lifetime-aware",
+      "forward-ordinary",
+      "compiler-directed-ordinary-compiler-prior"
+    ],
+    [
+      "B-lifetime-aware",
+      "forward-thp",
+      "compiler-directed-hugepage-compiler-prior"
+    ],
+    [
+      "B-lifetime-aware",
+      "reverse-thp",
+      "compiler-directed-hugepage-compiler-prior"
+    ],
+    [
+      "B-lifetime-aware",
+      "reverse-ordinary",
+      "compiler-directed-ordinary-compiler-prior"
+    ],
+    [
+      "A-strict",
+      "reverse-thp",
+      "compiler-directed-hugepage-compiler-prior"
+    ],
+    [
+      "A-strict",
+      "reverse-ordinary",
+      "compiler-directed-ordinary-compiler-prior"
+    ]
+  ],
+  "schema_version": 1,
+  "warmup_iterations": 0
+}

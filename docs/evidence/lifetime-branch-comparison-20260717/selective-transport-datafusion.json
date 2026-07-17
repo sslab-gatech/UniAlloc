@@ -1,0 +1,321 @@
+{
+  "backing_gates": {
+    "legacy": {
+      "forward": {
+        "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+        "ordinary_peak_anon_hugepages_kib": 0,
+        "ordinary_positive_backing_sample_count": 0,
+        "ordinary_routed_allocations": 786432,
+        "ordinary_sample_count": 132,
+        "ordinary_thp_advice_attempts": 0,
+        "ordinary_thp_advice_successes": 0,
+        "ordinary_thp_collapse_successes": 0,
+        "ordinary_thp_extent_mappings": 0,
+        "passed": true,
+        "reasons": [],
+        "thp_advice_attempts": 16,
+        "thp_advice_successes": 16,
+        "thp_collapse_successes": 16,
+        "thp_extent_mappings": 16,
+        "thp_peak_anon_hugepages_kib": 32768,
+        "thp_positive_backing_sample_count": 130,
+        "thp_routed_allocations": 786432,
+        "thp_sample_count": 130
+      },
+      "reverse": {
+        "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+        "ordinary_peak_anon_hugepages_kib": 0,
+        "ordinary_positive_backing_sample_count": 0,
+        "ordinary_routed_allocations": 786432,
+        "ordinary_sample_count": 129,
+        "ordinary_thp_advice_attempts": 0,
+        "ordinary_thp_advice_successes": 0,
+        "ordinary_thp_collapse_successes": 0,
+        "ordinary_thp_extent_mappings": 0,
+        "passed": true,
+        "reasons": [],
+        "thp_advice_attempts": 16,
+        "thp_advice_successes": 16,
+        "thp_collapse_successes": 16,
+        "thp_extent_mappings": 16,
+        "thp_peak_anon_hugepages_kib": 32768,
+        "thp_positive_backing_sample_count": 129,
+        "thp_routed_allocations": 786432,
+        "thp_sample_count": 129
+      }
+    },
+    "standalone": {
+      "forward": {
+        "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+        "ordinary_peak_anon_hugepages_kib": 0,
+        "ordinary_positive_backing_sample_count": 0,
+        "ordinary_routed_allocations": 786432,
+        "ordinary_sample_count": 130,
+        "ordinary_thp_advice_attempts": 0,
+        "ordinary_thp_advice_successes": 0,
+        "ordinary_thp_collapse_successes": 0,
+        "ordinary_thp_extent_mappings": 0,
+        "passed": false,
+        "reasons": [
+          "compiler-directed backing failure counter is nonzero: thp_collapse_errors"
+        ],
+        "thp_advice_attempts": 17,
+        "thp_advice_successes": 17,
+        "thp_collapse_successes": 16,
+        "thp_extent_mappings": 17,
+        "thp_peak_anon_hugepages_kib": 32768,
+        "thp_positive_backing_sample_count": 131,
+        "thp_routed_allocations": 786432,
+        "thp_sample_count": 131
+      },
+      "reverse": {
+        "claim_boundary": "both processes and every operation-window sample in this measured block are gated independently",
+        "ordinary_peak_anon_hugepages_kib": 0,
+        "ordinary_positive_backing_sample_count": 0,
+        "ordinary_routed_allocations": 786432,
+        "ordinary_sample_count": 133,
+        "ordinary_thp_advice_attempts": 0,
+        "ordinary_thp_advice_successes": 0,
+        "ordinary_thp_collapse_successes": 0,
+        "ordinary_thp_extent_mappings": 0,
+        "passed": true,
+        "reasons": [],
+        "thp_advice_attempts": 16,
+        "thp_advice_successes": 16,
+        "thp_collapse_successes": 16,
+        "thp_extent_mappings": 16,
+        "thp_peak_anon_hugepages_kib": 32768,
+        "thp_positive_backing_sample_count": 129,
+        "thp_routed_allocations": 786432,
+        "thp_sample_count": 129
+      }
+    }
+  },
+  "claim_boundary": "single direction-balanced AB/BA macro smoke; zero warmup; no confidence interval",
+  "classification": "post-port-long-only-transport-orthogonal-datafusion-abba",
+  "compiler_ablation": {
+    "legacy_applied_runtime_scope_count": 2290,
+    "legacy_binary_sha256": "ba3372f14a062595a10ba4bcb6d7643fdcee162bc12374eb2241f136685f2744",
+    "legacy_long_site_count": 19,
+    "legacy_only_long_keys": [],
+    "legacy_scope_status_counts": {
+      "actual_semantic_scope_enter_exit_rewrite_applied": 1374,
+      "actual_semantic_scope_generic_type_rewrite_applied": 916
+    },
+    "long_site_exact_parity": true,
+    "scope_reduction_percent": 98.73362445414847,
+    "standalone_applied_runtime_scope_count": 29,
+    "standalone_binary_sha256": "946ef595553eb5b9316dc7f20f0d17947b604a2d4ef3deac2699f735370497f1",
+    "standalone_elided_non_long_scope_count": 2261,
+    "standalone_long_site_count": 19,
+    "standalone_only_long_keys": [],
+    "standalone_scope_status_counts": {
+      "actual_semantic_scope_enter_exit_rewrite_applied": 9,
+      "actual_semantic_scope_generic_type_rewrite_applied": 20,
+      "lifetime_aware_non_long_semantic_scope_elided": 2261
+    }
+  },
+  "cross_variant_comparisons": {
+    "ordinary": {
+      "median_standalone_peak_rss_saving_percent": -1.1496450678061976,
+      "median_standalone_speedup_percent": -0.5430297295937324,
+      "pairs": [
+        {
+          "direction": "forward",
+          "legacy_collapse_successes": 0,
+          "legacy_peak_anon_hugepages_kib": 0,
+          "legacy_peak_rss_kib": 246348,
+          "legacy_query_seconds": 23.725413333,
+          "legacy_routed_allocations": 786432,
+          "standalone_collapse_successes": 0,
+          "standalone_peak_anon_hugepages_kib": 0,
+          "standalone_peak_rss_kib": 254408,
+          "standalone_peak_rss_saving_percent": -3.271794372188936,
+          "standalone_query_seconds": 23.436774338,
+          "standalone_routed_allocations": 786432,
+          "standalone_speedup_percent": 1.2165815235704558
+        },
+        {
+          "direction": "reverse",
+          "legacy_collapse_successes": 0,
+          "legacy_peak_anon_hugepages_kib": 0,
+          "legacy_peak_rss_kib": 262004,
+          "legacy_query_seconds": 23.274614541,
+          "legacy_routed_allocations": 786432,
+          "standalone_collapse_successes": 0,
+          "standalone_peak_anon_hugepages_kib": 0,
+          "standalone_peak_rss_kib": 259456,
+          "standalone_peak_rss_saving_percent": 0.9725042365765408,
+          "standalone_query_seconds": 23.810545354,
+          "standalone_routed_allocations": 786432,
+          "standalone_speedup_percent": -2.3026409827579206
+        }
+      ]
+    },
+    "thp": {
+      "median_standalone_peak_rss_saving_percent": 1.2002361899561989,
+      "median_standalone_speedup_percent": -0.21686475185307993,
+      "pairs": [
+        {
+          "direction": "forward",
+          "legacy_collapse_successes": 16,
+          "legacy_peak_anon_hugepages_kib": 32768,
+          "legacy_peak_rss_kib": 261696,
+          "legacy_query_seconds": 23.317906816,
+          "legacy_routed_allocations": 786432,
+          "standalone_collapse_successes": 16,
+          "standalone_peak_anon_hugepages_kib": 32768,
+          "standalone_peak_rss_kib": 257008,
+          "standalone_peak_rss_saving_percent": 1.7913915382734165,
+          "standalone_query_seconds": 23.340117673,
+          "standalone_routed_allocations": 786432,
+          "standalone_speedup_percent": -0.09525236195197696
+        },
+        {
+          "direction": "reverse",
+          "legacy_collapse_successes": 16,
+          "legacy_peak_anon_hugepages_kib": 32768,
+          "legacy_peak_rss_kib": 260064,
+          "legacy_query_seconds": 23.00305409,
+          "legacy_routed_allocations": 786432,
+          "standalone_collapse_successes": 16,
+          "standalone_peak_anon_hugepages_kib": 32768,
+          "standalone_peak_rss_kib": 258480,
+          "standalone_peak_rss_saving_percent": 0.6090808416389811,
+          "standalone_query_seconds": 23.08091417,
+          "standalone_routed_allocations": 786432,
+          "standalone_speedup_percent": -0.3384771417541829
+        }
+      ]
+    }
+  },
+  "fixed_work_digest": {
+    "approx_distinct_accumulator_bytes": 16384,
+    "approx_distinct_digest": "1adb208ef1d74d50",
+    "approx_distinct_max_error_ppm": 10638,
+    "approx_distinct_reasonable": true,
+    "approx_distinct_stable": true,
+    "approx_distinct_total_estimate": 97701,
+    "approx_distinct_total_exact": 98236,
+    "batches_per_table": 256,
+    "columns_per_table": 4,
+    "correctness": true,
+    "group_count": 1024,
+    "materialized_digest": "e95377e3d282affb",
+    "materialized_rows": 786432,
+    "query_digest": "2934adc49496a3dd",
+    "query_iterations": 256,
+    "query_output_rows": 1024,
+    "resident_payload_bytes": 44040192,
+    "result_digest": "33de08f6e921ea25",
+    "routable_buffer_bytes": 24576,
+    "rows_per_batch": 3072,
+    "rows_per_table": 786432,
+    "table_count": 2,
+    "target_partitions": 2
+  },
+  "fixed_work_output_parity": true,
+  "schema_version": 1,
+  "source_snapshot": {
+    "files": [
+      {
+        "bytes": 32594,
+        "path": "lifetime_aware.rs",
+        "sha256": "d67c0e12e0f141996423362a2cb8e930b152ebc3d21cf0844ec9553055021ef2"
+      },
+      {
+        "bytes": 645362,
+        "path": "unialloc-rustc-driver-engine.rs",
+        "sha256": "88f8f4c49445e9a171cd081830b750a688d25fb8726e5d842ec4655c7d5d2301"
+      },
+      {
+        "bytes": 698,
+        "path": "unialloc-rustc-lifetime-aware.rs",
+        "sha256": "986a2f846f1e23895222443a3d6ef4701e6db1de75936f562448731cc593d3d3"
+      },
+      {
+        "bytes": 684,
+        "path": "unialloc-rustc-mir-rewrite-dry-run.rs",
+        "sha256": "5dd1b23bc5cd594e95fba864c66fb70040ce324bb75d7e01898a0818490a137e"
+      }
+    ]
+  },
+  "within_variant_thp_vs_ordinary": {
+    "legacy": {
+      "median_thp_peak_rss_saving_percent": -2.7448821051993564,
+      "median_thp_speedup_percent": 1.442180855954791,
+      "pairs": [
+        {
+          "direction": "forward",
+          "ordinary_collapse_successes": 0,
+          "ordinary_peak_anon_hugepages_kib": 0,
+          "ordinary_peak_rss_kib": 246348,
+          "ordinary_policy": 10,
+          "ordinary_query_seconds": 23.725413333,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 16,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_peak_rss_kib": 261696,
+          "thp_peak_rss_saving_percent": -6.230210921135954,
+          "thp_policy": 9,
+          "thp_query_seconds": 23.317906816,
+          "thp_speedup_percent": 1.7175950162823581
+        },
+        {
+          "direction": "reverse",
+          "ordinary_collapse_successes": 0,
+          "ordinary_peak_anon_hugepages_kib": 0,
+          "ordinary_peak_rss_kib": 262004,
+          "ordinary_policy": 10,
+          "ordinary_query_seconds": 23.274614541,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 16,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_peak_rss_kib": 260064,
+          "thp_peak_rss_saving_percent": 0.7404467107372407,
+          "thp_policy": 9,
+          "thp_query_seconds": 23.00305409,
+          "thp_speedup_percent": 1.1667666956272242
+        }
+      ]
+    },
+    "standalone": {
+      "median_thp_peak_rss_saving_percent": -0.322904379288771,
+      "median_thp_speedup_percent": 1.738367019124134,
+      "pairs": [
+        {
+          "direction": "forward",
+          "ordinary_collapse_successes": 0,
+          "ordinary_peak_anon_hugepages_kib": 0,
+          "ordinary_peak_rss_kib": 254408,
+          "ordinary_policy": 10,
+          "ordinary_query_seconds": 23.436774338,
+          "thp_collapse_errors": 1,
+          "thp_collapse_successes": 16,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_peak_rss_kib": 257008,
+          "thp_peak_rss_saving_percent": -1.0219804408666393,
+          "thp_policy": 9,
+          "thp_query_seconds": 23.340117673,
+          "thp_speedup_percent": 0.4124145396718697
+        },
+        {
+          "direction": "reverse",
+          "ordinary_collapse_successes": 0,
+          "ordinary_peak_anon_hugepages_kib": 0,
+          "ordinary_peak_rss_kib": 259456,
+          "ordinary_policy": 10,
+          "ordinary_query_seconds": 23.810545354,
+          "thp_collapse_errors": 0,
+          "thp_collapse_successes": 16,
+          "thp_peak_anon_hugepages_kib": 32768,
+          "thp_peak_rss_kib": 258480,
+          "thp_peak_rss_saving_percent": 0.3761716822890972,
+          "thp_policy": 9,
+          "thp_query_seconds": 23.08091417,
+          "thp_speedup_percent": 3.0643194985763986
+        }
+      ]
+    }
+  }
+}

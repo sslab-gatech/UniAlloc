@@ -1,0 +1,184 @@
+{
+  "branch": "lifetime-aware",
+  "head": "4fb9c6760ebe4450b6810786c45e0062bdd5b754",
+  "engine_sha256": "1bf6083ecfbd29b437dfd881bb0a014d8345cb2ae2dd2a6d6d19b4165e05c65d",
+  "fixture": "/tmp/unialloc-heap-lifetime-ky2m78zx/b_long_only_transport_ablation.rs",
+  "variants": {
+    "legacy_loose": {
+      "binary_sha256": "bcc45ad454bc2028cd70d117579359e135410c5d5844ea929956c3ff4a56bcfb",
+      "binary_bytes": 4408528,
+      "semantic_scope_candidate_count": 4,
+      "status_counts": {
+        "actual_semantic_scope_generic_type_rewrite_applied": 4
+      },
+      "allocation_rows": [
+        {
+          "function": "local_owner",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [u64]))",
+          "hint": 0,
+          "basis": "automatic_rust_lifetime_prior_owner_live_call_unknown",
+          "status": "actual_semantic_scope_generic_type_rewrite_applied"
+        },
+        {
+          "function": "returned_owner",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u8; 4096_usize]]))",
+          "hint": 2,
+          "basis": "automatic_rust_lifetime_prior_return_long",
+          "status": "actual_semantic_scope_generic_type_rewrite_applied"
+        },
+        {
+          "function": "return_dynamic_vec",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:8521 ~ alloc[a394]::vec::{impl#0}::with_capacity), [u8]))",
+          "hint": 0,
+          "basis": "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown",
+          "status": "actual_semantic_scope_generic_type_rewrite_applied"
+        }
+      ],
+      "long_only_requested": false,
+      "operation_seconds_samples": [
+        0.106525419,
+        0.106369864,
+        0.106378858,
+        0.106314109,
+        0.106614194,
+        0.106496145
+      ],
+      "operation_seconds_median": 0.1064375015,
+      "observed_hints": [
+        8
+      ]
+    },
+    "standalone_long_only": {
+      "binary_sha256": "452f2a657fdf0c05d4ef70934baf54a2c27c16eae27d52f27e9e8288901c16c3",
+      "binary_bytes": 4408464,
+      "semantic_scope_candidate_count": 4,
+      "status_counts": {
+        "lifetime_aware_recovery_backed_non_long_scope_elided": 2,
+        "actual_semantic_scope_generic_type_rewrite_applied": 2
+      },
+      "allocation_rows": [
+        {
+          "function": "local_owner",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [u64]))",
+          "hint": 0,
+          "basis": "automatic_rust_lifetime_prior_owner_live_call_unknown",
+          "status": "lifetime_aware_recovery_backed_non_long_scope_elided"
+        },
+        {
+          "function": "returned_owner",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u8; 4096_usize]]))",
+          "hint": 2,
+          "basis": "automatic_rust_lifetime_prior_return_long",
+          "status": "actual_semantic_scope_generic_type_rewrite_applied"
+        },
+        {
+          "function": "return_dynamic_vec",
+          "callee": "Val(ZeroSized, FnDef(DefId(3:8521 ~ alloc[a394]::vec::{impl#0}::with_capacity), [u8]))",
+          "hint": 0,
+          "basis": "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown",
+          "status": "lifetime_aware_recovery_backed_non_long_scope_elided"
+        }
+      ],
+      "long_only_requested": true,
+      "operation_seconds_samples": [
+        0.079919818,
+        0.079654908,
+        0.079706446,
+        0.079923554,
+        0.07969636,
+        0.079649299
+      ],
+      "operation_seconds_median": 0.079701403,
+      "observed_hints": [
+        8
+      ]
+    }
+  },
+  "runs": [
+    {
+      "pair": 0,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106525419,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 0,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.079919818,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 1,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.079654908,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 1,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106369864,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 2,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106378858,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 2,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.079706446,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 3,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.079923554,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 3,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106314109,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 4,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106614194,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 4,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.07969636,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 5,
+      "variant": "standalone_long_only",
+      "operation_seconds": 0.079649299,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    },
+    {
+      "pair": 5,
+      "variant": "legacy_loose",
+      "operation_seconds": 0.106496145,
+      "checksum": 12499997500000,
+      "observed_hints": 8
+    }
+  ],
+  "long_only_saving_percent_vs_loose": 25.119058718228178
+}

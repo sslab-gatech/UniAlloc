@@ -1,0 +1,166 @@
+{
+  "A_v2_oxipng_fresh_join": {
+    "confusion_prediction_by_truth": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 4
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 0,
+        "long": 257,
+        "short": 32
+      }
+    },
+    "coverage_aware_long_recall": 0.0,
+    "harness_long_recall": null,
+    "long_precision": 0.0,
+    "non_unknown_coverage": 0.013651877133105802,
+    "source": "training-current/compiler-prior; real execution but training diagnostic"
+  },
+  "B_stage_a_byte_metrics": [
+    {
+      "decisive_byte_coverage": 7.204830943617744e-08,
+      "exact_layout_gate": false,
+      "long_byte_fp": 32,
+      "long_byte_precision": 0.0,
+      "long_byte_recall": 0.0,
+      "long_byte_tp": 0,
+      "matched_sites": 4,
+      "runtime_sites": 17,
+      "target": "oxipng"
+    },
+    {
+      "decisive_byte_coverage": 7.041416733046689e-06,
+      "exact_layout_gate": false,
+      "long_byte_fp": 0,
+      "long_byte_precision": 1.0,
+      "long_byte_recall": 0.00013783597518952445,
+      "long_byte_tp": 8,
+      "matched_sites": 1,
+      "runtime_sites": 34,
+      "target": "redb"
+    },
+    {
+      "decisive_byte_coverage": 0.08344648961789125,
+      "exact_layout_gate": true,
+      "long_byte_fp": 619392,
+      "long_byte_precision": 0.5,
+      "long_byte_recall": 0.10165445834575172,
+      "long_byte_tp": 619392,
+      "matched_sites": 9,
+      "runtime_sites": 54,
+      "target": "polars"
+    },
+    {
+      "decisive_byte_coverage": 0.24247116018187143,
+      "exact_layout_gate": true,
+      "long_byte_fp": 2686176,
+      "long_byte_precision": 0.9631377951225852,
+      "long_byte_recall": 0.9315901279312155,
+      "long_byte_tp": 70184560,
+      "matched_sites": 55,
+      "runtime_sites": 87,
+      "target": "swc"
+    },
+    {
+      "decisive_byte_coverage": 0.004163340664549234,
+      "exact_layout_gate": true,
+      "long_byte_fp": 0,
+      "long_byte_precision": 1.0,
+      "long_byte_recall": 0.029128388976025096,
+      "long_byte_tp": 5200,
+      "matched_sites": 1,
+      "runtime_sites": 99,
+      "target": "rustpython"
+    },
+    {
+      "decisive_byte_coverage": 6.595252569042473e-09,
+      "exact_layout_gate": true,
+      "long_byte_fp": 0,
+      "long_byte_precision": 1.0,
+      "long_byte_recall": 0.04066073697585769,
+      "long_byte_tp": 64,
+      "matched_sites": 1,
+      "runtime_sites": 23,
+      "target": "actix_web"
+    }
+  ],
+  "B_swc_production_repeat0_ordinary": {
+    "abstained": 45562,
+    "fn": 0,
+    "fp": 5441,
+    "non_unknown_coverage": 0.8605024264041762,
+    "selective_precision": 0.9806406620815291,
+    "selective_recall": 1.0,
+    "tn": 0,
+    "tp": 275612
+  },
+  "B_v1_ripgrep_fd_oxipng_fresh_join": {
+    "confusion_prediction_by_truth": {
+      "long": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "short": {
+        "indeterminate": 0,
+        "long": 0,
+        "short": 0
+      },
+      "unknown": {
+        "indeterminate": 103,
+        "long": 165,
+        "short": 74239
+      }
+    },
+    "non_unknown_coverage": 0.0,
+    "source": "retained v1 real-program ground truth; predates non-Unknown compiler hints"
+  },
+  "abi_cross_run": {
+    "A_on_v1": "rejected unsupported source v1",
+    "A_on_v2": "passed",
+    "B_on_v1": "passed",
+    "B_on_v2": "rejected unsupported ABI 2"
+  },
+  "heads": {
+    "A": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+    "B": "547787321dce74b15d65875539c22ed3fa122fa8"
+  },
+  "synthetic_fixture": {
+    "boundary": "regression fixture, labels encoded by test assertions; not independent real-world ground truth",
+    "long_precision": 1.0,
+    "long_recall": 1.0,
+    "non_unknown_coverage": 0.375,
+    "short_precision": 1.0,
+    "short_recall": 1.0,
+    "truth_by_prediction": {
+      "long": {
+        "long": 2,
+        "short": 0,
+        "unknown": 0
+      },
+      "short": {
+        "long": 0,
+        "short": 1,
+        "unknown": 0
+      },
+      "unknown": {
+        "long": 0,
+        "short": 0,
+        "unknown": 5
+      }
+    }
+  },
+  "unit_tests": {
+    "A_classifier": "11/11 pass, 3.50s",
+    "A_ground_truth": "11/11 pass, 0.06s",
+    "B_classifier": "11/11 pass, 3.87s",
+    "B_ground_truth": "8/8 pass, 0.06s"
+  }
+}

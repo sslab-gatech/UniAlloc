@@ -1,0 +1,59 @@
+{
+  "absorbed_commits": {
+    "evaluator_contract": "053f16fe7e97e42fa1c64d041dc87fa9a870751a",
+    "selective_transport": "a5a1c7ae9517a7ae787c5e3d0473fbe31cf4c86c",
+    "strict_checked_layout": "4fb9c6760ebe4450b6810786c45e0062bdd5b754"
+  },
+  "artifacts": {
+    "README.md": {
+      "bytes": 5063,
+      "sha256": "75a2da2c5db446c4f086010777a26c0d78a893a34457119f542933411b444a9a"
+    },
+    "current-head-datafusion.json": {
+      "bytes": 8801,
+      "sha256": "c04289ed10e8a3519a905e944b60b89e87b3ba2f41b14c0f59153eb44feb0e37"
+    },
+    "fair-oxipng-v2-classification.json": {
+      "bytes": 5169,
+      "sha256": "3de548a8aa72becadef07d129fbe71e96d68d0a2ce9f375b3f51bbc71cc1106d"
+    },
+    "historical-and-fixture-classification.json": {
+      "bytes": 4333,
+      "sha256": "252492ce1187f796d121b841b4a06d05885f82198c8e86aa94da2ce51cda3eb4"
+    },
+    "selective-transport-datafusion.json": {
+      "bytes": 12408,
+      "sha256": "60f539b9bad3d12273894e886308460a3f775365da20333e0597cd59c1e8e2dc"
+    },
+    "selective-transport-synthetic.json": {
+      "bytes": 5733,
+      "sha256": "38fac3074709ed461fcae705bfbc92953ba4353ae35510ebf9f25ac70b084114"
+    },
+    "strict-constant-evaluator.json": {
+      "bytes": 1869,
+      "sha256": "5081d8dc78a739d18b5ad9e116ac6cca0a04158bdd5312e6674876e0aae165b9"
+    }
+  },
+  "claim_boundary": [
+    "Oxipng is a same-snapshot offline classifier comparison with a fail-closed identity adapter.",
+    "DataFusion measurements are single direction-balanced fixed-work smokes with zero warmup and no confidence interval.",
+    "The selective-transport source snapshot includes the exact-local pairing safety gate; final changes after that snapshot affect audit naming and counts only."
+  ],
+  "classification": "compiler-lifetime-branch-comparison-and-selective-absorption",
+  "comparison_heads": {
+    "experiment": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+    "lifetime_aware_pre_absorption": "547787321dce74b15d65875539c22ed3fa122fa8"
+  },
+  "decision": {
+    "absorbed": [
+      "checked constant-layout evaluator",
+      "borrowed-Vec evaluator contract",
+      "recovery-backed non-Long allocation-scope elision"
+    ],
+    "keep_branch": "lifetime-aware",
+    "rejected": [
+      "experiment escape_long classification rule"
+    ]
+  },
+  "schema_version": 1
+}
