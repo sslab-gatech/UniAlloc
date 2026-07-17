@@ -1,0 +1,560 @@
+{
+  "classification": "fresh-current-head-convex-A-B-screen",
+  "passes": {
+    "A": {
+      "binary": "/tmp/unialloc-current-ab-convex-bedrock/tools/A-rustc-pass",
+      "binary_sha256": "9332be236b775f1befff8356d16ea6cf3a5812a30238b2a738e80e3eeffa5e55",
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "--cfg",
+        "unialloc_rustc_current",
+        "/tmp/unialloc-current-ab-convex-bedrock/snapshots/A/passes/unialloc-rustc-mir-rewrite-dry-run.rs",
+        "-O",
+        "-o",
+        "/tmp/unialloc-current-ab-convex-bedrock/tools/A-rustc-pass"
+      ],
+      "source": "/tmp/unialloc-current-ab-convex-bedrock/snapshots/A/passes/unialloc-rustc-mir-rewrite-dry-run.rs",
+      "source_sha256": "f55e4631eab930530c2c5d409b428b9247d8469890df607f5b4b478c27daa2d3",
+      "wall_seconds": 6.700664281845093
+    },
+    "B": {
+      "binary": "/tmp/unialloc-current-ab-convex-bedrock/tools/B-rustc-pass",
+      "binary_sha256": "bbe6f2d6176cb180a0fe544c65504cb46392c3d720bde8fe1bebc2cd339fdf44",
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "--cfg",
+        "unialloc_rustc_current",
+        "/tmp/unialloc-current-ab-convex-bedrock/snapshots/B/passes/unialloc-rustc-lifetime-aware.rs",
+        "-O",
+        "-o",
+        "/tmp/unialloc-current-ab-convex-bedrock/tools/B-rustc-pass"
+      ],
+      "source": "/tmp/unialloc-current-ab-convex-bedrock/snapshots/B/passes/unialloc-rustc-lifetime-aware.rs",
+      "source_sha256": "986a2f846f1e23895222443a3d6ef4701e6db1de75936f562448731cc593d3d3",
+      "wall_seconds": 6.356825113296509
+    }
+  },
+  "provenance": {
+    "A": {
+      "alloc_macros_tree": "f9e63f1c1cbe7f089c7421c399e6e0277f3c9377",
+      "branch": "exp/compiler-directed-lifetime-20260716",
+      "head": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+      "label": "A",
+      "pass_files": [
+        {
+          "bytes": 700227,
+          "name": "unialloc-rustc-mir-rewrite-dry-run.rs",
+          "sha256": "f55e4631eab930530c2c5d409b428b9247d8469890df607f5b4b478c27daa2d3"
+        }
+      ],
+      "pass_tree": "3c0d7f8cc93253c14dc95aae484fca55e249f415",
+      "snapshot_root": "/tmp/unialloc-current-ab-convex-bedrock/snapshots/A",
+      "unialloc_tree": "caf560dd5ec0b67edafa7e7af8e846264b38fbc0",
+      "worktree_clean": true
+    },
+    "B": {
+      "alloc_macros_tree": "f9e63f1c1cbe7f089c7421c399e6e0277f3c9377",
+      "branch": "lifetime-aware",
+      "head": "cbc6877eceb8cf338351dca2a6472c556d7e3dbe",
+      "label": "B",
+      "pass_files": [
+        {
+          "bytes": 32594,
+          "name": "lifetime_aware.rs",
+          "sha256": "d67c0e12e0f141996423362a2cb8e930b152ebc3d21cf0844ec9553055021ef2"
+        },
+        {
+          "bytes": 646797,
+          "name": "unialloc-rustc-driver-engine.rs",
+          "sha256": "1bf6083ecfbd29b437dfd881bb0a014d8345cb2ae2dd2a6d6d19b4165e05c65d"
+        },
+        {
+          "bytes": 698,
+          "name": "unialloc-rustc-lifetime-aware.rs",
+          "sha256": "986a2f846f1e23895222443a3d6ef4701e6db1de75936f562448731cc593d3d3"
+        }
+      ],
+      "pass_tree": "3daff78c24be4941a61174a88ae23ae8f99ca5d0",
+      "snapshot_root": "/tmp/unialloc-current-ab-convex-bedrock/snapshots/B",
+      "unialloc_tree": "08d7f01d699e9932a7c0d2ecd8ce3dea3902789f",
+      "worktree_clean": true
+    }
+  },
+  "schema_version": 1,
+  "targets": {
+    "convex": {
+      "attribution": {
+        "A": {
+          "median_thp_peak_rss_saving_percent": 0.11488474489607756,
+          "median_thp_speedup_percent": -190.36764746568042,
+          "pairs": [
+            {
+              "direction": "forward",
+              "ordinary_peak_rss_kib": 22612,
+              "ordinary_seconds": 3.730747169,
+              "thp_peak_rss_kib": 22596,
+              "thp_peak_rss_saving_percent": 0.07075888908544135,
+              "thp_seconds": 16.665379104,
+              "thp_speedup_percent": -346.7035247651755
+            },
+            {
+              "direction": "reverse",
+              "ordinary_peak_rss_kib": 22640,
+              "ordinary_seconds": 3.741083484,
+              "thp_peak_rss_kib": 22604,
+              "thp_peak_rss_saving_percent": 0.15901060070671377,
+              "thp_seconds": 5.014240417,
+              "thp_speedup_percent": -34.03177016618537
+            }
+          ]
+        },
+        "B": {
+          "median_thp_peak_rss_saving_percent": 0.05294740557712672,
+          "median_thp_speedup_percent": -228.52141311674984,
+          "pairs": [
+            {
+              "direction": "forward",
+              "ordinary_peak_rss_kib": 22600,
+              "ordinary_seconds": 3.70845144,
+              "thp_peak_rss_kib": 22600,
+              "thp_peak_rss_saving_percent": 0.0,
+              "thp_seconds": 14.821187516,
+              "thp_speedup_percent": -299.65974358289026
+            },
+            {
+              "direction": "reverse",
+              "ordinary_peak_rss_kib": 22664,
+              "ordinary_seconds": 3.740529804,
+              "thp_peak_rss_kib": 22640,
+              "thp_peak_rss_saving_percent": 0.10589481115425343,
+              "thp_seconds": 9.627490917,
+              "thp_speedup_percent": -157.38308265060945
+            }
+          ]
+        }
+      },
+      "claim_boundary": "one A/B plus one B/A fresh-process screen per policy; zero warmup; no confidence interval",
+      "comparisons": {
+        "10": {
+          "median_B_peak_rss_saving_percent": -0.026468950161864086,
+          "median_B_speedup_percent": 0.3062105014273366,
+          "pairs": [
+            {
+              "A_operation_seconds": 3.730747169,
+              "A_peak_anon_hugepages_kib": 0,
+              "A_peak_rss_kib": 22612,
+              "A_routes": 2731,
+              "B_operation_seconds": 3.70845144,
+              "B_peak_anon_hugepages_kib": 0,
+              "B_peak_rss_kib": 22600,
+              "B_peak_rss_saving_percent": 0.05306916681408102,
+              "B_routes": 2731,
+              "B_speedup_percent": 0.5976210123607991,
+              "direction": "forward"
+            },
+            {
+              "A_operation_seconds": 3.741083484,
+              "A_peak_anon_hugepages_kib": 0,
+              "A_peak_rss_kib": 22640,
+              "A_routes": 2731,
+              "B_operation_seconds": 3.740529804,
+              "B_peak_anon_hugepages_kib": 0,
+              "B_peak_rss_kib": 22664,
+              "B_peak_rss_saving_percent": -0.10600706713780919,
+              "B_routes": 2731,
+              "B_speedup_percent": 0.01479999049387399,
+              "direction": "reverse"
+            }
+          ]
+        },
+        "9": {
+          "median_B_peak_rss_saving_percent": -0.08848304764611317,
+          "median_B_speedup_percent": -40.4684867137983,
+          "pairs": [
+            {
+              "A_operation_seconds": 16.665379104,
+              "A_peak_anon_hugepages_kib": 0,
+              "A_peak_rss_kib": 22596,
+              "A_routes": 2731,
+              "B_operation_seconds": 14.821187516,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 22600,
+              "B_peak_rss_saving_percent": -0.017702248185519562,
+              "B_routes": 2731,
+              "B_speedup_percent": 11.066004418449499,
+              "direction": "forward"
+            },
+            {
+              "A_operation_seconds": 5.014240417,
+              "A_peak_anon_hugepages_kib": 0,
+              "A_peak_rss_kib": 22604,
+              "A_routes": 2731,
+              "B_operation_seconds": 9.627490917,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 22640,
+              "B_peak_rss_saving_percent": -0.15926384710670677,
+              "B_routes": 2731,
+              "B_speedup_percent": -92.0029778460461,
+              "direction": "reverse"
+            }
+          ]
+        }
+      },
+      "compiler_audits": {
+        "A": {
+          "applied_runtime_scope_count": 1,
+          "audit_file_count": 1,
+          "audit_files": [
+            {
+              "bytes": 5717406,
+              "name": "convex_core-3d1853466fac5569.json",
+              "sha256": "a11359a41f01f19c321990939007e515ea225a857190359f789f912a583c5466"
+            }
+          ],
+          "basis_counts": {
+            "automatic_rust_lifetime_prior_dynamic_buffer_observe": 1,
+            "automatic_rust_lifetime_prior_escape_long_unjoinable_layout_unknown": 1,
+            "automatic_rust_lifetime_prior_owner_live_call_unknown": 1,
+            "automatic_rust_lifetime_prior_return_long": 1,
+            "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown": 31,
+            "compiler_directed_no_admissible_evidence": 24,
+            "compiler_directed_preserved_without_recovery_rebind": 4,
+            "not_applicable_recovery_authoritative": 8
+          },
+          "compiler_pass": [
+            {
+              "actual_allocator_call_replacement": false,
+              "actual_allocator_call_replacement_requested": false,
+              "actual_semantic_ownership_transfer_rewrite": false,
+              "actual_semantic_ownership_transfer_rewrite_requested": true,
+              "actual_semantic_scope_rewrite": true,
+              "actual_semantic_scope_rewrite_requested": true,
+              "auto_cross_thread_recovery_hint": false,
+              "automatic_heap_bounded_process_long_oracle_allocation_site_count": 0,
+              "automatic_heap_bounded_process_long_oracle_count": 0,
+              "automatic_heap_bounded_process_long_oracle_hint": 41218,
+              "automatic_heap_exact_drop_fact_allocation_site_count": 0,
+              "automatic_heap_exact_drop_fact_count": 3,
+              "automatic_heap_lifetime_inference_contract": "Exact Drop is exported only as an eventual-release fact with hint=0/confidence=0; it makes no short-duration, pressure-bound, or allocator-phase claim. 0xA102 is a bounded process-long oracle for exact core mem::forget/alloc Box::leak smoke patterns and is excluded from real-program Long solution claims. Owner-live Call/Drop cleanup edges, branches, aliases, refcounted owners, and unsupported sinks abstain. Analysis runs post-borrowck before ordinary release MIR optimization",
+              "automatic_heap_lifetime_inference_enabled": false,
+              "automatic_heap_lifetime_inference_precedence": "exact_profile>manual_global>automatic_heap>automatic_epoch>Unknown",
+              "automatic_heap_unknown_allocation_site_count": 0,
+              "automatic_heap_unknown_count": 0,
+              "automatic_lifetime_abstained_allocation_site_count": 0,
+              "automatic_lifetime_candidate_allocation_site_count": 35,
+              "automatic_lifetime_classifier_enabled": false,
+              "automatic_lifetime_classifier_precedence": "exact_profile>manual_global>automatic>Unknown",
+              "automatic_lifetime_eligible_allocation_site_count": 0,
+              "automatic_lifetime_ephemeral_allocation_site_count": 0,
+              "automatic_lifetime_ephemeral_count": 0,
+              "automatic_lifetime_long_lived_allocation_site_count": 0,
+              "automatic_lifetime_long_lived_count": 0,
+              "automatic_lifetime_pairing_contract": "same per-owner decision for semantic allocation and matching Drop scopes",
+              "automatic_lifetime_phase_boundary": "exact DefId unialloc::lifetime_hugepage_advance_epoch on unique normal MIR path",
+              "automatic_lifetime_unknown_allocation_site_count": 0,
+              "automatic_lifetime_unknown_allocation_site_reasons": {},
+              "automatic_lifetime_unknown_count": 0,
+              "automatic_lifetime_unsupported_allocation_site_count": 0,
+              "automatic_rust_lifetime_prior_contract": "Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Exact alloc Vec reserve whose &mut Vec<T, Global> receiver is a formal MIR argument or its compiler-generated one-step reborrow, plus exact Global Vec/String with_capacity scopes whose existing ownership proof reaches Return/Escape but whose layout is dynamic, emit only observation tag 0xA103. Actual 4--32 KiB runtime Layout subcohorts stay ordinary until online outcomes confirm Long. Owner-live cleanup/unwind, local or aliased receivers, projected receivers, custom allocators, and unsupported ownership abstain",
+              "automatic_rust_lifetime_prior_enabled": false,
+              "automatic_rust_lifetime_prior_long_allocation_site_count": 1,
+              "automatic_rust_lifetime_prior_long_confidence": 70,
+              "automatic_rust_lifetime_prior_observation_allocation_site_count": 1,
+              "automatic_rust_lifetime_prior_precedence": "exact_profile>manual_global>bounded_process_long_oracle>automatic_rust_lifetime_prior>automatic_heap_fact>automatic_epoch>Unknown",
+              "automatic_rust_lifetime_prior_short_allocation_site_count": 0,
+              "automatic_rust_lifetime_prior_short_confidence": 85,
+              "automatic_rust_lifetime_prior_unknown_allocation_site_count": 33,
+              "body_clone_returned_to_rustc": true,
+              "claim_grade": false,
+              "compiler_directed_abstained_allocation_site_count": 33,
+              "compiler_directed_admitted_long_allocation_site_count": 1,
+              "compiler_directed_admitted_short_allocation_site_count": 0,
+              "compiler_directed_advisory_long_min_confidence": 70,
+              "compiler_directed_lifetime_basis_counts": {
+                "automatic_rust_lifetime_prior_dynamic_buffer_observe": 1,
+                "automatic_rust_lifetime_prior_escape_long_unjoinable_layout_unknown": 1,
+                "automatic_rust_lifetime_prior_owner_live_call_unknown": 1,
+                "automatic_rust_lifetime_prior_return_long": 1,
+                "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown": 31
+              },
+              "compiler_directed_lifetime_enabled": true,
+              "compiler_directed_ownership_transfer_elided_count": 4,
+              "compiler_directed_profile_min_confidence": 90,
+              "compiler_directed_short_min_confidence": 80,
+              "compiler_directed_transport_flags_zero": true,
+              "continue_compilation": true,
+              "cross_thread_recovery_hint_count": 59,
+              "cross_thread_recovery_placement_hint_bit": 32768,
+              "default_policy_flags": 1,
+              "direct_local_metadata_abi": true,
+              "direct_local_size_align_with_semantic_drop": true,
+              "direct_replacement_resolution_status": "not_requested_dry_run",
+              "kind": "rustc_driver_optimized_mir_provider_override",
+              "lifetime_hint": 0,
+              "lifetime_profile_abstention_count": 0,
+              "lifetime_profile_ambiguous_entry_count": 0,
+              "lifetime_profile_ambiguous_match_count": 0,
+              "lifetime_profile_binding": "exact(callsite,type_id,module_id)",
+              "lifetime_profile_confidence_threshold": 0,
+              "lifetime_profile_digest": null,
+              "lifetime_profile_digest_algorithm": "fnv1a64-raw-bytes",
+              "lifetime_profile_duplicate_key_count": 0,
+              "lifetime_profile_enabled": false,
+              "lifetime_profile_format": "unialloc-lifetime-profile-v1",
+              "lifetime_profile_format_valid": false,
+              "lifetime_profile_guard_mismatch_count": 0,
+              "lifetime_profile_invalid_line_count": 0,
+              "lifetime_profile_match_count": 0,
+              "lifetime_profile_miss_count": 0,
+              "lifetime_profile_path": null,
+              "lifetime_profile_source_entry_line_count": 0,
+              "lifetime_profile_unique_entry_count": 0,
+              "marker_free_heap_analysis_query": "mir_drops_elaborated_and_const_checked",
+              "marker_free_heap_preoptimization_rewrite": true,
+              "module_id": 8992273964296485599,
+              "module_id_algorithm": "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))",
+              "name": "unialloc-rustc-driver-mir-rewrite-dry-run",
+              "notes": [
+                "This installs a real rustc query override and returns cloned MIR bodies to rustc.",
+                "Dry-run is the default; explicit actual modes can retarget direct allocator calls or insert semantic-scope enter/exit calls."
+              ],
+              "placement_hint": 0,
+              "policy_flags": 0,
+              "query_overridden": "optimized_mir",
+              "release_mir_optimization_preserved": true,
+              "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+              "rewrite_applied_count": 0,
+              "semantic_ownership_transfer_candidate_count": 4,
+              "semantic_ownership_transfer_replacement_resolution_status": "compiler_directed_pointer_self_identifying_no_rebind",
+              "semantic_ownership_transfer_rewrite_applied_count": 0,
+              "semantic_scope_callback_capable_skipped_count": 60,
+              "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+              "semantic_scope_drop_candidate_count": 24,
+              "semantic_scope_drop_generic_type_parameter_skipped_count": 42,
+              "semantic_scope_drop_non_heap_skipped_count": 33,
+              "semantic_scope_drop_rewrite_applied_count": 0,
+              "semantic_scope_drop_unsolved_candidate_count": 7,
+              "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+              "semantic_scope_rewrite_applied_count": 1,
+              "semantic_scope_unsolved_candidate_count": 1099,
+              "semantic_scope_unwind_pop_inserted_count": 0
+            }
+          ],
+          "hint_counts": {
+            "0": 69,
+            "2": 1,
+            "41219": 1
+          },
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:e77ec15c3972222a",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 750_usize]]))",
+              "callsite": 16680982671671829034,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "calendars::bitmap::HolidayBitmap::new",
+              "module_id": 8992273964296485599,
+              "owner_place": "_4",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 16680982671671829034,
+                "module_id": 8992273964296485599,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 6000,
+                "type_id": 13029795806507983472
+              },
+              "type_id": 13029795806507983472
+            }
+          ],
+          "relevant_candidate_count": 71,
+          "rewrite_status_counts": {
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "compiler_directed_drop_semantic_scope_elided": 24,
+            "compiler_directed_observation_only_scope_elided": 1,
+            "compiler_directed_ownership_transfer_rewrite_elided": 4,
+            "compiler_directed_unknown_semantic_scope_elided": 33,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 8
+          }
+        },
+        "B": {
+          "applied_runtime_scope_count": 1,
+          "audit_file_count": 1,
+          "audit_files": [
+            {
+              "bytes": 5572302,
+              "name": "convex_core-ea6efcad93142bff.json",
+              "sha256": "5e824c1bb8ff111912becc354193f31235505aeb2bb4d530a2051ce59c4a3675"
+            }
+          ],
+          "basis_counts": {
+            "automatic_rust_lifetime_prior_escape_long_unjoinable_layout_unknown": 1,
+            "automatic_rust_lifetime_prior_owner_live_call_unknown": 1,
+            "automatic_rust_lifetime_prior_return_long": 1,
+            "automatic_rust_lifetime_prior_return_long_out_of_band_layout_unknown": 2,
+            "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown": 30,
+            "default_unknown": 24,
+            "not_applicable_recovery_authoritative": 8,
+            "preserved_by_ownership_transfer_rebind": 4
+          },
+          "compiler_pass": [
+            {
+              "actual_allocator_call_replacement": false,
+              "actual_allocator_call_replacement_requested": false,
+              "actual_semantic_ownership_transfer_rewrite": true,
+              "actual_semantic_ownership_transfer_rewrite_requested": true,
+              "actual_semantic_scope_rewrite": true,
+              "actual_semantic_scope_rewrite_requested": true,
+              "auto_cross_thread_recovery_hint": false,
+              "automatic_heap_bounded_process_long_oracle_allocation_site_count": 0,
+              "automatic_heap_bounded_process_long_oracle_count": 0,
+              "automatic_heap_bounded_process_long_oracle_hint": 41218,
+              "automatic_heap_exact_drop_fact_allocation_site_count": 0,
+              "automatic_heap_exact_drop_fact_count": 3,
+              "automatic_heap_lifetime_inference_contract": "Exact Drop is exported only as an eventual-release fact with hint=0/confidence=0; it makes no short-duration, pressure-bound, or allocator-phase claim. 0xA102 is a bounded process-long oracle for exact core mem::forget/alloc Box::leak smoke patterns and is excluded from real-program Long solution claims. Owner-live Call/Drop cleanup edges, branches, aliases, refcounted owners, and unsupported sinks abstain. Analysis runs post-borrowck before ordinary release MIR optimization",
+              "automatic_heap_lifetime_inference_enabled": false,
+              "automatic_heap_lifetime_inference_precedence": "exact_profile>manual_global>automatic_heap>automatic_epoch>Unknown",
+              "automatic_heap_unknown_allocation_site_count": 0,
+              "automatic_heap_unknown_count": 0,
+              "automatic_lifetime_abstained_allocation_site_count": 0,
+              "automatic_lifetime_candidate_allocation_site_count": 35,
+              "automatic_lifetime_classifier_enabled": false,
+              "automatic_lifetime_classifier_precedence": "exact_profile>manual_global>automatic>Unknown",
+              "automatic_lifetime_eligible_allocation_site_count": 0,
+              "automatic_lifetime_ephemeral_allocation_site_count": 0,
+              "automatic_lifetime_ephemeral_count": 0,
+              "automatic_lifetime_long_lived_allocation_site_count": 0,
+              "automatic_lifetime_long_lived_count": 0,
+              "automatic_lifetime_pairing_contract": "same per-owner decision for semantic allocation and matching Drop scopes",
+              "automatic_lifetime_phase_boundary": "exact DefId unialloc::lifetime_hugepage_advance_epoch on unique normal MIR path",
+              "automatic_lifetime_unknown_allocation_site_count": 0,
+              "automatic_lifetime_unknown_allocation_site_reasons": {},
+              "automatic_lifetime_unknown_count": 0,
+              "automatic_lifetime_unsupported_allocation_site_count": 0,
+              "automatic_rust_lifetime_prior_contract": "Advisory MIR ownership prior: all-path local release and cleanup-free receiver ownership may emit Short; propagated owner carriers reaching return or consuming escape may emit Long. Owner-live cleanup/unwind, opaque calls before Drop, raw loop/yield reachability, and unsupported ownership abstain. Exact per-site runtime observation remains authoritative",
+              "automatic_rust_lifetime_prior_enabled": true,
+              "automatic_rust_lifetime_prior_long_allocation_site_count": 1,
+              "automatic_rust_lifetime_prior_long_confidence": 70,
+              "automatic_rust_lifetime_prior_precedence": "exact_profile>manual_global>bounded_process_long_oracle>automatic_rust_lifetime_prior>automatic_heap_fact>automatic_epoch>Unknown",
+              "automatic_rust_lifetime_prior_short_allocation_site_count": 0,
+              "automatic_rust_lifetime_prior_short_confidence": 85,
+              "automatic_rust_lifetime_prior_unknown_allocation_site_count": 34,
+              "body_clone_returned_to_rustc": true,
+              "claim_grade": false,
+              "continue_compilation": true,
+              "cross_thread_recovery_hint_count": 59,
+              "cross_thread_recovery_placement_hint_bit": 32768,
+              "default_policy_flags": 1,
+              "direct_local_metadata_abi": true,
+              "direct_local_size_align_with_semantic_drop": true,
+              "direct_replacement_resolution_status": "not_requested_dry_run",
+              "kind": "rustc_driver_optimized_mir_provider_override",
+              "lifetime_hint": 0,
+              "lifetime_profile_abstention_count": 0,
+              "lifetime_profile_ambiguous_entry_count": 0,
+              "lifetime_profile_ambiguous_match_count": 0,
+              "lifetime_profile_binding": "exact(callsite,type_id,module_id)",
+              "lifetime_profile_confidence_threshold": 0,
+              "lifetime_profile_digest": null,
+              "lifetime_profile_digest_algorithm": "fnv1a64-raw-bytes",
+              "lifetime_profile_duplicate_key_count": 0,
+              "lifetime_profile_enabled": false,
+              "lifetime_profile_format": "unialloc-lifetime-profile-v1",
+              "lifetime_profile_format_valid": false,
+              "lifetime_profile_guard_mismatch_count": 0,
+              "lifetime_profile_invalid_line_count": 0,
+              "lifetime_profile_match_count": 0,
+              "lifetime_profile_miss_count": 0,
+              "lifetime_profile_path": null,
+              "lifetime_profile_source_entry_line_count": 0,
+              "lifetime_profile_unique_entry_count": 0,
+              "marker_free_heap_analysis_query": "mir_drops_elaborated_and_const_checked",
+              "marker_free_heap_preoptimization_rewrite": true,
+              "module_id": 8992273964296485599,
+              "module_id_algorithm": "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))",
+              "name": "unialloc-rustc-lifetime-aware",
+              "notes": [
+                "This installs a real rustc query override and returns cloned MIR bodies to rustc.",
+                "Dry-run is the default; explicit actual modes can retarget direct allocator calls or insert semantic-scope enter/exit calls."
+              ],
+              "placement_hint": 0,
+              "policy_flags": 0,
+              "query_overridden": "optimized_mir",
+              "recovery_backed_non_long_scope_elided_count": 34,
+              "recovery_backed_non_long_scope_elision_requested": true,
+              "release_mir_optimization_preserved": true,
+              "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+              "rewrite_applied_count": 0,
+              "semantic_ownership_transfer_candidate_count": 4,
+              "semantic_ownership_transfer_replacement_resolution_status": "resolved_unialloc_semantic_vec_into_iter",
+              "semantic_ownership_transfer_rewrite_applied_count": 4,
+              "semantic_scope_callback_capable_skipped_count": 60,
+              "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+              "semantic_scope_drop_candidate_count": 24,
+              "semantic_scope_drop_generic_type_parameter_skipped_count": 42,
+              "semantic_scope_drop_non_heap_skipped_count": 33,
+              "semantic_scope_drop_rewrite_applied_count": 24,
+              "semantic_scope_drop_unsolved_candidate_count": 7,
+              "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+              "semantic_scope_rewrite_applied_count": 1,
+              "semantic_scope_unsolved_candidate_count": 1099,
+              "semantic_scope_unwind_pop_inserted_count": 0
+            }
+          ],
+          "hint_counts": {
+            "0": 70,
+            "2": 1
+          },
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:e77ec15c3972222a",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 750_usize]]))",
+              "callsite": 16680982671671829034,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "calendars::bitmap::HolidayBitmap::new",
+              "module_id": 8992273964296485599,
+              "owner_place": "_4",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 16680982671671829034,
+                "module_id": 8992273964296485599,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 6000,
+                "type_id": 13029795806507983472
+              },
+              "type_id": 13029795806507983472
+            }
+          ],
+          "relevant_candidate_count": 71,
+          "rewrite_status_counts": {
+            "actual_semantic_ownership_transfer_rewrite_applied": 4,
+            "actual_semantic_scope_drop_rewrite_applied": 24,
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "lifetime_aware_recovery_backed_non_long_scope_elided": 34,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 8
+          }
+        }
+      },
+      "fixed_work": {
+        "bitmap_bytes_per_calendar": 6000,
+        "business_hits": 107066845,
+        "calendar_count": 2731,
+        "compiler_long_cohort_bytes": 16386000,
+        "correctness": true,
+        "date_count": 47847,
+        "digest": "5b49db0f0b986115",
+        "holiday_hits": 100099,
+        "holidays_per_calendar": 32,
+        "queries": 150000000
+      }
+    }
+  }
+}

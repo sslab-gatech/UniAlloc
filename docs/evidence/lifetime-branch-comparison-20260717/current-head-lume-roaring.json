@@ -1,0 +1,410 @@
+{
+  "claim_boundary": "One A/B and one B/A fresh-process screen per target, fixed work, CPU 74, policy 9 only, zero warmup, no confidence interval. A CPU-126 Roaring attempt is excluded because contemporaneous workload contention produced a first-cell order artifact.",
+  "classification": "fresh-current-head-lume-roaring-policy9-abba-compact",
+  "heads": {
+    "A": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+    "B": "cbc6877eceb8cf338351dca2a6472c556d7e3dbe"
+  },
+  "schema_version": 1,
+  "targets": {
+    "lume": {
+      "comparisons": {
+        "9": {
+          "median_B_peak_rss_saving_percent": -0.15760140601657444,
+          "median_B_speedup_percent": -0.10225376450139845,
+          "pairs": [
+            {
+              "A_operation_seconds": 4.845410606,
+              "A_peak_anon_hugepages_kib": 16384,
+              "A_peak_rss_kib": 21576,
+              "A_routes": 2048,
+              "B_operation_seconds": 4.819358259,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 21600,
+              "B_peak_rss_saving_percent": -0.11123470522803114,
+              "B_routes": 2048,
+              "B_speedup_percent": 0.5376705736298,
+              "direction": "forward"
+            },
+            {
+              "A_operation_seconds": 4.763613865,
+              "A_peak_anon_hugepages_kib": 16384,
+              "A_peak_rss_kib": 21572,
+              "A_routes": 2048,
+              "B_operation_seconds": 4.798968364,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 21616,
+              "B_peak_rss_saving_percent": -0.20396810680511773,
+              "B_routes": 2048,
+              "B_speedup_percent": -0.7421781026325969,
+              "direction": "reverse"
+            }
+          ]
+        }
+      },
+      "compiler": {
+        "A": {
+          "allocator_rlib_sha256": "aa37d405f37a512abab4d37b128b4e9f51df6a325564fcf6ca00bc8cbbd5bc0b",
+          "binary_sha256": "afef0778229467e9e49f866e841b6b3e5373f9c26d2039c8d6a5de756f5d061b",
+          "head": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:270196f90201b2e9",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 1024_usize]]))",
+              "callsite": 2810693638680589033,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "<fast_retrieval::Container as bm25::_::_serde::Deserialize<'de>>::deserialize",
+              "module_id": 3655305840026048062,
+              "owner_place": "_49",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 2810693638680589033,
+                "module_id": 3655305840026048062,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 8192,
+                "type_id": 12498306404518559570
+              },
+              "type_id": 12498306404518559570
+            }
+          ],
+          "pass_binary_sha256": "9332be236b775f1befff8356d16ea6cf3a5812a30238b2a738e80e3eeffa5e55",
+          "rewrite_status_counts": {
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "compiler_directed_drop_semantic_scope_elided": 521,
+            "compiler_directed_ownership_transfer_rewrite_elided": 37,
+            "compiler_directed_unknown_semantic_scope_elided": 214,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 140
+          },
+          "runtime_allocation_scope_count": 1
+        },
+        "B": {
+          "allocator_rlib_sha256": "3fdcb51cc992f0e9a1522164c1631952482bf224b14414155a526ad6fbb993d4",
+          "binary_sha256": "81ed346c64654a66e77d8272824ac4769bec0d17504ce9c78e55ce0736be6bfb",
+          "head": "cbc6877eceb8cf338351dca2a6472c556d7e3dbe",
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:270196f90201b2e9",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 1024_usize]]))",
+              "callsite": 2810693638680589033,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "<fast_retrieval::Container as bm25::_::_serde::Deserialize<'de>>::deserialize",
+              "module_id": 3655305840026048062,
+              "owner_place": "_49",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 2810693638680589033,
+                "module_id": 3655305840026048062,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 8192,
+                "type_id": 12498306404518559570
+              },
+              "type_id": 12498306404518559570
+            }
+          ],
+          "pass_binary_sha256": "bbe6f2d6176cb180a0fe544c65504cb46392c3d720bde8fe1bebc2cd339fdf44",
+          "rewrite_status_counts": {
+            "actual_semantic_ownership_transfer_rewrite_applied": 37,
+            "actual_semantic_scope_drop_generic_type_rewrite_applied": 1,
+            "actual_semantic_scope_drop_rewrite_applied": 520,
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "lifetime_aware_recovery_backed_non_long_scope_elided": 211,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 140
+          },
+          "runtime_allocation_scope_count": 1
+        }
+      },
+      "cpu_affinity": [
+        74
+      ],
+      "fixed_work": {
+        "bitmap_count": 2048,
+        "correctness": true,
+        "digest": "ec7814d581469625",
+        "iterations": 160000,
+        "posting_cardinality": 2048
+      },
+      "full_result": "/tmp/unialloc-current-ab-lume/results/lume.json",
+      "full_result_sha256": "f090b39159b64cbe3930c03a9de3dba6268c91b5f159fbbb25af6c2a6e234ad0",
+      "gates": {
+        "ahp_16mib_all": true,
+        "collapse_8_of_8_all": true,
+        "fixed_output_parity": true,
+        "fresh_process": true,
+        "online_learning_zero_all": true,
+        "policy9_all": true,
+        "routes_2048_all": true,
+        "zero_warmup": true
+      },
+      "runs": [
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "A",
+          "cell": "p9-forward-1-A",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 4.845410606,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 21576,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "B",
+          "cell": "p9-forward-2-B",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 4.819358259,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 21600,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "B",
+          "cell": "p9-reverse-1-B",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 4.798968364,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 21616,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "A",
+          "cell": "p9-reverse-2-A",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 4.763613865,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 21572,
+          "policy": 9,
+          "routed_allocations": 2048
+        }
+      ]
+    },
+    "roaring": {
+      "comparisons": {
+        "9": {
+          "median_B_peak_rss_saving_percent": 0.25965949584356973,
+          "median_B_speedup_percent": 0.041825551964139396,
+          "pairs": [
+            {
+              "A_operation_seconds": 6.853559963,
+              "A_peak_anon_hugepages_kib": 16384,
+              "A_peak_rss_kib": 23884,
+              "A_routes": 2048,
+              "B_operation_seconds": 6.861879044,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 23692,
+              "B_peak_rss_saving_percent": 0.8038854463238988,
+              "B_routes": 2048,
+              "B_speedup_percent": -0.12138335470779602,
+              "direction": "forward"
+            },
+            {
+              "A_operation_seconds": 6.884011153,
+              "A_peak_anon_hugepages_kib": 16384,
+              "A_peak_rss_kib": 23896,
+              "A_routes": 2048,
+              "B_operation_seconds": 6.869896558,
+              "B_peak_anon_hugepages_kib": 16384,
+              "B_peak_rss_kib": 23964,
+              "B_peak_rss_saving_percent": -0.2845664546367593,
+              "B_routes": 2048,
+              "B_speedup_percent": 0.2050344586360748,
+              "direction": "reverse"
+            }
+          ]
+        }
+      },
+      "compiler": {
+        "A": {
+          "allocator_rlib_sha256": "d6890e8da6b522e8475a44e63af3a41bd4680ade9f11920ca6b17a14ae749a22",
+          "binary_sha256": "d20f876dc2731f2be00c26d8b34cac9599edf4622878f335c17e3ad7faae060d",
+          "head": "98e4381486de5698d24d8a3c38c051f60b3adf5b",
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:25b8b8b24195afcb",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 1024_usize]]))",
+              "callsite": 2718125450862112715,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "bitmap::store::bitmap_store::BitmapStore::new",
+              "module_id": 17369008097295317270,
+              "owner_place": "_1",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 2718125450862112715,
+                "module_id": 17369008097295317270,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 8192,
+                "type_id": 12498306404518559570
+              },
+              "type_id": 12498306404518559570
+            }
+          ],
+          "pass_binary_sha256": null,
+          "rewrite_status_counts": {
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "compiler_directed_drop_semantic_scope_elided": 24,
+            "compiler_directed_observation_only_scope_elided": 4,
+            "compiler_directed_ownership_transfer_rewrite_elided": 20,
+            "compiler_directed_unknown_semantic_scope_elided": 17,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 19
+          },
+          "runtime_allocation_scope_count": 1
+        },
+        "B": {
+          "allocator_rlib_sha256": "ae3a319f7fa4119bff24a2aab5bf544332364e16f7b39abfffbd6533438ab02e",
+          "binary_sha256": "6e0470be7b423631493ee6f08bbdf01145798e7ab64fb9aab632fd5d8c96ad12",
+          "head": "cbc6877eceb8cf338351dca2a6472c556d7e3dbe",
+          "long_rows": [
+            {
+              "allocation_site_id": "rustc-driver-mir-semantic-scope:25b8b8b24195afcb",
+              "callee": "Val(ZeroSized, FnDef(DefId(3:682 ~ alloc[a394]::boxed::{impl#0}::new), [[u64; 1024_usize]]))",
+              "callsite": 2718125450862112715,
+              "lifetime_hint": 2,
+              "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+              "lifetime_hint_confidence": 70,
+              "mir_function": "bitmap::store::bitmap_store::BitmapStore::new",
+              "module_id": 17369008097295317270,
+              "owner_place": "_1",
+              "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+              "requested_layout_basis": "exact_box_new_payload_layout",
+              "rewrite_status": "actual_semantic_scope_generic_type_rewrite_applied",
+              "runtime_join_key": {
+                "callsite": 2718125450862112715,
+                "module_id": 17369008097295317270,
+                "requested_align_bytes": 8,
+                "requested_size_bytes": 8192,
+                "type_id": 12498306404518559570
+              },
+              "type_id": 12498306404518559570
+            }
+          ],
+          "pass_binary_sha256": null,
+          "rewrite_status_counts": {
+            "actual_semantic_ownership_transfer_rewrite_applied": 20,
+            "actual_semantic_scope_drop_generic_type_rewrite_applied": 3,
+            "actual_semantic_scope_drop_rewrite_applied": 21,
+            "actual_semantic_scope_generic_type_rewrite_applied": 1,
+            "lifetime_aware_recovery_backed_non_long_scope_elided": 21,
+            "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery": 19
+          },
+          "runtime_allocation_scope_count": 1
+        }
+      },
+      "cpu_affinity": [
+        74
+      ],
+      "fixed_work": {
+        "containers": 1024,
+        "correctness": true,
+        "digest": "6af6146226287e85",
+        "intersection_cardinality": 4474880,
+        "iterations": 12000,
+        "left_cardinality": 22370304,
+        "right_cardinality": 13422592
+      },
+      "full_result": "/tmp/unialloc-current-ab-roaring/results/roaring.json",
+      "full_result_sha256": "e7693d333d2b4432c9a35d9706b62e07d2c941eb5ef4be9f7696ad058be5ac85",
+      "gates": {
+        "ahp_16mib_all": true,
+        "collapse_8_of_8_all": true,
+        "fixed_output_parity": true,
+        "fresh_process": true,
+        "online_learning_zero_all": true,
+        "policy9_all": true,
+        "routes_2048_all": true,
+        "zero_warmup": true
+      },
+      "runs": [
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "A",
+          "cell": "p9-forward-1-A",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 6.853559963,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 23884,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "B",
+          "cell": "p9-forward-2-B",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 6.861879044,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 23692,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "B",
+          "cell": "p9-reverse-1-B",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 6.869896558,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 23964,
+          "policy": 9,
+          "routed_allocations": 2048
+        },
+        {
+          "adaptive_live_trailers": 0,
+          "adaptive_site_count": 0,
+          "adaptive_training_allocations": 0,
+          "branch": "A",
+          "cell": "p9-reverse-2-A",
+          "collapse_errors": 0,
+          "collapse_successes": 8,
+          "operation_seconds": 6.884011153,
+          "peak_anon_hugepages_kib": 16384,
+          "peak_rss_kib": 23896,
+          "policy": 9,
+          "routed_allocations": 2048
+        }
+      ]
+    }
+  },
+  "verdict": {
+    "integration": "Keep B as the integration branch; treat A's broader transport elision as a future safety-gated optimization rather than a demonstrated current-head performance win",
+    "mechanism": "Both admit the same one exact 8192-byte Long site and produce the same 2048 routes plus 16 MiB THP backing; B retains paired Drop and ownership-transfer transport that A elides",
+    "performance": "A and B are directionally tied on both targets",
+    "rss": "A and B are directionally tied on both targets"
+  }
+}
