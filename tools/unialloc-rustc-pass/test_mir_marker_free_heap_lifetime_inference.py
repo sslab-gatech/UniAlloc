@@ -469,6 +469,47 @@ fn main() {
             encoding="utf-8",
         )
 
+        cls.selective_transport_fixture = (
+            cls.tmp / "rust_lifetime_prior_selective_transport.rs"
+        )
+        cls.selective_transport_fixture.write_text(
+            """extern crate unialloc;
+
+#[inline(never)]
+fn all_path_local_release() {
+    let owner = Box::new([2_u8; 4096]);
+    drop(owner);
+}
+
+#[inline(never)]
+fn returned_owner() -> Box<[u8; 4096]> {
+    Box::new([1_u8; 4096])
+}
+
+#[inline(never)]
+fn owner_live_across_opaque_call() {
+    let owner = Box::new([3_u8; 4096]);
+    std::hint::black_box(&owner);
+    drop(owner);
+}
+
+#[inline(never)]
+fn exact_local_short() -> u64 {
+    let _owner = Box::new([4_u64; 16]);
+    4
+}
+
+fn main() {
+    all_path_local_release();
+    drop(returned_owner());
+    owner_live_across_opaque_call();
+    std::hint::black_box(exact_local_short());
+    println!("observed_hints={}", unialloc::observed_hints());
+}
+""",
+            encoding="utf-8",
+        )
+
         cls.measured_box_long_fixture = (
             cls.tmp / "rust_lifetime_prior_measured_box_long.rs"
         )
@@ -1385,7 +1426,7 @@ fn main() {
         self.assertIn("observed_hints=8", completed.stdout)
 
     def _run_measured_box_pass_mode(
-        self, label: str, *, standalone: bool
+        self, label: str, *, standalone: bool, fixture: Path | None = None
     ) -> tuple[dict[str, object], Path]:
         audit_path = self.tmp / f"{label}.json"
         output_path = self.tmp / label
@@ -1423,7 +1464,7 @@ fn main() {
                 f"unialloc={self.stub_rlib}",
                 "-o",
                 str(output_path),
-                str(self.measured_box_long_fixture),
+                str(fixture or self.measured_box_long_fixture),
             ]
         )
         env = os.environ.copy()
@@ -1527,6 +1568,142 @@ fn main() {
             hashlib.sha256(standalone_binary.read_bytes()).hexdigest(),
             hashlib.sha256(legacy_binary.read_bytes()).hexdigest(),
         )
+
+    def test_standalone_pass_elides_recovery_backed_non_long_scopes(self) -> None:
+        legacy, legacy_binary = self._run_measured_box_pass_mode(
+            "selective-transport-legacy",
+            standalone=False,
+            fixture=self.selective_transport_fixture,
+        )
+        standalone, standalone_binary = self._run_measured_box_pass_mode(
+            "selective-transport-standalone",
+            standalone=True,
+            fixture=self.selective_transport_fixture,
+        )
+
+        def rows_by_function(audit: dict[str, object]) -> dict[str, dict[str, object]]:
+            rows = audit.get("rewrite_candidates", [])
+            assert isinstance(rows, list)
+            return {
+                str(row["mir_function"]): row
+                for row in rows
+                if isinstance(row, dict)
+                and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+                and (
+                    "::new" in str(row.get("callee") or "")
+                    or "with_capacity" in str(row.get("callee") or "")
+                )
+                and str(row.get("mir_function") or "").endswith(
+                    (
+                        "all_path_local_release",
+                        "returned_owner",
+                        "owner_live_across_opaque_call",
+                        "exact_local_short",
+                    )
+                )
+            }
+
+        legacy_rows = rows_by_function(legacy)
+        standalone_rows = rows_by_function(standalone)
+        self.assertFalse(
+            legacy["compiler_pass"]["recovery_backed_non_long_scope_elision_requested"]
+        )
+        self.assertTrue(
+            standalone["compiler_pass"]["recovery_backed_non_long_scope_elision_requested"]
+        )
+        self.assertEqual(
+            standalone["compiler_pass"][
+                "recovery_backed_non_long_scope_elided_count"
+            ],
+            2,
+        )
+        self.assertEqual(set(standalone_rows), set(legacy_rows))
+        for function in standalone_rows:
+            self.assertEqual(
+                standalone_rows[function]["lifetime_hint"],
+                legacy_rows[function]["lifetime_hint"],
+            )
+            self.assertEqual(
+                standalone_rows[function]["lifetime_hint_basis"],
+                legacy_rows[function]["lifetime_hint_basis"],
+            )
+
+        long_row = next(
+            row
+            for function, row in standalone_rows.items()
+            if function.endswith("returned_owner")
+        )
+        self.assertEqual(long_row["lifetime_hint"], 2, long_row)
+        self.assertTrue(str(long_row["rewrite_status"]).endswith("_applied"), long_row)
+
+        for function in (
+            "all_path_local_release",
+            "owner_live_across_opaque_call",
+        ):
+            row = next(
+                row
+                for name, row in standalone_rows.items()
+                if name.endswith(function)
+            )
+            self.assertNotEqual(row["lifetime_hint"], 2, row)
+            self.assertEqual(
+                row["rewrite_status"],
+                "lifetime_aware_recovery_backed_non_long_scope_elided",
+                row,
+            )
+            self.assertEqual(row["replacement_symbol"], "", row)
+            self.assertEqual(
+                row["metadata_pairing_contract"],
+                "compiler_audit_only_no_runtime_metadata",
+                row,
+            )
+            self.assertFalse(row["semantic_scope_unwind_pop_inserted"], row)
+
+        exact_local = next(
+            row
+            for name, row in standalone_rows.items()
+            if name.endswith("exact_local_short")
+        )
+        self.assertEqual(exact_local["lifetime_hint"], 1, exact_local)
+        self.assertTrue(str(exact_local["rewrite_status"]).endswith("_applied"))
+        self.assertTrue(str(exact_local["replacement_symbol"]).endswith("_local"))
+        exact_local_drops = [
+            row
+            for row in standalone["rewrite_candidates"]
+            if isinstance(row, dict)
+            and str(row.get("mir_function") or "").endswith("exact_local_short")
+            and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
+        ]
+        self.assertTrue(exact_local_drops, exact_local_drops)
+        self.assertTrue(
+            all(
+                str(row["rewrite_status"]).endswith("_applied")
+                and str(row["replacement_symbol"]).endswith("_local")
+                for row in exact_local_drops
+            ),
+            exact_local_drops,
+        )
+
+        legacy_run = subprocess.run(
+            [str(legacy_binary)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        standalone_run = subprocess.run(
+            [str(standalone_binary)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(legacy_run.returncode, 0, legacy_run.stderr)
+        self.assertEqual(standalone_run.returncode, 0, standalone_run.stderr)
+        self.assertIn("observed_hints=12", legacy_run.stdout)
+        self.assertIn("observed_hints=12", standalone_run.stdout)
 
     def test_standalone_pass_rejects_mechanism_conflicts(self) -> None:
         library_path = str(self.sysroot / "lib")

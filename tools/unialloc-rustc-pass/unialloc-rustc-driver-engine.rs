@@ -135,6 +135,7 @@ static mut LOWERING_PLACEMENT_HINT: u16 = 0;
 static mut AUTO_CROSS_THREAD_RECOVERY_HINT: bool = false;
 static mut DIRECT_LOCAL_METADATA_ABI: bool = false;
 static mut DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP: bool = false;
+static mut ELIDE_RECOVERY_BACKED_NON_LONG_SCOPES: bool = false;
 static mut CONTINUE_COMPILATION: bool = false;
 static LIFETIME_PROFILE: OnceLock<LifetimeProfile> = OnceLock::new();
 
@@ -754,6 +755,10 @@ fn direct_local_metadata_abi_requested() -> bool {
 #[inline]
 fn direct_local_size_align_with_semantic_drop_requested() -> bool {
     unsafe { DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP }
+}
+
+fn recovery_backed_non_long_scope_elision_requested() -> bool {
+    unsafe { ELIDE_RECOVERY_BACKED_NON_LONG_SCOPES }
 }
 
 #[inline]
@@ -13504,25 +13509,46 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 candidate_cross_thread_escape,
                 scope_uses_local_no_recovery,
             );
-        let mut rewrite_status = if runtime_identity_owner_ty.is_some() {
+        let allocation_owner_proven = lifetime_analysis_features
+            .as_ref()
+            .and_then(|features| features.owner_place.as_ref())
+            .is_some();
+        // A local/no-recovery allocation scope and its matching Drop scope are
+        // one metadata contract. Retain that pair until both sides can be
+        // elided together; otherwise Drop would create orphan typed metadata.
+        let non_long_scope_elided = recovery_backed_non_long_scope_elision_requested()
+            && allocation_owner_proven
+            && !exact_local_pair
+            && lifetime_hint != LIFETIME_HINT_LONG_LIVED;
+        let mut rewrite_status = if non_long_scope_elided {
+            "lifetime_aware_recovery_backed_non_long_scope_elided"
+        } else if runtime_identity_owner_ty.is_some() {
             "semantic_scope_generic_type_rewrite_planned"
         } else {
             "semantic_scope_enter_exit_rewrite_planned"
         };
-        let mut replacement_resolution_status = "not_requested_dry_run";
-        let mut replacement_preview = format!(
-            "Wrap {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
-            callee,
-            type_id,
-            lowering_module_id(),
-            policy_flags,
-            lifetime_hint,
-            placement_hint,
-            callsite,
-            semantic_object_type
-        );
+        let mut replacement_resolution_status = if non_long_scope_elided {
+            "lifetime_aware_recovery_backed_non_long_transport_elided"
+        } else {
+            "not_requested_dry_run"
+        };
+        let mut replacement_preview = if non_long_scope_elided {
+            "Lifetime-aware non-Long evidence remains in the compiler audit without runtime semantic-scope transport".to_string()
+        } else {
+            format!(
+                "Wrap {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
+                callee,
+                type_id,
+                lowering_module_id(),
+                policy_flags,
+                lifetime_hint,
+                placement_hint,
+                callsite,
+                semantic_object_type
+            )
+        };
         let mut semantic_scope_unwind_pop_inserted = false;
-        if semantic_scope_rewrite {
+        if semantic_scope_rewrite && !non_long_scope_elided {
             let resolved_scope_abi = selected_semantic_scope_abi.filter(|scope_abi| {
                 runtime_identity_owner_ty.is_none() || scope_abi.generic_push_def_id.is_some()
             });
@@ -13689,7 +13715,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             size_operand: None,
             align_operand: None,
             rewrite_status,
-            replacement_symbol: if runtime_identity_owner_ty.is_some() {
+            replacement_symbol: if non_long_scope_elided {
+                ""
+            } else if runtime_identity_owner_ty.is_some() {
                 generic_semantic_scope_push_symbol(
                     selected_semantic_scope_abi
                         .map(|abi| abi.local_no_recovery)
@@ -13703,7 +13731,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             replacement_resolution_status,
             replacement_preview,
             semantic_scope_unwind_pop_inserted,
-            metadata_pairing_contract: if runtime_identity_owner_ty.is_some()
+            metadata_pairing_contract: if non_long_scope_elided {
+                "compiler_audit_only_no_runtime_metadata"
+            } else if runtime_identity_owner_ty.is_some()
                 && scope_uses_local_no_recovery
             {
                 "semantic_scope_monomorphized_runtime_type_metadata_local_no_recovery"
@@ -14616,6 +14646,12 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
         .count();
+    let recovery_backed_non_long_scope_elided_count = records
+        .iter()
+        .filter(|record| {
+            record.rewrite_status == "lifetime_aware_recovery_backed_non_long_scope_elided"
+        })
+        .count();
     let semantic_ownership_transfer_candidate_count = records
         .iter()
         .filter(|record| record.lowering_kind == "semantic_ownership_transfer_rewrite")
@@ -15109,6 +15145,16 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"actual_semantic_scope_rewrite_requested\": {},",
         cli.semantic_scope_rewrite
+    );
+    let _ = writeln!(
+        json,
+        "    \"recovery_backed_non_long_scope_elision_requested\": {},",
+        cli.pass_mode == PassMode::LifetimeAware
+    );
+    let _ = writeln!(
+        json,
+        "    \"recovery_backed_non_long_scope_elided_count\": {},",
+        recovery_backed_non_long_scope_elided_count
     );
     let _ = writeln!(
         json,
@@ -15764,6 +15810,16 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"recovery_backed_non_long_scope_elision_requested\": {},",
+        cli.pass_mode == PassMode::LifetimeAware
+    );
+    let _ = writeln!(
+        json,
+        "    \"recovery_backed_non_long_scope_elided_count\": {},",
+        recovery_backed_non_long_scope_elided_count
+    );
+    let _ = writeln!(
+        json,
         "    \"actual_semantic_ownership_transfer_rewrite_requested\": {},",
         cli.semantic_scope_rewrite
     );
@@ -16087,6 +16143,12 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
         .count();
+    let recovery_backed_non_long_scope_elided_count = records
+        .iter()
+        .filter(|record| {
+            record.rewrite_status == "lifetime_aware_recovery_backed_non_long_scope_elided"
+        })
+        .count();
     let semantic_ownership_transfer_candidate_count = records
         .iter()
         .filter(|record| record.lowering_kind == "semantic_ownership_transfer_rewrite")
@@ -16215,6 +16277,16 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         text,
         "actual_semantic_scope_rewrite_requested: {}",
         cli.semantic_scope_rewrite
+    );
+    let _ = writeln!(
+        text,
+        "recovery_backed_non_long_scope_elision_requested: {}",
+        cli.pass_mode == PassMode::LifetimeAware
+    );
+    let _ = writeln!(
+        text,
+        "recovery_backed_non_long_scope_elided_count: {}",
+        recovery_backed_non_long_scope_elided_count
     );
     let _ = writeln!(
         text,
@@ -16556,6 +16628,7 @@ pub(crate) fn run(pass_mode: PassMode) {
         AUTO_CROSS_THREAD_RECOVERY_HINT = cli.auto_cross_thread_recovery_hint;
         DIRECT_LOCAL_METADATA_ABI = cli.direct_local_metadata_abi;
         DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP = cli.direct_local_size_align_with_semantic_drop;
+        ELIDE_RECOVERY_BACKED_NON_LONG_SCOPES = cli.pass_mode == PassMode::LifetimeAware;
         CONTINUE_COMPILATION = cli.continue_compilation;
     }
     let mut callbacks = RewriteDryRunCallbacks::default();
