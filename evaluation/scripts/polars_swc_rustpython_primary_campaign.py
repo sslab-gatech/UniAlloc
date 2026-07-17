@@ -33,6 +33,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "evaluation" / "scripts"))
 
 import realworld_type_isolation_matrix as matrix  # noqa: E402
+import rustc_pass_source_closure as pass_closure  # noqa: E402
 
 
 SUITE_PATH = ROOT / "evaluation" / "config" / "type_isolation_primary_suite.json"
@@ -606,10 +607,7 @@ def tree_digest(
 
 def implementation_files(snapshot: pathlib.Path) -> list[pathlib.Path]:
     files = [
-        snapshot
-        / "tools"
-        / "unialloc-rustc-pass"
-        / "unialloc-rustc-mir-rewrite-dry-run.rs"
+        snapshot / path for path in pass_closure.source_closure_relative_paths(snapshot)
     ]
     for source_root in (snapshot / "unialloc", snapshot / "alloc_macros"):
         files.extend(
@@ -626,11 +624,9 @@ def working_tree_context_files(repository: pathlib.Path) -> list[pathlib.Path]:
     files = [
         repository / name for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain")
     ]
-    files.append(
-        repository
-        / "tools"
-        / "unialloc-rustc-pass"
-        / "unialloc-rustc-mir-rewrite-dry-run.rs"
+    files.extend(
+        repository / path
+        for path in pass_closure.source_closure_relative_paths(repository)
     )
     for source_root in (repository / "unialloc", repository / "alloc_macros"):
         files.extend(
@@ -811,6 +807,7 @@ def verify_checkout(checkout: pathlib.Path, spec: TargetSpec) -> dict[str, Any]:
 
 def allocator_revision_archive_bytes(revision: str) -> tuple[str, bytes]:
     resolved = git_output(ROOT, "rev-parse", f"{revision}^{{commit}}")
+    pass_sources = pass_closure.git_source_closure_relative_paths(ROOT, resolved)
     result = execute(
         [
             "git",
@@ -822,7 +819,7 @@ def allocator_revision_archive_bytes(revision: str) -> tuple[str, bytes]:
             "rust-toolchain",
             "unialloc",
             "alloc_macros",
-            "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+            *[str(path) for path in pass_sources],
         ],
         cwd=ROOT,
         env=os.environ.copy(),
@@ -923,7 +920,7 @@ def snapshot_allocator(
             requested_head = archive_allocator_revision(snapshot, revision)
         else:
             assert live_identity is not None
-            (snapshot / "tools" / "unialloc-rustc-pass").mkdir(parents=True)
+            snapshot.mkdir(parents=True)
             for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain"):
                 shutil.copy2(ROOT / name, snapshot / name)
             shutil.copytree(
@@ -936,30 +933,13 @@ def snapshot_allocator(
                 snapshot / "alloc_macros",
                 ignore=shutil.ignore_patterns("target", ".git"),
             )
-            pass_source = (
-                ROOT
-                / "tools"
-                / "unialloc-rustc-pass"
-                / "unialloc-rustc-mir-rewrite-dry-run.rs"
-            )
-            snapshot_pass = (
-                snapshot
-                / "tools"
-                / "unialloc-rustc-pass"
-                / "unialloc-rustc-mir-rewrite-dry-run.rs"
-            )
-            shutil.copy2(pass_source, snapshot_pass)
+            pass_closure.copy_source_closure(ROOT, snapshot)
             observed_live_identity = working_tree_identity(ROOT)
             if observed_live_identity != live_identity:
                 shutil.rmtree(snapshot, ignore_errors=True)
                 raise CampaignError("working tree changed while it was being frozen")
 
-    snapshot_pass = (
-        snapshot
-        / "tools"
-        / "unialloc-rustc-pass"
-        / "unialloc-rustc-mir-rewrite-dry-run.rs"
-    )
+    pass_provenance = pass_closure.source_closure_provenance(snapshot)
     canonical_files = implementation_files(snapshot)
     context_files = working_tree_context_files(snapshot)
     canonical_digest = tree_digest(canonical_files, snapshot, trailing_nul=True)
@@ -1007,8 +987,7 @@ def snapshot_allocator(
             "Cargo.toml,Cargo.lock,rust-toolchain and every archived file under "
             "unialloc and alloc_macros"
         ),
-        "pass_source": str(snapshot_pass.resolve()),
-        "pass_source_sha256": sha256_file(snapshot_pass),
+        **pass_provenance,
         "source_kind": "working_tree" if current_working_tree else "git_revision",
         "allocator_revision": requested_head
         or existing.get("allocator_revision")

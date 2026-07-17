@@ -21,6 +21,58 @@ selected `std_bench` runtime smokes prove the implementation path, while the
 whole paper C002 surface still has to be covered before final claims are marked
 complete.
 
+## Standalone lifetime-aware pass
+
+`unialloc-rustc-lifetime-aware.rs` is the dedicated entry point for the
+compiler-directed lifetime mechanism measured by the five-target campaign. It
+selects one fixed pass mode:
+
+- actual semantic-scope rewriting is enabled;
+- the automatic Rust lifetime prior is enabled;
+- direct local metadata ABI and exact size/align-with-semantic-Drop pairing are
+  enabled;
+- the independent type-isolation policy flag is fixed to `0`; and
+- normal rustc compilation continues after the pass.
+
+The historical `unialloc-rustc-mir-rewrite-dry-run.rs` path remains a thin
+compatibility entry point. Both binaries delegate to
+`unialloc-rustc-driver-engine.rs`. Pure profile parsing, lifetime decisions,
+hint precedence, selection, and requested-layout admission live in
+`lifetime_aware.rs`; the semantic type/ownership solver and MIR surgery remain
+shared by both entry points.
+
+Build both entry points on the pinned current rustc surface:
+
+```sh
+TOOLCHAIN="$(cat rust-toolchain)"
+RUSTC_BOOTSTRAP=1 rustc +"$TOOLCHAIN" --cfg unialloc_rustc_current \
+  tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs \
+  -o /tmp/unialloc-rustc-mir-rewrite-dry-run
+RUSTC_BOOTSTRAP=1 rustc +"$TOOLCHAIN" --cfg unialloc_rustc_current \
+  tools/unialloc-rustc-pass/unialloc-rustc-lifetime-aware.rs \
+  -o /tmp/unialloc-rustc-lifetime-aware
+```
+
+Use the lifetime pass directly as the Cargo wrapper; the measured mechanism
+switches above require no environment flags:
+
+```sh
+SYSROOT="$(rustc +$(cat rust-toolchain) --print sysroot)"
+LD_LIBRARY_PATH="$SYSROOT/lib" \
+UNIALLOC_RUSTC_TARGET_CRATES="my-app" \
+UNIALLOC_REWRITE_AUDIT_DIR=/tmp/unialloc-lifetime-audits \
+RUSTC_WRAPPER=/tmp/unialloc-rustc-lifetime-aware \
+cargo +$(cat rust-toolchain) build --release
+```
+
+The standalone mode fails closed on configuration that would change the
+measured mechanism: direct allocator rewriting, nonzero manual placement,
+cross-thread placement, alternate automatic lifetime classifiers, nonzero
+policy flags, analysis-only mode, and dry-run mode. Exact lifetime profiles,
+manual lifetime hints, confidence thresholds, target-crate allowlists, audit
+paths, and pass-log paths remain supported inputs. The compatibility driver
+retains every existing combined-mode option.
+
 `type_id` is deliberately site-scoped:
 `fnv1a64(allocation-site-object-type-id-v2 || function || MIR location ||
 source span || object type || callee)`.  The row also records

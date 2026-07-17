@@ -16,8 +16,14 @@ from typing import Any, Dict, Iterable, List
 
 
 ROOT = Path(__file__).resolve().parents[2]
+EVALUATION_SCRIPT_DIR = ROOT / "evaluation" / "scripts"
+if str(EVALUATION_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(EVALUATION_SCRIPT_DIR))
+
+import rustc_pass_source_closure as pass_closure  # noqa: E402
+
 RUNNER_SOURCE = Path(__file__).resolve()
-PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+PASS_SOURCE = ROOT / pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 PROBE_NAME = "rustc_driver_mir_semantic_scope_unwind_probe"
 PROBE_SOURCE = ROOT / "unialloc/src/bin" / f"{PROBE_NAME}.rs"
 TYPE_ISOLATED = 0x1
@@ -30,7 +36,7 @@ SOURCE_BINDING_PATHS = (
     Path("unialloc/Cargo.toml"),
     Path("unialloc/build.rs"),
     Path("unialloc/src"),
-    PASS_SOURCE.relative_to(ROOT),
+    *[Path(path) for path in pass_closure.source_closure_relative_paths(ROOT)],
     RUNNER_SOURCE.relative_to(ROOT),
 )
 
@@ -440,6 +446,7 @@ def main() -> int:
         "artifacts": {
             "pass_source": str(PASS_SOURCE),
             "pass_source_sha256": sha256(PASS_SOURCE),
+            "pass_source_closure": pass_closure.source_closure_provenance(ROOT),
             "pass_binary": str(pass_binary),
             "pass_binary_sha256": sha256(pass_binary),
             "probe_source": str(PROBE_SOURCE),

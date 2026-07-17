@@ -24,6 +24,11 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EVALUATE_PATH = ROOT / "evaluation" / "scripts" / "evaluate.py"
 DOCKER_DRIVER_PATH = ROOT / "evaluation" / "scripts" / "paper_collections_docker_driver.py"
+RUSTC_MIR_REWRITE_SOURCE_CLOSURE = (
+    ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs",
+    ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-driver-engine.rs",
+    ROOT / "tools" / "unialloc-rustc-pass" / "lifetime_aware.rs",
+)
 
 
 spec = importlib.util.spec_from_file_location("unialloc_evaluate", EVALUATE_PATH)
@@ -40,6 +45,14 @@ docker_driver_spec.loader.exec_module(paper_collections_docker_driver)
 def write_json(path: pathlib.Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def rustc_mir_rewrite_source() -> str:
+    """Return the complete source closure behind the thin compatibility entry point."""
+
+    return "\n".join(
+        path.read_text(encoding="utf-8") for path in RUSTC_MIR_REWRITE_SOURCE_CLOSURE
+    )
 
 
 @contextlib.contextmanager
@@ -11200,9 +11213,7 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertTrue(expected.issubset(evaluate.RUSTC_DRIVER_DIRECT_ALLOCATOR_RESOLVED_STATUSES))
 
     def test_direct_allocator_local_metadata_abi_keeps_size_align_recovery_backed(self) -> None:
-        pass_source = (ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs").read_text(
-            encoding="utf-8"
-        )
+        pass_source = rustc_mir_rewrite_source()
         self.assertNotIn(
             '(DirectAllocatorCallKind::SizeAlignAlloc, false, true) => {\n'
             '            "__unialloc_alloc_with_metadata_local"',
@@ -11247,9 +11258,7 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertIn("results_update_skipped", evaluate_source)
 
     def test_direct_allocator_size_align_local_pairing_contract_is_fail_closed(self) -> None:
-        pass_source = (ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs").read_text(
-            encoding="utf-8"
-        )
+        pass_source = rustc_mir_rewrite_source()
         self.assertIn("--unialloc-direct-local-size-align-with-semantic-drop", pass_source)
         self.assertIn("UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP", pass_source)
         self.assertIn("local_metadata_abi_semantic_drop_scope", pass_source)
@@ -11872,8 +11881,7 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertTrue(entry["sample_rewrite_candidates"][0]["cross_thread_recovery_hint"])
 
     def test_rustc_driver_mir_rewrite_pass_uses_rustc_middle_heap_type_solver(self) -> None:
-        source_path = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
-        source = source_path.read_text(encoding="utf-8")
+        source = rustc_mir_rewrite_source()
 
         self.assertIn("ty::Adt", source)
         self.assertIn("heap_object_type_from_ty", source)

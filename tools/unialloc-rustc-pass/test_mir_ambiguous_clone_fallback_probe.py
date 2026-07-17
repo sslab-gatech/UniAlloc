@@ -6,11 +6,17 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
+EVALUATION_SCRIPT_DIR = ROOT / "evaluation" / "scripts"
+if str(EVALUATION_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(EVALUATION_SCRIPT_DIR))
+
+import rustc_pass_source_closure as pass_closure  # noqa: E402
+
 RUNNER_SOURCE = Path(__file__).resolve()
-PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+PASS_SOURCE = ROOT / pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 PROBE_NAME = "rustc_driver_mir_ambiguous_clone_fallback_probe"
 PROBE_SOURCE = ROOT / "unialloc/src/bin" / f"{PROBE_NAME}.rs"
-SOURCE_BINDING_PATHS = (Path("Cargo.toml"), Path("Cargo.lock"), Path("rust-toolchain"), Path("alloc_macros/Cargo.toml"), Path("alloc_macros/src"), Path("unialloc/Cargo.toml"), Path("unialloc/build.rs"), Path("unialloc/src"), PASS_SOURCE.relative_to(ROOT), RUNNER_SOURCE.relative_to(ROOT))
+SOURCE_BINDING_PATHS = (Path("Cargo.toml"), Path("Cargo.lock"), Path("rust-toolchain"), Path("alloc_macros/Cargo.toml"), Path("alloc_macros/src"), Path("unialloc/Cargo.toml"), Path("unialloc/build.rs"), Path("unialloc/src"), *[Path(path) for path in pass_closure.source_closure_relative_paths(ROOT)], RUNNER_SOURCE.relative_to(ROOT))
 AMBIGUOUS_FUNCTION = "Result::clone"
 AUDIT_ONLY_CLONE_STATUS = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
 PLAIN_CLONE_FUNCTION = "Option::clone"
@@ -318,6 +324,6 @@ def main() -> int:
     paths=sorted(rewrites.glob('*.json'))
     if len(paths)!=1: raise SystemExit(f"expected one target audit, found {len(paths)} in {rewrites}")
     audit=json.loads(paths[0].read_text(encoding='utf-8')); runtime=load_runtime_event(Path(run['stdout'])); validation=validate(audit,runtime); shutil.rmtree(target); end=source_binding_snapshot(toolchain,rustc); assert_source_binding_stable(start,end)
-    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass and runtime type-isolation regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec, Option::clone, and Result::clone operations and no manual metadata allocator ABI calls.','All three broad Option/Result Clone calls must remain exact unresolved audit-only rows with zero applied compiler scopes.','Runtime counters prove each audit-only Clone allocation/deallocation used fallback without consuming the protected Producer or same-layout Consumer typed-cache entries.','Exact Vec controls retain distinct Producer/Consumer identities and recover the protected Producer entry after all broad Clone fallbacks.']}
+    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_source_closure':pass_closure.source_closure_provenance(ROOT),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass and runtime type-isolation regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec, Option::clone, and Result::clone operations and no manual metadata allocator ABI calls.','All three broad Option/Result Clone calls must remain exact unresolved audit-only rows with zero applied compiler scopes.','Runtime counters prove each audit-only Clone allocation/deallocation used fallback without consuming the protected Producer or same-layout Consumer typed-cache entries.','Exact Vec controls retain distinct Producer/Consumer identities and recover the protected Producer entry after all broad Clone fallbacks.']}
     sp=out/'summary.json'; sp.write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8'); print(json.dumps({'summary':str(sp),'validated':True},sort_keys=True)); return 0
 if __name__=='__main__': sys.exit(main())

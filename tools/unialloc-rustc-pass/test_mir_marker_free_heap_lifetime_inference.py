@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+LIFETIME_PASS_SOURCE = (
+    ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-lifetime-aware.rs"
+)
 TOOLCHAIN = (ROOT / "rust-toolchain").read_text(encoding="utf-8").strip()
 
 LOCAL_DROP_BASIS = "automatic_heap_exact_local_drop_fact_unknown"
@@ -80,6 +84,21 @@ class MirMarkerFreeHeapLifetimeInferenceTest(unittest.TestCase):
                 str(PASS_SOURCE),
                 "-o",
                 str(cls.driver),
+            ],
+            cwd=ROOT,
+            env=build_env,
+            check=True,
+        )
+        cls.lifetime_driver = cls.tmp / "unialloc-rustc-lifetime-aware"
+        subprocess.run(
+            [
+                cls.rustc,
+                f"+{TOOLCHAIN}",
+                "--cfg",
+                "unialloc_rustc_current",
+                str(LIFETIME_PASS_SOURCE),
+                "-o",
+                str(cls.lifetime_driver),
             ],
             cwd=ROOT,
             env=build_env,
@@ -1319,6 +1338,210 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=8", completed.stdout)
+
+    def _run_measured_box_pass_mode(
+        self, label: str, *, standalone: bool
+    ) -> tuple[dict[str, object], Path]:
+        audit_path = self.tmp / f"{label}.json"
+        output_path = self.tmp / label
+        command = [
+            str(self.lifetime_driver if standalone else self.driver),
+            "--unialloc-rewrite-audit-out",
+            str(audit_path),
+        ]
+        if not standalone:
+            # The explicit legacy flags are the final five-target measured
+            # compiler-hint contract. The standalone pass selects this mode
+            # without requiring deployment-time switches.
+            command.extend(
+                [
+                    "--unialloc-actual-semantic-scope-rewrite",
+                    "--unialloc-auto-rust-lifetime-prior",
+                    "--unialloc-direct-local-metadata-abi",
+                    "--unialloc-direct-local-size-align-with-semantic-drop",
+                    "--unialloc-policy-flags",
+                    "0",
+                    "--unialloc-continue-compilation",
+                ]
+            )
+        command.extend(
+            [
+                "--",
+                "--sysroot",
+                str(self.sysroot),
+                "-C",
+                "opt-level=3",
+                "-C",
+                "panic=abort",
+                "--edition=2021",
+                "--extern",
+                f"unialloc={self.stub_rlib}",
+                "-o",
+                str(output_path),
+                str(self.measured_box_long_fixture),
+            ]
+        )
+        env = os.environ.copy()
+        for name in (
+            "UNIALLOC_ACTUAL_MIR_REWRITE",
+            "UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE",
+            "UNIALLOC_AUTO_LIFETIME_CLASSIFIER",
+            "UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE",
+            "UNIALLOC_AUTO_RUST_LIFETIME_PRIOR",
+            "UNIALLOC_DIRECT_LOCAL_METADATA_ABI",
+            "UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP",
+            "UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT",
+            "UNIALLOC_LOWERING_PLACEMENT_HINT",
+            "UNIALLOC_LOWERING_POLICY_FLAGS",
+        ):
+            env.pop(name, None)
+        library_path = str(self.sysroot / "lib")
+        env["LD_LIBRARY_PATH"] = library_path
+        env["DYLD_LIBRARY_PATH"] = library_path
+        completed = subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(audit_path.read_text(encoding="utf-8")), output_path
+
+    @staticmethod
+    def _canonical_lifetime_audit(audit: dict[str, object]) -> list[dict[str, object]]:
+        fields = (
+            "allocation_site_id",
+            "type_id",
+            "module_id",
+            "flags",
+            "lifetime_hint",
+            "lifetime_hint_confidence",
+            "lifetime_hint_basis",
+            "placement_hint",
+            "callsite",
+            "mir_function",
+            "basic_block",
+            "callee",
+            "destination_place",
+            "destination_type",
+            "semantic_object_type",
+            "type_id_basis",
+            "rewrite_status",
+            "replacement_symbol",
+            "replacement_resolution_status",
+            "metadata_pairing_contract",
+            "lowering_kind",
+            "lifetime_analysis_features",
+        )
+        rows = audit.get("rewrite_candidates", [])
+        assert isinstance(rows, list)
+        canonical = [
+            {field: row.get(field) for field in fields}
+            for row in rows
+            if isinstance(row, dict)
+        ]
+        return sorted(
+            canonical,
+            key=lambda row: (
+                str(row.get("mir_function")),
+                str(row.get("basic_block")),
+                str(row.get("allocation_site_id")),
+                str(row.get("lowering_kind")),
+            ),
+        )
+
+    def test_standalone_pass_matches_measured_legacy_box_kernel(self) -> None:
+        legacy, legacy_binary = self._run_measured_box_pass_mode(
+            "measured-box-legacy", standalone=False
+        )
+        standalone, standalone_binary = self._run_measured_box_pass_mode(
+            "measured-box-standalone", standalone=True
+        )
+
+        for audit in (legacy, standalone):
+            compiler_pass = audit["compiler_pass"]
+            self.assertIsInstance(compiler_pass, dict)
+            assert isinstance(compiler_pass, dict)
+            self.assertFalse(compiler_pass["actual_allocator_call_replacement_requested"])
+            self.assertTrue(compiler_pass["actual_semantic_scope_rewrite_requested"])
+            self.assertTrue(compiler_pass["automatic_rust_lifetime_prior_enabled"])
+            self.assertTrue(compiler_pass["direct_local_metadata_abi"])
+            self.assertTrue(
+                compiler_pass["direct_local_size_align_with_semantic_drop"]
+            )
+            self.assertEqual(compiler_pass["policy_flags"], 0)
+
+        self.assertEqual(
+            self._canonical_lifetime_audit(standalone),
+            self._canonical_lifetime_audit(legacy),
+        )
+        self.assertEqual(
+            hashlib.sha256(standalone_binary.read_bytes()).hexdigest(),
+            hashlib.sha256(legacy_binary.read_bytes()).hexdigest(),
+        )
+
+    def test_standalone_pass_rejects_mechanism_conflicts(self) -> None:
+        library_path = str(self.sysroot / "lib")
+        env = os.environ.copy()
+        env["LD_LIBRARY_PATH"] = library_path
+        env["DYLD_LIBRARY_PATH"] = library_path
+
+        def assert_rejected(
+            args: list[str], *, process_env: dict[str, str], label: object
+        ) -> None:
+            for rustc_args in (
+                ["--", "--version"],
+                [
+                    "--unialloc-target-crates",
+                    "selected_crate",
+                    "--",
+                    "--crate-name",
+                    "bypassed_dependency",
+                    "--version",
+                ],
+            ):
+                completed = subprocess.run(
+                    [str(self.lifetime_driver), *args, *rustc_args],
+                    cwd=ROOT,
+                    env=process_env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(
+                    completed.returncode,
+                    2,
+                    (label, rustc_args, completed.stderr),
+                )
+                self.assertIn("rejects incompatible option", completed.stderr)
+
+        for args in (
+            ["--unialloc-actual-mir-rewrite"],
+            ["--unialloc-placement-hint", "1"],
+            ["--unialloc-auto-lifetime-classifier"],
+            ["--unialloc-auto-heap-lifetime-inference"],
+            ["--unialloc-auto-cross-thread-recovery-hint"],
+            ["--unialloc-policy-flags", "1"],
+            ["--unialloc-stop-after-analysis"],
+            ["--unialloc-dry-run-only"],
+        ):
+            assert_rejected(args, process_env=env, label=args)
+
+        for name in (
+            "UNIALLOC_ACTUAL_MIR_REWRITE",
+            "UNIALLOC_AUTO_LIFETIME_CLASSIFIER",
+            "UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE",
+            "UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT",
+            "UNIALLOC_LOWERING_PLACEMENT_HINT",
+            "UNIALLOC_LOWERING_POLICY_FLAGS",
+        ):
+            conflict_env = env.copy()
+            conflict_env[name] = "1"
+            assert_rejected([], process_env=conflict_env, label=name)
 
     def test_rust_lifetime_prior_abstains_before_unjoinable_generic_transport(
         self,

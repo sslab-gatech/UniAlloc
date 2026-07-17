@@ -112,6 +112,9 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain"):
                 self.assertTrue((snapshot / name).is_file())
             self.assertTrue((snapshot / "unialloc/.cargo/config").is_file())
+            closure = campaign.pass_closure.source_closure_relative_paths(snapshot)
+            self.assertEqual(3, len(closure))
+            self.assertTrue(all((snapshot / path).is_file() for path in closure))
             self.assertIn("unialloc/.cargo/config", record["campaign_snapshot_files"])
             self.assertEqual(
                 campaign.tree_digest(

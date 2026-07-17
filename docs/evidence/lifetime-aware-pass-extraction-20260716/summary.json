@@ -1,0 +1,295 @@
+{
+  "boundary": [
+    "Bedrock and Convex are fixed-work real-target harnesses from the pinned four-arm evidence.",
+    "The exact target binaries and canonical lifetime audits match the immutable pre-extraction pins.",
+    "Timing and RSS are a regression screen with six samples per variant per target, not confidence-interval evidence."
+  ],
+  "command": [
+    "python3",
+    "evaluation/lifetime-pass-regression-20260716/run_regression.py",
+    "--run-id",
+    "lifetime-pass-pinned-final-20260716-2248",
+    "--standalone-source",
+    "tools/unialloc-rustc-pass/unialloc-rustc-lifetime-aware.rs",
+    "--targets",
+    "bedrock",
+    "convex",
+    "--pairs",
+    "3",
+    "--cpu",
+    "126",
+    "--jobs",
+    "8"
+  ],
+  "contract": {
+    "fresh_process": true,
+    "fresh_run_directory": true,
+    "metrics_separate": [
+      "fixed-work operation seconds",
+      "operation-window peak RSS KiB"
+    ],
+    "operation_gate": "median standalone slowdown <= 2%",
+    "ordering": "three AB plus BA pairs per target",
+    "peak_rss_gate": "median standalone increase <= max(2% of compatibility median, 1024 KiB)",
+    "reference": "checked-in binary and canonical-audit SHA pins plus exact-host immutable pre-extraction raw tree",
+    "warmup_iterations": 0
+  },
+  "git_head_before_commit": "66321bf413465f5c0e81ef4ac1554ef821231c5b",
+  "harness": {
+    "path": "evaluation/lifetime-pass-regression-20260716/run_regression.py",
+    "raw_output_ignored_by_git": true,
+    "sha256": "65f1a15e45611d7ebdba05d4b626098559b53aa5ccd18dc19d6518e6f299b099",
+    "test_path": "evaluation/lifetime-pass-regression-20260716/test_run_regression.py",
+    "test_sha256": "0088b4dd0fa1bf26bb52822cc98f7b15473465d92301d0d713c9f96ffd1ee38a",
+    "unit_test_count": 10,
+    "unit_tests_passed": true
+  },
+  "pass_builds": {
+    "compat": {
+      "entrypoint": "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+      "entrypoint_sha256": "5dd1b23bc5cd594e95fba864c66fb70040ce324bb75d7e01898a0818490a137e",
+      "pass_binary_sha256": "1c9adfa8f9ab1f38665213ce800152283be1779f5cb57d6ef401b00730196e44",
+      "source_closure_files": [
+        {
+          "bytes": 684,
+          "role": "entrypoint",
+          "sha256": "5dd1b23bc5cd594e95fba864c66fb70040ce324bb75d7e01898a0818490a137e",
+          "stable_path": "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+        },
+        {
+          "bytes": 641047,
+          "role": "shared_engine",
+          "sha256": "5d9f3e031386b0747998da5ad4f4b1a98d7633fc3ce61fe055ed4633b607f51b",
+          "stable_path": "tools/unialloc-rustc-pass/unialloc-rustc-driver-engine.rs"
+        },
+        {
+          "bytes": 32594,
+          "role": "lifetime_policy",
+          "sha256": "d67c0e12e0f141996423362a2cb8e930b152ebc3d21cf0844ec9553055021ef2",
+          "stable_path": "tools/unialloc-rustc-pass/lifetime_aware.rs"
+        }
+      ],
+      "source_closure_sha256": "5ff7c1044ae3aff1c0af98954786270a588b6b24770609767a092f0cb686290f"
+    },
+    "standalone": {
+      "entrypoint": "tools/unialloc-rustc-pass/unialloc-rustc-lifetime-aware.rs",
+      "entrypoint_sha256": "986a2f846f1e23895222443a3d6ef4701e6db1de75936f562448731cc593d3d3",
+      "pass_binary_sha256": "dbf237fc9dfb7d66c88b5fbb9f7a304bc9ad316cdc4119039f3386c53e6cab29",
+      "source_closure_files": [
+        {
+          "bytes": 698,
+          "role": "entrypoint",
+          "sha256": "986a2f846f1e23895222443a3d6ef4701e6db1de75936f562448731cc593d3d3",
+          "stable_path": "tools/unialloc-rustc-pass/unialloc-rustc-lifetime-aware.rs"
+        },
+        {
+          "bytes": 641047,
+          "role": "shared_engine",
+          "sha256": "5d9f3e031386b0747998da5ad4f4b1a98d7633fc3ce61fe055ed4633b607f51b",
+          "stable_path": "tools/unialloc-rustc-pass/unialloc-rustc-driver-engine.rs"
+        },
+        {
+          "bytes": 32594,
+          "role": "lifetime_policy",
+          "sha256": "d67c0e12e0f141996423362a2cb8e930b152ebc3d21cf0844ec9553055021ef2",
+          "stable_path": "tools/unialloc-rustc-pass/lifetime_aware.rs"
+        }
+      ],
+      "source_closure_sha256": "1446349215478e15ec2cc638714ec9cbebf5d3ac13bb22a3939f69e375ce346f"
+    }
+  },
+  "passed": true,
+  "raw_artifacts": {
+    "build/passes.json": {
+      "bytes": 6354,
+      "sha256": "22dec908c62d682c002c3957bedf250e2bef053f713f86a894b5c119fb0864dd"
+    },
+    "build/targets/bedrock/parity.json": {
+      "bytes": 205147,
+      "sha256": "f6af480aca1e6e6ee400a689ce52f78889415b8d29162d298e236b874836a0c4"
+    },
+    "build/targets/convex/parity.json": {
+      "bytes": 234433,
+      "sha256": "95cf44d3952ffc9184eab29740218b3a998c1c0b06af78fe0f69672085cea931"
+    },
+    "pre-extraction-references.json": {
+      "bytes": 2655,
+      "sha256": "2be41423f89895a2e41ca497b6e50137cc9d4786db943e5feda8f20da68aee9a"
+    },
+    "results/bedrock.json": {
+      "bytes": 40578,
+      "sha256": "cd9789063e42672878867109d487a00be1b37840b9761cbee5a895c99b498059"
+    },
+    "results/convex.json": {
+      "bytes": 45718,
+      "sha256": "89e4bfc8398e09fb6511262881eb69197f237bafa02301a726b72ffa4c260462"
+    },
+    "summary.json": {
+      "bytes": 19848,
+      "sha256": "760c0ac360b1d1ed5743a3c5e53f99d8b7a5f915cd4d697e93ddd71644a32b9e"
+    }
+  },
+  "run_id": "lifetime-pass-pinned-final-20260716-2248",
+  "schema_version": 1,
+  "source": "lifetime-aware-pass-extraction-regression-summary-v1",
+  "targets": {
+    "bedrock": {
+      "compat_vs_standalone_parity": {
+        "binary_unchanged_by_text_extraction": true,
+        "canonical_audit_exact": true,
+        "canonical_audit_sha256": "b1471e9e423946ed15f77df26a7965b240cda261e2f5f3256bb4e8d63308a126",
+        "full_binary_exact": true,
+        "full_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "lifetime_candidate_count": 60,
+        "passed": true,
+        "text_bytes": 558723,
+        "text_exact": true,
+        "text_sha256": "000ca77a80c8136f5d91415788766a1626fc4802741ad56a8698be0be001166d"
+      },
+      "fixed_work": {
+        "chunks": 1024,
+        "correctness": true,
+        "digest": "8ff01d6c0978f587",
+        "iterations": 3000000,
+        "lookups": 3072000000
+      },
+      "measurement": {
+        "ab_ba_pair_count": 3,
+        "cpu_affinity": [
+          126
+        ],
+        "fresh_process": true,
+        "fresh_process_count": 12,
+        "operation_gate": {
+          "maximum_allowed_slowdown_percent": 2.0,
+          "median_slowdown_percent": 0.07773396481168815,
+          "passed": true
+        },
+        "peak_rss_gate": {
+          "compat_median_peak_rss_kib": 12804.0,
+          "maximum_allowed_increase_kib": 1024.0,
+          "median_increase_kib": 60.0,
+          "passed": true,
+          "rule": "max(2% of compatibility median peak RSS, 1024 KiB)"
+        },
+        "per_variant_medians": {
+          "compat": {
+            "operation_peak_rss_kib": 12804.0,
+            "operation_seconds": 5.4563730715,
+            "sample_count": 6
+          },
+          "standalone": {
+            "operation_peak_rss_kib": 12866.0,
+            "operation_seconds": 5.4569986275,
+            "sample_count": 6
+          }
+        },
+        "warmup_iterations": 0
+      },
+      "passed": true,
+      "pre_extraction_reference_gate": {
+        "audit_match_passed": true,
+        "binary_match_passed": true,
+        "build_record": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/four-arm-other-targets-20260716/builds/bedrock/build.json",
+        "build_record_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "build_record_sha256": "b9fba61e508d25e8feee144c10eb01421ab2b7ef066ad4690caaff0282b89446",
+        "checked_in_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "checked_in_canonical_audit_sha256": "b1471e9e423946ed15f77df26a7965b240cda261e2f5f3256bb4e8d63308a126",
+        "compat_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "compat_canonical_audit_sha256": "b1471e9e423946ed15f77df26a7965b240cda261e2f5f3256bb4e8d63308a126",
+        "compat_lifetime_candidate_count": 60,
+        "expected_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "expected_canonical_audit_sha256": "b1471e9e423946ed15f77df26a7965b240cda261e2f5f3256bb4e8d63308a126",
+        "expected_lifetime_candidate_count": 60,
+        "observed_reference_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "passed": true,
+        "source": "immutable-pre-extraction-four-arm-build-v1",
+        "standalone_binary_sha256": "ed26bc99472fd3030394ae877f8a0ea7fdfddc75145f254b2c9d5e405ff12869",
+        "standalone_canonical_audit_sha256": "b1471e9e423946ed15f77df26a7965b240cda261e2f5f3256bb4e8d63308a126",
+        "standalone_lifetime_candidate_count": 60
+      }
+    },
+    "convex": {
+      "compat_vs_standalone_parity": {
+        "binary_unchanged_by_text_extraction": true,
+        "canonical_audit_exact": true,
+        "canonical_audit_sha256": "b04c9cc050b9dfe42104b61642d58e3969261659b44fcbab24d7bde05c7898af",
+        "full_binary_exact": true,
+        "full_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "lifetime_candidate_count": 71,
+        "passed": true,
+        "text_bytes": 530115,
+        "text_exact": true,
+        "text_sha256": "35664be302b0d8219a290ebd95a771983a00010eab1dc80537a25d54f3e7e139"
+      },
+      "fixed_work": {
+        "bitmap_bytes_per_calendar": 6000,
+        "business_hits": 107066845,
+        "calendar_count": 2731,
+        "compiler_long_cohort_bytes": 16386000,
+        "correctness": true,
+        "date_count": 47847,
+        "digest": "5b49db0f0b986115",
+        "holiday_hits": 100099,
+        "holidays_per_calendar": 32,
+        "queries": 150000000
+      },
+      "measurement": {
+        "ab_ba_pair_count": 3,
+        "cpu_affinity": [
+          126
+        ],
+        "fresh_process": true,
+        "fresh_process_count": 12,
+        "operation_gate": {
+          "maximum_allowed_slowdown_percent": 2.0,
+          "median_slowdown_percent": 0.36752506441698474,
+          "passed": true
+        },
+        "peak_rss_gate": {
+          "compat_median_peak_rss_kib": 22606.0,
+          "maximum_allowed_increase_kib": 1024.0,
+          "median_increase_kib": 24.0,
+          "passed": true,
+          "rule": "max(2% of compatibility median peak RSS, 1024 KiB)"
+        },
+        "per_variant_medians": {
+          "compat": {
+            "operation_peak_rss_kib": 22606.0,
+            "operation_seconds": 3.4091123894999997,
+            "sample_count": 6
+          },
+          "standalone": {
+            "operation_peak_rss_kib": 22620.0,
+            "operation_seconds": 3.4176762605,
+            "sample_count": 6
+          }
+        },
+        "warmup_iterations": 0
+      },
+      "passed": true,
+      "pre_extraction_reference_gate": {
+        "audit_match_passed": true,
+        "binary_match_passed": true,
+        "build_record": "/home/hanqing/alloc/UniAlloc-compiler-directed-swc-run-20260716/evaluation/raw/four-arm-other-targets-20260716/builds/convex/build.json",
+        "build_record_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "build_record_sha256": "094dab0fd9cf78df5c6d312455be2d9e220d2344362612c21f7352387f076238",
+        "checked_in_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "checked_in_canonical_audit_sha256": "b04c9cc050b9dfe42104b61642d58e3969261659b44fcbab24d7bde05c7898af",
+        "compat_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "compat_canonical_audit_sha256": "b04c9cc050b9dfe42104b61642d58e3969261659b44fcbab24d7bde05c7898af",
+        "compat_lifetime_candidate_count": 71,
+        "expected_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "expected_canonical_audit_sha256": "b04c9cc050b9dfe42104b61642d58e3969261659b44fcbab24d7bde05c7898af",
+        "expected_lifetime_candidate_count": 71,
+        "observed_reference_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "passed": true,
+        "source": "immutable-pre-extraction-four-arm-build-v1",
+        "standalone_binary_sha256": "55fa4a7eb764c87021c43c1b68e8ff070c84faedeba14569c64163ce7553e1f7",
+        "standalone_canonical_audit_sha256": "b04c9cc050b9dfe42104b61642d58e3969261659b44fcbab24d7bde05c7898af",
+        "standalone_lifetime_candidate_count": 71
+      }
+    }
+  },
+  "toolchain": "nightly-2026-06-11"
+}

@@ -36,6 +36,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import realworld_type_isolation_matrix as matrix  # noqa: E402
+import rustc_pass_source_closure as pass_closure  # noqa: E402
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -47,9 +48,7 @@ PINNED_IMPLEMENTATION_SHA256 = (
 )
 PINNED_IMPLEMENTATION_FILE_COUNT = 131
 PINNED_IMPLEMENTATION_SIZE_BYTES = 4_426_670
-PASS_RELATIVE_PATH = pathlib.PurePosixPath(
-    "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
-)
+PASS_RELATIVE_PATH = pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 ASSEMBLER_TARGET_DIR = (
     ROOT / "evaluation" / "raw" / "type-isolation-primary-v1" / "targets"
 )
@@ -501,7 +500,7 @@ def git_output(checkout: pathlib.Path, *arguments: str) -> str:
 
 def canonical_implementation_path(path: str) -> bool:
     candidate = pathlib.PurePosixPath(path)
-    if candidate == PASS_RELATIVE_PATH:
+    if candidate in pass_closure.PASS_SOURCE_CANDIDATE_RELATIVE_PATHS:
         return True
     if not candidate.parts or candidate.parts[0] not in {"unialloc", "alloc_macros"}:
         return False
@@ -539,7 +538,10 @@ def snapshot_stream(root: pathlib.Path, paths: Sequence[str]) -> tuple[str, int,
 
 
 def working_tree_paths(repository: pathlib.Path) -> list[str]:
-    paths = ["Cargo.toml", "Cargo.lock", "rust-toolchain", str(PASS_RELATIVE_PATH)]
+    paths = ["Cargo.toml", "Cargo.lock", "rust-toolchain"]
+    paths.extend(
+        str(path) for path in pass_closure.source_closure_relative_paths(repository)
+    )
     for root_name in ("unialloc", "alloc_macros"):
         source_root = repository / root_name
         paths.extend(
@@ -561,6 +563,7 @@ def working_tree_paths(repository: pathlib.Path) -> list[str]:
 
 
 def git_tree_blob_rows(repository: pathlib.Path, revision: str) -> list[dict[str, str]]:
+    pass_sources = pass_closure.git_source_closure_relative_paths(repository, revision)
     tree = run_command(
         [
             "git",
@@ -573,7 +576,7 @@ def git_tree_blob_rows(repository: pathlib.Path, revision: str) -> list[dict[str
             "Cargo.toml",
             "Cargo.lock",
             "rust-toolchain",
-            str(PASS_RELATIVE_PATH),
+            *[str(path) for path in pass_sources],
         ],
         cwd=repository,
         env=os.environ.copy(),
@@ -600,7 +603,7 @@ def git_tree_blob_rows(repository: pathlib.Path, revision: str) -> list[dict[str
             }
         )
     paths = {row["path"] for row in rows}
-    required = {"Cargo.toml", "Cargo.lock", str(PASS_RELATIVE_PATH)}
+    required = {"Cargo.toml", "Cargo.lock", *[str(path) for path in pass_sources]}
     if not required.issubset(paths):
         raise CampaignError(
             "implementation revision is missing required files: "
@@ -1132,7 +1135,7 @@ def ensure_revision_mir_wrapper(
 ) -> pathlib.Path:
     verify_implementation_snapshot(implementation)
     pass_source = implementation.path / PASS_RELATIVE_PATH
-    pass_sha256 = sha256_file(pass_source)
+    pass_provenance = pass_closure.source_closure_provenance(implementation.path)
     record_path = path.with_name(path.name + ".build.json")
     if path.is_file() and record_path.is_file():
         try:
@@ -1144,7 +1147,8 @@ def ensure_revision_mir_wrapper(
             and cached.get("toolchain") == toolchain
             and cached.get("implementation_revision") == implementation.revision
             and cached.get("implementation_sha256") == implementation.sha256
-            and cached.get("pass_source_sha256") == pass_sha256
+            and cached.get("pass_source_closure_sha256")
+            == pass_provenance["pass_source_closure_sha256"]
             and cached.get("wrapper_sha256") == sha256_file(path)
         ):
             return path.resolve()
@@ -1183,8 +1187,7 @@ def ensure_revision_mir_wrapper(
             "implementation_revision": implementation.revision,
             "implementation_sha256": implementation.sha256,
             "implementation_snapshot": str(implementation.path),
-            "pass_source": str(pass_source.resolve()),
-            "pass_source_sha256": pass_sha256,
+            **pass_provenance,
             "wrapper_sha256": sha256_file(path),
             "command": result["command"],
         },

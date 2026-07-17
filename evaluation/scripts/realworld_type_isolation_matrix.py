@@ -29,6 +29,11 @@ from typing import Any, Iterable, Sequence
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import rustc_pass_source_closure as pass_closure  # noqa: E402
 
 
 def _load_google_tcmalloc_support() -> Any:
@@ -56,9 +61,7 @@ GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER = GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKE
 DEFAULT_RAW_DIR = ROOT / "evaluation" / "raw" / "realworld-type-isolation-matrix"
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation" / "external" / "_checkouts"
 DEFAULT_WRAPPER = DEFAULT_RAW_DIR / "tools" / "unialloc-rustc-wrapper"
-PASS_SOURCE = (
-    ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
-)
+PASS_SOURCE = ROOT / pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 STATS_PREFIX = "UNIALLOC_REALWORLD_STATS="
 TYPE_STATS_PREFIX = "UNIALLOC_REALWORLD_TYPE_STATS="
 DEPOT_STATS_PREFIX = "UNIALLOC_REALWORLD_DEPOT_STATS="
@@ -1618,7 +1621,7 @@ def validate_typeiso_coverage(
 def ensure_wrapper(path: pathlib.Path, toolchain: str, timeout: int) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     record_path = path.with_name(path.name + ".build.json")
-    pass_source_sha256 = sha256_file(PASS_SOURCE)
+    pass_provenance = pass_closure.source_closure_provenance_for_entrypoint(PASS_SOURCE)
     if path.is_file() and record_path.is_file():
         try:
             record = json.loads(record_path.read_text(encoding="utf-8"))
@@ -1627,7 +1630,8 @@ def ensure_wrapper(path: pathlib.Path, toolchain: str, timeout: int) -> pathlib.
         if (
             record.get("success") is True
             and record.get("toolchain") == toolchain
-            and record.get("pass_source_sha256") == pass_source_sha256
+            and record.get("pass_source_closure_sha256")
+            == pass_provenance["pass_source_closure_sha256"]
             and record.get("wrapper_sha256") == sha256_file(path)
         ):
             return path.resolve()
@@ -1662,8 +1666,7 @@ def ensure_wrapper(path: pathlib.Path, toolchain: str, timeout: int) -> pathlib.
         "schema_version": 1,
         "success": True,
         "toolchain": toolchain,
-        "pass_source": str(PASS_SOURCE.resolve()),
-        "pass_source_sha256": pass_source_sha256,
+        **pass_provenance,
         "wrapper_sha256": sha256_file(path),
         "command": result["command"],
     }
@@ -2621,7 +2624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "toolchain": args.toolchain,
         "wrapper": {"path": str(wrapper), "sha256": sha256_file(wrapper)},
         "implementation_sha256": implementation_digest(),
-        "pass_source_sha256": sha256_file(PASS_SOURCE),
+        **pass_closure.source_closure_provenance(ROOT),
         "sysroot": str(sysroot),
         "host": host_snapshot(),
         "measurement_affinity": {

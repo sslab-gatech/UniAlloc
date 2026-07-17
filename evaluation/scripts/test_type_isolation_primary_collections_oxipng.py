@@ -143,6 +143,12 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             self.assertEqual(IMPLEMENTATION_REVISION, audit["implementation_revision"])
             self.assertEqual(digest, audit["unialloc_implementation_sha256"])
             self.assertEqual(IMPLEMENTATION_SHA256, digest)
+            self.assertEqual(
+                (self.runner.pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH,),
+                self.runner.pass_closure.git_source_closure_relative_paths(
+                    ROOT, IMPLEMENTATION_REVISION
+                ),
+            )
             for relative_path in (
                 "unialloc/src/lib.rs",
                 "alloc_macros/src/lib.rs",
@@ -242,6 +248,11 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             )
             for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain"):
                 self.assertTrue((snapshot / name).is_file())
+            for relative in self.runner.pass_closure.source_closure_relative_paths(
+                snapshot
+            ):
+                self.assertTrue((snapshot / relative).is_file())
+            self.assertEqual(3, audit["pass_source_closure_file_count"])
             self.assertTrue((snapshot / "unialloc/.cargo/config").is_file())
             self.assertEqual(
                 self.runner.campaign_snapshot_digest(snapshot)[0],

@@ -132,6 +132,11 @@ class RedbActixCampaignTests(unittest.TestCase):
             )
             for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain"):
                 self.assertTrue((snapshot.path / name).is_file())
+            closure = self.campaign.pass_closure.source_closure_relative_paths(
+                snapshot.path
+            )
+            self.assertEqual(3, len(closure))
+            self.assertTrue(all((snapshot.path / path).is_file() for path in closure))
 
     def test_current_working_tree_cli_is_explicit_and_never_publishable(self) -> None:
         primary = self.campaign.parse_args(["--targets", "redb"])

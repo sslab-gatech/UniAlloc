@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from evaluation.scripts import realworld_type_isolation_matrix as matrix  # noqa: E402
+from evaluation.scripts import rustc_pass_source_closure as pass_closure  # noqa: E402
 
 
 SUITE_PATH = ROOT / "evaluation/config/type_isolation_primary_suite.json"
@@ -390,9 +391,7 @@ def implementation_digest(snapshot: Path) -> str:
         snapshot / "unialloc",
         snapshot / "alloc_macros",
     )
-    files = [
-        snapshot / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
-    ]
+    files = [snapshot / path for path in pass_closure.source_closure_relative_paths(snapshot)]
     for source_root in roots:
         files.extend(
             path
@@ -412,7 +411,7 @@ def implementation_digest(snapshot: Path) -> str:
 def campaign_snapshot_digest(snapshot: Path) -> tuple[str, int, int]:
     files = [snapshot / name for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain")]
     files.extend(
-        [snapshot / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"]
+        snapshot / path for path in pass_closure.source_closure_relative_paths(snapshot)
     )
     for source_root in (snapshot / "unialloc", snapshot / "alloc_macros"):
         files.extend(
@@ -501,6 +500,7 @@ def resolve_implementation_revision(revision: str) -> str:
 
 def materialize_git_implementation(revision: str, destination: Path) -> None:
     destination.mkdir(parents=True)
+    pass_sources = pass_closure.git_source_closure_relative_paths(ROOT, revision)
     archive = subprocess.run(
         [
             "git",
@@ -510,7 +510,7 @@ def materialize_git_implementation(revision: str, destination: Path) -> None:
             "--",
             "unialloc",
             "alloc_macros",
-            "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+            *[str(path) for path in pass_sources],
         ],
         cwd=ROOT,
         check=False,
@@ -551,7 +551,7 @@ def freeze_unialloc_implementation(
         repository_status = command_text(["git", "status", "--short"], cwd=ROOT)
         source_digest = implementation_digest(ROOT)
         source_context = campaign_snapshot_digest(ROOT)
-        (staging / "tools/unialloc-rustc-pass").mkdir(parents=True)
+        staging.mkdir(parents=True)
         for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain"):
             shutil.copy2(ROOT / name, staging / name)
         shutil.copytree(
@@ -564,10 +564,7 @@ def freeze_unialloc_implementation(
             staging / "alloc_macros",
             ignore=shutil.ignore_patterns("target", ".git"),
         )
-        shutil.copy2(
-            matrix.PASS_SOURCE,
-            staging / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
-        )
+        pass_closure.copy_source_closure(ROOT, staging)
         source_kind = "working_tree"
         resolved_revision = repository_head
         if (
@@ -623,6 +620,7 @@ def freeze_unialloc_implementation(
         shutil.rmtree(staging)
     else:
         staging.replace(destination)
+    pass_provenance = pass_closure.source_closure_provenance(destination)
     audit = {
         "schema_version": 1,
         "unialloc_implementation_sha256": digest,
@@ -633,10 +631,7 @@ def freeze_unialloc_implementation(
         "implementation_revision": resolved_revision,
         "unialloc_tree_sha256": sha256_tree(destination / "unialloc"),
         "alloc_macros_tree_sha256": sha256_tree(destination / "alloc_macros"),
-        "pass_source_sha256": sha256_file(
-            destination
-            / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
-        ),
+        **pass_provenance,
     }
     if implementation_revision is None:
         audit.update(
@@ -670,11 +665,14 @@ def ensure_frozen_wrapper(
     pass_source = (
         snapshot / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
     )
+    pass_provenance = pass_closure.source_closure_provenance(snapshot)
     if wrapper.is_file() and record_path.is_file():
         record = json.loads(record_path.read_text(encoding="utf-8"))
         if (
             record.get("unialloc_implementation_sha256") == digest
             and record.get("toolchain") == toolchain
+            and record.get("pass_source_closure_sha256")
+            == pass_provenance["pass_source_closure_sha256"]
             and record.get("wrapper_sha256") == sha256_file(wrapper)
         ):
             return wrapper.resolve()
@@ -711,8 +709,7 @@ def ensure_frozen_wrapper(
             "success": True,
             "toolchain": toolchain,
             "unialloc_implementation_sha256": digest,
-            "pass_source": str(pass_source.resolve()),
-            "pass_source_sha256": sha256_file(pass_source),
+            **pass_provenance,
             "wrapper_sha256": sha256_file(wrapper),
             "command": result["command"],
         },

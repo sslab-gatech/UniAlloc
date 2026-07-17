@@ -35,12 +35,13 @@ from typing import Any, Iterable, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PASS_SOURCE = (
-    ROOT
-    / "tools"
-    / "unialloc-rustc-pass"
-    / "unialloc-rustc-mir-rewrite-dry-run.rs"
-)
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import rustc_pass_source_closure as pass_closure  # noqa: E402
+
+PASS_SOURCE = ROOT / pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 FIXTURE_SOURCE = (
     ROOT / "evaluation" / "fixtures" / "compiler_heap_lifetime_workload.rs"
 )
@@ -649,11 +650,15 @@ def ensure_wrapper(path: Path, *, toolchain: str, timeout: int) -> dict[str, Any
         str(path),
     ]
     result = run_checked(command, cwd=ROOT, env=env, timeout=timeout)
+    provenance = pass_closure.source_closure_provenance(ROOT)
     return {
         "path": str(path.resolve()),
         "sha256": sha256_file(path),
         "source": str(PASS_SOURCE.resolve()),
         "source_sha256": sha256_file(PASS_SOURCE),
+        "source_closure_sha256": provenance["pass_source_closure_sha256"],
+        "source_closure_file_count": provenance["pass_source_closure_file_count"],
+        "source_files": provenance["pass_source_files"],
         "command": command,
         "stdout_sha256": sha256_bytes(result.stdout),
         "stderr_sha256": sha256_bytes(result.stderr),
@@ -664,11 +669,15 @@ def ensure_wrapper(path: Path, *, toolchain: str, timeout: int) -> dict[str, Any
 def bind_existing_wrapper(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ExperimentError(f"provided compiler wrapper does not exist: {path}")
+    provenance = pass_closure.source_closure_provenance(ROOT)
     return {
         "path": str(path.resolve()),
         "sha256": sha256_file(path),
         "source": str(PASS_SOURCE.resolve()),
         "source_sha256": sha256_file(PASS_SOURCE),
+        "source_closure_sha256": provenance["pass_source_closure_sha256"],
+        "source_closure_file_count": provenance["pass_source_closure_file_count"],
+        "source_files": provenance["pass_source_files"],
         "command": None,
         "built_by_harness": False,
     }

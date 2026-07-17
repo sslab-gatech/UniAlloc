@@ -1,10 +1,10 @@
 #![feature(rustc_private)]
 
-//! Compatibility entry point for the historical combined UniAlloc MIR driver.
+//! Standalone compiler-directed lifetime-aware allocation pass.
 //!
-//! The implementation lives in `unialloc-rustc-driver-engine.rs` so this
-//! compatibility binary and the lifetime-only binary execute the same
-//! rustc_driver engine.
+//! This entry point selects the measured semantic-scope rewrite plus automatic
+//! Rust lifetime-prior path and fails closed on incompatible placement or
+//! direct-allocator rewrite configuration.
 
 #[cfg(unialloc_rustc_current)]
 extern crate rustc_abi;
@@ -21,5 +21,5 @@ extern crate rustc_span;
 mod engine;
 
 fn main() {
-    engine::run(engine::PassMode::LegacyCombined);
+    engine::run(engine::PassMode::LifetimeAware);
 }

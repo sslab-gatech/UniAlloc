@@ -29,7 +29,10 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
     def test_compiler_wrapper_rebuilds_when_pass_source_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            pass_source = root / "pass.rs"
+            pass_source = root / matrix.pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
+            engine_source = root / matrix.pass_closure.PASS_ENGINE_RELATIVE_PATH
+            lifetime_source = root / matrix.pass_closure.PASS_LIFETIME_POLICY_RELATIVE_PATH
+            pass_source.parent.mkdir(parents=True)
             wrapper = root / "wrapper"
             calls: list[list[object]] = []
 
@@ -37,7 +40,11 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                 command = list(argv)
                 calls.append(command)
                 output = pathlib.Path(command[command.index("-o") + 1])
-                output.write_bytes(b"compiled:" + pass_source.read_bytes())
+                provenance = matrix.pass_closure.source_closure_provenance(root)
+                output.write_bytes(
+                    b"compiled:"
+                    + str(provenance["pass_source_closure_sha256"]).encode()
+                )
                 return {
                     "command": [str(value) for value in command],
                     "exit_code": 0,
@@ -47,22 +54,33 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                     "timed_out": False,
                 }
 
-            pass_source.write_bytes(b"first")
+            pass_source.write_text(
+                '#[path = "unialloc-rustc-driver-engine.rs"] mod engine;\n'
+            )
+            engine_source.write_text("mod lifetime_aware;\nfn first() {}\n")
+            lifetime_source.write_text("fn policy() { /* first */ }\n")
             with (
                 mock.patch.object(matrix, "PASS_SOURCE", pass_source),
                 mock.patch.object(matrix, "execute", side_effect=fake_execute),
             ):
                 matrix.ensure_wrapper(wrapper, "nightly-2026-06-11", 30)
-                self.assertEqual(wrapper.read_bytes(), b"compiled:first")
+                first = wrapper.read_bytes()
 
                 matrix.ensure_wrapper(wrapper, "nightly-2026-06-11", 30)
                 self.assertEqual(len(calls), 1)
 
-                pass_source.write_bytes(b"second")
+                engine_source.write_text("mod lifetime_aware;\nfn second() {}\n")
                 matrix.ensure_wrapper(wrapper, "nightly-2026-06-11", 30)
+                second = wrapper.read_bytes()
 
-            self.assertEqual(wrapper.read_bytes(), b"compiled:second")
-            self.assertEqual(len(calls), 2)
+                lifetime_source.write_text("fn policy() { /* second */ }\n")
+                matrix.ensure_wrapper(wrapper, "nightly-2026-06-11", 30)
+                third = wrapper.read_bytes()
+
+            self.assertNotEqual(first, second)
+            self.assertNotEqual(second, third)
+            self.assertEqual(wrapper.read_bytes(), third)
+            self.assertEqual(len(calls), 3)
 
     def test_typeiso_rebuild_discards_target_metadata_from_old_force_load_rlib(
         self,

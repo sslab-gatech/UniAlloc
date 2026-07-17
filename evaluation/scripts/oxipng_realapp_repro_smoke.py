@@ -22,13 +22,19 @@ import tempfile
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import rustc_pass_source_closure as pass_closure  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_TOOLCHAIN = "nightly-2022-07-01"
 DEFAULT_TARGET_CRATE = "oxipng"
 DEFAULT_INPUT = pathlib.Path("tests/files/filter_0_for_palette_1.png")
 DEFAULT_EXPECTED_OUTPUT_SHA256 = "565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff"
 DEFAULT_PINNED_CHECKOUT = ROOT / "evaluation" / "external" / "_checkouts" / "external-R-Oxipng-Oxipng"
-PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
+PASS_SOURCE = ROOT / pass_closure.PASS_ENTRYPOINT_RELATIVE_PATH
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
 OWNERSHIP_TRANSFER_RUNTIME_SOURCE = "instrumented-oxipng-workload-window"
 RAW_METADATA_RUNTIME_SOURCE = "semantic_fallback_attribution_snapshot"
@@ -53,7 +59,7 @@ SCOPED_STATUS_PATHS = [
     pathlib.Path("unialloc/Cargo.toml"),
     pathlib.Path("unialloc/build.rs"),
     pathlib.Path("alloc_macros"),
-    PASS_SOURCE.relative_to(ROOT),
+    *[pathlib.Path(path) for path in pass_closure.source_closure_relative_paths(ROOT)],
     pathlib.Path("evaluation/scripts/oxipng_realapp_repro_smoke.py"),
     pathlib.Path("evaluation/scripts/test_oxipng_realapp_repro_smoke.py"),
 ]
@@ -1719,6 +1725,7 @@ def scoped_fingerprint(file_hashes: dict[str, str]) -> str:
 def source_binding(toolchain: str, sysroot: pathlib.Path, rustc_verbose_version: str) -> dict[str, Any]:
     paths = SCOPED_STATUS_PATHS
     file_hashes = source_file_hashes(paths)
+    pass_provenance = pass_closure.source_closure_provenance(ROOT)
     return {
         "repo_head": git_output(ROOT, ["rev-parse", "HEAD"]),
         "scoped_status": git_status_for_paths(ROOT, paths),
@@ -1726,8 +1733,8 @@ def source_binding(toolchain: str, sysroot: pathlib.Path, rustc_verbose_version:
         "scoped_file_count": len(file_hashes),
         "scoped_fingerprint_sha256": scoped_fingerprint(file_hashes),
         "scoped_file_hashes": file_hashes,
+        **pass_provenance,
         "pass_source": str(PASS_SOURCE.relative_to(ROOT)),
-        "pass_source_sha256": sha256_file(PASS_SOURCE),
         "repo_cargo_lock_sha256": sha256_file(ROOT / "Cargo.lock"),
         "build_toolchain": toolchain,
         "rustc_sysroot": str(sysroot),
@@ -1741,6 +1748,7 @@ def reject_source_drift(start: dict[str, Any], end: dict[str, Any]) -> None:
         "scoped_status",
         "scoped_fingerprint_sha256",
         "pass_source_sha256",
+        "pass_source_closure_sha256",
         "repo_cargo_lock_sha256",
         "rustc_sysroot",
         "rustc_verbose_version",

@@ -1275,6 +1275,18 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertIn("evaluation/scripts/test_oxipng_realapp_repro_smoke.py", binding["scoped_file_hashes"])
         self.assertIn("pass_source_sha256", binding)
         self.assertRegex(binding["pass_source_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(
+            binding["pass_source_closure_sha256"], r"^[0-9a-f]{64}$"
+        )
+        self.assertEqual(binding["pass_source_closure_file_count"], 3)
+        self.assertIn(
+            "tools/unialloc-rustc-pass/unialloc-rustc-driver-engine.rs",
+            binding["scoped_file_hashes"],
+        )
+        self.assertIn(
+            "tools/unialloc-rustc-pass/lifetime_aware.rs",
+            binding["scoped_file_hashes"],
+        )
         self.assertIn("repo_cargo_lock_sha256", binding)
         self.assertRegex(binding["scoped_fingerprint_sha256"], r"^[0-9a-f]{64}$")
         self.assertGreater(binding["scoped_file_count"], 0)
@@ -1288,6 +1300,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             "scoped_status": "",
             "scoped_fingerprint_sha256": "one",
             "pass_source_sha256": "p",
+            "pass_source_closure_sha256": "closure",
             "repo_cargo_lock_sha256": "c",
             "rustc_sysroot": "/tmp/sysroot",
             "rustc_verbose_version": "rustc",

@@ -242,7 +242,10 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
             if isinstance(row, dict)
             and str(row.get("mir_function") or "").endswith("selected_value")
             and row.get("rewrite_status")
-            == "actual_semantic_scope_enter_exit_rewrite_applied"
+            in {
+                "actual_semantic_scope_enter_exit_rewrite_applied",
+                "actual_semantic_scope_generic_type_rewrite_applied",
+            }
         ]
         self.assertTrue(selected_rows)
         dependency_rows = [
