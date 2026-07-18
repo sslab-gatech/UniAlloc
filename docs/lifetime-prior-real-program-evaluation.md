@@ -134,16 +134,11 @@ requested bytes or 8 MiB of runtime-confirmed Short requested bytes.
 The campaign implementation and retained outputs are:
 
 - [`evaluation/scripts/lifetime_prior_six_program_campaign.py`](../evaluation/scripts/lifetime_prior_six_program_campaign.py)
-- [`evaluation/raw/lifetime-prior-stage-a-v2-swc-20260715/stage-a-results.json`](../evaluation/raw/lifetime-prior-stage-a-v2-swc-20260715/stage-a-results.json)
-- [`evaluation/raw/lifetime-prior-stage-a-v2-polars-20260715/stage-a-results.json`](../evaluation/raw/lifetime-prior-stage-a-v2-polars-20260715/stage-a-results.json)
-- [`evaluation/raw/lifetime-prior-stage-a-routed-v3-rustpython-20260715/stage-a-results.json`](../evaluation/raw/lifetime-prior-stage-a-routed-v3-rustpython-20260715/stage-a-results.json)
-- [`evaluation/raw/lifetime-prior-stage-a-routed-v4-actix-20260715/stage-a-results.json`](../evaluation/raw/lifetime-prior-stage-a-routed-v4-actix-20260715/stage-a-results.json)
-- [`evaluation/raw/lifetime-prior-stage-a-routed-small-20260715/stage-a-results.json`](../evaluation/raw/lifetime-prior-stage-a-routed-small-20260715/stage-a-results.json)
+- [`docs/evidence/lifetime-prior-real-program-20260715/summary.json`](evidence/lifetime-prior-real-program-20260715/summary.json)
 
-These `evaluation/raw` paths are the current source evidence and are ignored by
-Git. A compact tracked evidence package remains pending; claims should retain
-the raw path, source commit, allocator revision, and artifact digest until that
-package is committed.
+The tracked summary retains all six Stage-A rows and binds each ignored local
+`evaluation/raw` source by role, path, and SHA-256. The raw trees remain local
+reproduction inputs; repository-facing claims use the compact summary.
 
 ### Pinned program sources
 
@@ -172,11 +167,9 @@ feature-triage evidence pending exact-gate reruns.
 | RustPython | 32.4 s | 99 sites; 178,520 B Long, 1,070,477 B Short, and 88,144 B censored; opportunity gate failed | 22 applied priors; 1 executed exact prior site with 10 Long and 5 censored allocations | Complete screen with low opportunity and narrow executed-prior coverage |
 | Actix Web | 31.8 s | 23 sites; 1,574 B Long and 9,703,948,249 B Short | 15 applied priors; 1 executed exact prior site with one 64-B Long allocation | Strong Short opportunity with negligible executed Long-prior volume |
 
-The RustPython and Actix executed-prior rows are retained in their respective
-[`RustPython exact join`](../evaluation/raw/lifetime-prior-stage-a-routed-v3-rustpython-20260715/runs/rustpython/compiler-prior/measured/compiler-runtime-exact-join.json)
-and
-[`Actix exact join`](../evaluation/raw/lifetime-prior-stage-a-routed-v4-actix-20260715/runs/actix_web/compiler-prior/measured/compiler-runtime-exact-join.json)
-artifacts.
+The RustPython and Actix executed-prior rows are retained under `stage_a` in
+the tracked [`summary.json`](evidence/lifetime-prior-real-program-20260715/summary.json),
+along with the source roles and raw artifact digests for their exact joins.
 
 ### Strongest evidence: SWC
 
@@ -202,8 +195,9 @@ Long-byte recall  = 70,184,560 / 75,338,454 = 93.16%
 
 All 297 emitted priors had complete compiler layouts. Fifty-five sites executed
 in the selected workload, while 242 remained unobserved. This is partial static
-coverage with complete executed-prior accounting. The exact evidence is in
-[`compiler-runtime-exact-join.json`](../evaluation/raw/lifetime-prior-stage-a-v2-swc-20260715/runs/swc/compiler-prior/measured/compiler-runtime-exact-join.json).
+coverage with complete executed-prior accounting. The SWC exact-join rows and
+source digest are retained in the tracked
+[`summary.json`](evidence/lifetime-prior-real-program-20260715/summary.json).
 
 ### Polars type-specific pattern
 
@@ -219,8 +213,9 @@ outcomes:
 
 Across the nine matched prior sites, object precision was 70.0% and byte
 precision was 50.0%. A function-level return rule alone loses this distinction;
-the exact runtime type/site cohort recovers it. The rows are retained in
-[`compiler-runtime-exact-join.json`](../evaluation/raw/lifetime-prior-stage-a-v2-polars-20260715/runs/polars/compiler-prior/measured/compiler-runtime-exact-join.json).
+the exact runtime type/site cohort recovers it. The Polars exact-join rows and
+source digest are retained in the tracked
+[`summary.json`](evidence/lifetime-prior-real-program-20260715/summary.json).
 
 ## Stage-A evidence boundary
 
@@ -268,10 +263,10 @@ exclusive measurement locking, and balanced arm order. The five arms were
 `default`, runtime-only ordinary, compiler-prior ordinary, runtime-only
 selective THP, and compiler-prior selective THP.
 
-Raw result artifacts:
+Ignored local raw result inputs recorded by the tracked summary:
 
-- [`Polars Stage-B results`](../evaluation/raw/lifetime-prior-stage-b-v2-polars-20260715/stage-b-results.json)
-- [`SWC warmup-bounded Stage-B results`](../evaluation/raw/lifetime-prior-stage-b-v3-swc-warmup5-20260715/stage-b-results.json)
+- `evaluation/raw/lifetime-prior-stage-b-v2-polars-20260715/stage-b-results.json`
+- `evaluation/raw/lifetime-prior-stage-b-v3-swc-warmup5-20260715/stage-b-results.json`
 
 The tracked, source-digest-bound evidence package is
 [`docs/evidence/lifetime-prior-real-program-20260715/`](evidence/lifetime-prior-real-program-20260715/).

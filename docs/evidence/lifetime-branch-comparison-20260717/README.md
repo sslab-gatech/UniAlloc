@@ -145,6 +145,15 @@ and patch hashes, directional cells, strict gates, and advice-only regression
 proof. It remains a one-pair-per-direction screen without a confidence
 interval.
 
+The retained `v4-separate-pending-bool.rs` is the measured runtime source
+byte-for-byte (SHA-256
+`09d7f3a9fc994d68405d665a56a063614ffe15baeeec5e08e2f5cbeae7231dcc`).
+Commit `24f75c5` then removed one `ThpAdviceFailed` assignment on the
+collapse-error path, applied rustfmt-only line changes, and added a regression
+test. Every timed V4 process reported zero collapse errors, so the measured
+success path is unchanged; the error-path change has safety-test evidence
+only.
+
 ## Orthogonal method ablations
 
 The checked-layout matrix had ten cases. Before the port, the experiment head

@@ -73,14 +73,17 @@ manual lifetime hints, confidence thresholds, target-crate allowlists, audit
 paths, and pass-log paths remain supported inputs. The compatibility driver
 retains every existing combined-mode option.
 
-`type_id` is deliberately site-scoped:
+The allocation-listing pass uses a deliberately site-scoped `type_id`:
 `fnv1a64(allocation-site-object-type-id-v2 || function || MIR location ||
-source span || object type || callee)`.  The row also records
-`object_type_id = fnv1a64(object type || callee)` so audits can distinguish
-"same object/callee shape" from "same compiler allocation site".  The allocator
-metadata path receives the site-scoped `type_id` plus the separate `callsite`
-hash; runtime imports now check the `(type_id, callsite)` pair against the
-compiler map instead of accepting a type-id-only match.
+source span || object type || callee)`. Its rows also record
+`object_type_id = fnv1a64(object type || callee)` so listing audits can
+distinguish "same object/callee shape" from "same compiler allocation site".
+
+The rewrite and lifetime passes use the separate `rust-type-id-v2` identity
+domain. Each allocator-authorizing nonzero `type_id` comes from one exact
+resolved compiler `Ty`; the metadata carries that identity alongside a
+separate `callsite` hash. Runtime imports validate the `(type_id, callsite)`
+pair, while type and callee display strings remain audit-only.
 
 ## Build
 

@@ -41,6 +41,10 @@ modules.builtin
 *.elf
 *.bin
 *.gz
+# The compiler-lifetime ground-truth bundle hashes these raw exporter and
+# compiler-audit inputs, so the committed evidence package must retain them.
+!docs/evidence/compiler-lifetime-ground-truth-20260715/compiler-audits.tar.gz
+!docs/evidence/compiler-lifetime-ground-truth-20260715/runtime/*.stderr.bin
 *.bz2
 *.lzma
 *.xz

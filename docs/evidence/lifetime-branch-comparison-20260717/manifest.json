@@ -7,8 +7,8 @@
   },
   "artifacts": {
     "README.md": {
-      "bytes": 10369,
-      "sha256": "83d9d134b584a9854ae214ffab09809a06a6dea6c99c91f8d52ceb51efcf5de7"
+      "bytes": 10841,
+      "sha256": "75e761c49ef17d12260ff1ce162ac129d70f62ce28001fb946c1d390f9835296"
     },
     "current-head-bedrock.json": {
       "bytes": 29817,
@@ -49,6 +49,10 @@
     "strict-constant-evaluator.json": {
       "bytes": 1869,
       "sha256": "5081d8dc78a739d18b5ad9e116ac6cca0a04158bdd5312e6674876e0aae165b9"
+    },
+    "v4-separate-pending-bool.rs": {
+      "bytes": 334517,
+      "sha256": "09d7f3a9fc994d68405d665a56a063614ffe15baeeec5e08e2f5cbeae7231dcc"
     }
   },
   "claim_boundary": [
@@ -57,7 +61,8 @@
     "The selective-transport source snapshot includes the exact-local pairing safety gate; final changes after that snapshot affect audit naming and counts only.",
     "Lume, Roaring, Convex, and Bedrock current-head measurements are one A/B and one B/A fresh-process screen per target with zero warmup and no confidence interval.",
     "Runtime absorption variants share one fixed source path, runner path, Cargo target, RUSTFLAGS set, and compiler-pass binary; each comparison has one A/B and one B/A pair.",
-    "Convex policy-9 timing is direction-conflicted; its retained evidence is mechanism-only."
+    "Convex policy-9 timing is direction-conflicted; its retained evidence is mechanism-only.",
+    "The retained V4 source is the byte-exact measured runtime input; 24f75c5 changes only an unexercised collapse-error assignment, formatting, and regression coverage."
   ],
   "classification": "compiler-lifetime-branch-comparison-and-selective-absorption",
   "comparison_heads": {
