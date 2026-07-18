@@ -334,6 +334,14 @@ pub const MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES: usize = 512 * 1024;
 /// a single hot exact layout absorb a bounded burst. The process-visible
 /// registry therefore sees no larger per-thread worst case than before.
 pub const MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES: usize = 4096;
+/// Maximum plain semantic-cache owners kept by one receiving thread after an
+/// actual foreign-thread recovery.
+///
+/// Cross-thread frees already pay process-visible recovery and lifecycle
+/// authentication. Preserve a small exact-reuse window, then terminally
+/// release authenticated overflow instead of extending its lifetime in the
+/// synchronized process-wide depot.
+const MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES: usize = 64;
 /// Maximum allocator-rounded bytes retained by one metadata-segregated semantic cache bucket.
 ///
 /// Side-table entries carry richer metadata and are stored in bounded buckets
@@ -4078,6 +4086,43 @@ fn atomic_saturating_decrement(counter: &AtomicUsize) -> usize {
     }
 }
 
+/// Monotonic identity for the thread that publishes a process-visible
+/// recovery record. Plain cross-thread-capable records store this token in the
+/// existing `auth` word, which is otherwise zero for their unprotected policy.
+/// The token selects a cache-retention policy; it does not authenticate a
+/// protected record.
+static NEXT_AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN: AtomicU64 = AtomicU64::new(1);
+
+#[thread_local]
+static mut AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN: u64 = 0;
+
+#[inline]
+fn current_auto_allocation_publisher_thread_token() -> u64 {
+    unsafe {
+        let cached = AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN;
+        if cached != 0 {
+            return cached;
+        }
+        let token = match NEXT_AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |current| current.checked_add(1),
+        ) {
+            Ok(token) if token != 0 => token,
+            Ok(_) | Err(_) => panic!("auto-allocation publisher thread token exhausted"),
+        };
+        AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN = token;
+        token
+    }
+}
+
+#[inline]
+fn auto_allocation_record_tracks_publisher_thread(metadata: AllocationMetadata) -> bool {
+    metadata.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY != 0
+        && compiler_type_isolated_recovery_fast_path(metadata)
+        && metadata.flags & SEGREGATED_TYPE_CACHE_POLICY_MASK == 0
+}
+
 #[derive(Clone, Copy)]
 struct AutoAllocationRecord {
     ptr: usize,
@@ -4129,7 +4174,14 @@ impl AutoAllocationRecord {
     fn global_integrity_auth_required(self) -> bool {
         self.align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT != 0
             || metadata_integrity_required(self.metadata)
-            || self.auth != 0
+            || (self.auth != 0 && !auto_allocation_record_tracks_publisher_thread(self.metadata))
+    }
+
+    #[inline]
+    fn recovered_on_foreign_thread(self) -> bool {
+        auto_allocation_record_tracks_publisher_thread(self.metadata)
+            && self.auth != 0
+            && self.auth != current_auto_allocation_publisher_thread_token()
     }
 
     #[inline]
@@ -4137,8 +4189,13 @@ impl AutoAllocationRecord {
         self.ptr == ptr as usize
             && self.size == layout.size()
             && self.recorded_align() == layout.align()
-            && (!self.global_integrity_auth_required()
-                || self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata))
+            && (if self.global_integrity_auth_required() {
+                self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata)
+            } else if auto_allocation_record_tracks_publisher_thread(self.metadata) {
+                self.auth != 0
+            } else {
+                true
+            })
     }
 }
 
@@ -4169,14 +4226,19 @@ impl AutoAllocationRecordMismatch {
 pub(crate) enum AutoAllocationRecordLookup {
     Missing,
     Mismatched(AutoAllocationRecordMismatch),
-    Exact(AllocationMetadata),
+    Exact(AllocationMetadata, bool),
 }
 
 impl AutoAllocationRecordLookup {
     #[inline]
+    fn exact(record: AutoAllocationRecord) -> Self {
+        Self::Exact(record.metadata, record.recovered_on_foreign_thread())
+    }
+
+    #[inline]
     fn exact_metadata(self) -> Option<AllocationMetadata> {
         match self {
-            AutoAllocationRecordLookup::Exact(metadata) => Some(metadata),
+            AutoAllocationRecordLookup::Exact(metadata, _) => Some(metadata),
             AutoAllocationRecordLookup::Missing | AutoAllocationRecordLookup::Mismatched(_) => None,
         }
     }
@@ -5424,6 +5486,19 @@ fn fast_auto_allocation_record_auth_matches(
 }
 
 #[inline]
+fn global_auto_allocation_record_auth(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> u64 {
+    if auto_allocation_record_tracks_publisher_thread(metadata) {
+        current_auto_allocation_publisher_thread_token()
+    } else {
+        fast_auto_allocation_record_auth(ptr, layout, metadata)
+    }
+}
+
+#[inline]
 fn fast_auto_allocation_record_for(
     ptr: *mut u8,
     layout: Layout,
@@ -5462,7 +5537,7 @@ fn auto_allocation_record_for(
         // the metadata-protection/PAC policy flags. Plain type isolation keeps
         // the same private-table trust boundary as the TLS recovery tier and
         // avoids hashing eight metadata fields twice per allocation lifetime.
-        auth: fast_auto_allocation_record_auth(ptr, layout, metadata),
+        auth: global_auto_allocation_record_auth(ptr, layout, metadata),
         metadata,
     }
 }
@@ -6142,7 +6217,7 @@ fn lookup_fast_auto_allocation_record(
                     FAST_AUTO_ALLOCATION_RECORD_INLINE = AutoAllocationRecord::empty();
                     fast_auto_allocation_record_global_deactivate();
                 }
-                return AutoAllocationRecordLookup::Exact(inline_record.metadata);
+                return AutoAllocationRecordLookup::exact(inline_record);
             }
             return AutoAllocationRecordLookup::Mismatched(
                 AutoAllocationRecordMismatch::from_record(inline_record),
@@ -6169,7 +6244,7 @@ fn lookup_fast_auto_allocation_record(
                                 AutoAllocationRecord::tombstone()
                             };
                     }
-                    return AutoAllocationRecordLookup::Exact(record.metadata);
+                    return AutoAllocationRecordLookup::exact(record);
                 }
                 return AutoAllocationRecordLookup::Mismatched(
                     AutoAllocationRecordMismatch::from_record(record),
@@ -6220,7 +6295,7 @@ fn lookup_fast_auto_allocation_record(
                             };
                     }
                     remember_fast_auto_allocation_record_hot_slot(ptr_key, idx);
-                    return AutoAllocationRecordLookup::Exact(record.metadata);
+                    return AutoAllocationRecordLookup::exact(record);
                 }
                 return AutoAllocationRecordLookup::Mismatched(
                     AutoAllocationRecordMismatch::from_record(record),
@@ -6663,13 +6738,13 @@ fn lookup_auto_allocation_record(
     remove: bool,
 ) -> AutoAllocationRecordLookup {
     let fast_lookup = lookup_fast_auto_allocation_record(ptr, layout, remove);
-    if let AutoAllocationRecordLookup::Exact(_) = fast_lookup {
+    if let AutoAllocationRecordLookup::Exact(_, _) = fast_lookup {
         return fast_lookup;
     }
 
     let global_lookup = lookup_global_auto_allocation_record(ptr, layout, remove);
     match global_lookup {
-        AutoAllocationRecordLookup::Exact(_) => global_lookup,
+        AutoAllocationRecordLookup::Exact(_, _) => global_lookup,
         AutoAllocationRecordLookup::Mismatched(mismatch) => {
             AutoAllocationRecordLookup::Mismatched(mismatch)
         }
@@ -6783,7 +6858,7 @@ fn lookup_global_auto_allocation_record_in_shard(
                         ptr_key,
                     );
                 }
-                return AutoAllocationRecordLookup::Exact(record.metadata);
+                return AutoAllocationRecordLookup::exact(record);
             }
             return AutoAllocationRecordLookup::Mismatched(
                 AutoAllocationRecordMismatch::from_record(record),
@@ -6811,7 +6886,7 @@ fn lookup_global_auto_allocation_record_in_shard(
                 } else {
                     remember_global_auto_allocation_record_hot_slot(&mut *table, ptr_key, idx);
                 }
-                return AutoAllocationRecordLookup::Exact(record.metadata);
+                return AutoAllocationRecordLookup::exact(record);
             }
             return AutoAllocationRecordLookup::Mismatched(
                 AutoAllocationRecordMismatch::from_record(record),
@@ -6860,7 +6935,7 @@ fn lookup_global_auto_allocation_record_in_shard(
                             semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
                         }
                     }
-                    return AutoAllocationRecordLookup::Exact(record.metadata);
+                    return AutoAllocationRecordLookup::exact(record);
                 }
                 return AutoAllocationRecordLookup::Mismatched(
                     AutoAllocationRecordMismatch::from_record(record),
@@ -6891,7 +6966,7 @@ fn lookup_global_auto_allocation_record_in_shard(
                     } else {
                         remember_global_auto_allocation_record_hot_slot(&mut *table, ptr_key, idx);
                     }
-                    return AutoAllocationRecordLookup::Exact(record.metadata);
+                    return AutoAllocationRecordLookup::exact(record);
                 }
                 return AutoAllocationRecordLookup::Mismatched(
                     AutoAllocationRecordMismatch::from_record(record),
@@ -7000,10 +7075,10 @@ fn exact_auto_allocation_record_for_identity_rebind(
     let fast = lookup_fast_auto_allocation_record(ptr, layout, false);
     let global = lookup_global_auto_allocation_record(ptr, layout, false);
     match (fast, global) {
-        (AutoAllocationRecordLookup::Exact(metadata), AutoAllocationRecordLookup::Missing) => {
+        (AutoAllocationRecordLookup::Exact(metadata, _), AutoAllocationRecordLookup::Missing) => {
             Some((AutoAllocationRecordStorage::Fast, metadata))
         }
-        (AutoAllocationRecordLookup::Missing, AutoAllocationRecordLookup::Exact(metadata)) => {
+        (AutoAllocationRecordLookup::Missing, AutoAllocationRecordLookup::Exact(metadata, _)) => {
             Some((AutoAllocationRecordStorage::Global, metadata))
         }
         _ => None,
@@ -8276,6 +8351,22 @@ unsafe fn plain_type_cache_trusted_retained_accounting() -> Option<(usize, usize
         retained_bytes.checked_add(inline_retained_bytes)?,
         retained_entries,
     ))
+}
+
+#[inline]
+unsafe fn cross_thread_recovery_plain_cache_can_retain_one() -> bool {
+    let linked_entries = match plain_type_cache_trusted_retained_accounting() {
+        Some((_, retained_entries)) => retained_entries,
+        None => return false,
+    };
+    let inline_entries = usize::from(!INLINE_TYPE_CACHE_ENTRY.is_empty());
+    match linked_entries
+        .checked_add(inline_entries)
+        .and_then(|entries| entries.checked_add(SMALL_EXACT_TYPE_CACHE_OCCUPIED))
+    {
+        Some(entries) => entries < MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES,
+        None => false,
+    }
 }
 
 #[inline]
@@ -11406,6 +11497,7 @@ unsafe fn cache_compiler_type_metadata_free(
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
+    recovered_on_foreign_thread: bool,
     ownership: PendingGlobalTypeCacheOwnership,
 ) -> bool {
     if ptr.is_null() {
@@ -11469,6 +11561,24 @@ unsafe fn cache_compiler_type_metadata_free(
             TerminalRetainedOwnership::TypeCache,
         );
     }
+    if cache_class == SemanticTypeCacheClass::Plain
+        && recovered_on_foreign_thread
+        && !cross_thread_recovery_plain_cache_can_retain_one()
+    {
+        record_stats_type_cache_bypass(metadata);
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::AggregateEntryBudget,
+            layout,
+        );
+        return finish_rejected_type_cache_insert(
+            alloc,
+            ptr,
+            layout,
+            metadata,
+            ownership,
+            TerminalRetainedOwnership::TypeCache,
+        );
+    }
     if push_small_exact_type_cache(ptr, layout, metadata) {
         record_type_cache_admitted(layout, metadata);
         ownership.commit();
@@ -11502,6 +11612,17 @@ unsafe fn cache_compiler_type_metadata_free(
                     record_type_cache_admitted(layout, metadata);
                     ownership.commit();
                     true
+                }
+                Err(rejection) if recovered_on_foreign_thread => {
+                    record_type_cache_admission_rejection(rejection, layout);
+                    finish_rejected_type_cache_insert(
+                        alloc,
+                        ptr,
+                        layout,
+                        metadata,
+                        ownership,
+                        TerminalRetainedOwnership::TypeCache,
+                    )
                 }
                 Err(rejection) => rescue_rejected_type_cache_insert_in_depot(
                     alloc,
@@ -14219,7 +14340,7 @@ unsafe fn pause_stale_reclaim_after_snapshot_for_test() {
 pub(crate) unsafe fn pause_reallocation_after_recovery_lookup_for_test(
     recovery: AutoAllocationRecordLookup,
 ) {
-    if !matches!(recovery, AutoAllocationRecordLookup::Exact(_))
+    if !matches!(recovery, AutoAllocationRecordLookup::Exact(_, _))
         || !TEST_PAUSE_NEXT_REALLOC_AFTER_EXACT_RECOVERY_LOOKUP
     {
         return;
@@ -15929,23 +16050,34 @@ impl RustAllocator {
         layout: Layout,
         metadata: AllocationMetadata,
         recover_allocation_record: bool,
+        recovered_on_foreign_thread: bool,
         ownership: PendingGlobalTypeCacheOwnership,
     ) {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        let cache_metadata = if recover_allocation_record {
-            match recover_auto_allocation_record_metadata(ptr, layout, true) {
-                Some(recorded_metadata) => {
-                    deallocation_metadata_after_recovery_record(metadata, recorded_metadata)
+        let (cache_metadata, recovered_on_foreign_thread) = if recover_allocation_record {
+            match lookup_auto_allocation_record(ptr, layout, true) {
+                AutoAllocationRecordLookup::Exact(recorded_metadata, foreign_thread) => (
+                    deallocation_metadata_after_recovery_record(metadata, recorded_metadata),
+                    foreign_thread,
+                ),
+                AutoAllocationRecordLookup::Missing | AutoAllocationRecordLookup::Mismatched(_) => {
+                    (metadata, recovered_on_foreign_thread)
                 }
-                None => metadata,
             }
         } else {
-            metadata
+            (metadata, recovered_on_foreign_thread)
         };
         record_stats_dealloc_layout(cache_metadata, layout);
-        if cache_compiler_type_metadata_free(self, ptr, layout, cache_metadata, ownership) {
+        if cache_compiler_type_metadata_free(
+            self,
+            ptr,
+            layout,
+            cache_metadata,
+            recovered_on_foreign_thread,
+            ownership,
+        ) {
             return;
         }
         panic!("compiler type-cache admission returned without releasing or retaining storage");
@@ -16293,7 +16425,7 @@ impl RustAllocator {
         let ptr = observation.ptr();
         let (dealloc_metadata, consume_recovery_record) = if recover_allocation_record {
             match lookup_auto_allocation_record(ptr, layout, false) {
-                AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
                     self.dealloc_with_recovery_record_from_observation(
                         layout,
                         metadata,
@@ -16455,17 +16587,29 @@ impl RustAllocator {
             return;
         }
         if compiler_type_isolated_recovery_fast_path(metadata) {
-            if consume_recovery_record {
-                let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
-            }
+            let recovered_on_foreign_thread = if consume_recovery_record {
+                match lookup_auto_allocation_record(ptr, layout, true) {
+                    AutoAllocationRecordLookup::Exact(_, foreign_thread) => foreign_thread,
+                    AutoAllocationRecordLookup::Missing
+                    | AutoAllocationRecordLookup::Mismatched(_) => false,
+                }
+            } else {
+                false
+            };
             let ownership = match admission {
                 GlobalDeallocationAdmission::TypeCache(ownership) => ownership,
                 GlobalDeallocationAdmission::DelayedFree(_) => {
                     panic!("compiler metadata admitted to delayed-free domain")
                 }
             };
-            return self
-                .dealloc_with_compiler_type_metadata_fast(ptr, layout, metadata, false, ownership);
+            return self.dealloc_with_compiler_type_metadata_fast(
+                ptr,
+                layout,
+                metadata,
+                false,
+                recovered_on_foreign_thread,
+                ownership,
+            );
         }
         clear_memory_tagged_allocation(ptr, layout, metadata);
         if consume_recovery_record {
@@ -16619,7 +16763,7 @@ impl RustAllocator {
             return core::ptr::null_mut();
         }
         let dealloc_metadata = match old_recovery {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+            AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
                 preview_deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata)
             }
             AutoAllocationRecordLookup::Missing => old_metadata,
@@ -16660,7 +16804,7 @@ impl RustAllocator {
             return core::ptr::null_mut();
         }
         let (dealloc_metadata, consume_recovery_record) = match old_recovery {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
+            AutoAllocationRecordLookup::Exact(recorded_metadata, _) => (
                 deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata),
                 true,
             ),
@@ -16697,7 +16841,7 @@ impl RustAllocator {
                 .unwrap_or(true);
         if storage_can_reuse_in_place {
             let recovery_record_committed = match old_recovery {
-                AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
                     if auto_allocation_recovery_recording_enabled() {
                         replace_auto_allocation_record_for_reallocation(
                             ptr,
@@ -17477,7 +17621,7 @@ unsafe fn realloc_layout_with_split_ffi_metadata(
     #[cfg(test)]
     pause_reallocation_after_recovery_lookup_for_test(old_recovery);
     let old_metadata = match old_recovery {
-        AutoAllocationRecordLookup::Exact(recorded) => {
+        AutoAllocationRecordLookup::Exact(recorded, _) => {
             // The allocation-completion record owns the old object's identity
             // and policy. Resolve without changing counters; a successful
             // commit records the explicit old-identity validation below. The
@@ -17501,7 +17645,7 @@ unsafe fn realloc_layout_with_split_ffi_metadata(
         )
     });
     if !new_ptr.is_null() {
-        if let AutoAllocationRecordLookup::Exact(recorded) = old_recovery {
+        if let AutoAllocationRecordLookup::Exact(recorded, _) = old_recovery {
             let _ = deallocation_metadata_after_recovery_record(requested_old_metadata, recorded);
         }
     }
@@ -17536,7 +17680,7 @@ unsafe fn realloc_layout_with_ffi_metadata(
     #[cfg(test)]
     pause_reallocation_after_recovery_lookup_for_test(old_recovery);
     let (old_metadata, new_metadata, recovery_record_found) = match old_recovery {
-        AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+        AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
             let delegated = recovery_delegated_metadata_after_record(metadata, recorded_metadata);
             (
                 if delegated.is_some() {
@@ -17619,7 +17763,7 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
     #[cfg(test)]
     pause_reallocation_after_recovery_lookup_for_test(old_recovery);
     let old_metadata = match old_recovery {
-        AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
+        AutoAllocationRecordLookup::Exact(recorded_metadata, _) => recorded_metadata,
         AutoAllocationRecordLookup::Missing => metadata,
         AutoAllocationRecordLookup::Mismatched(_) => {
             // Do not collapse a live same-address/different-layout record into
@@ -21462,21 +21606,21 @@ mod tests {
         });
         assert!(matches!(
             lookup_fast_auto_allocation_record(duplicate_ptr, layout, false),
-            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+            AutoAllocationRecordLookup::Exact(metadata, _) if metadata == duplicate_source
         ));
         assert!(matches!(
             lookup_global_auto_allocation_record(duplicate_ptr, layout, false),
-            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+            AutoAllocationRecordLookup::Exact(metadata, _) if metadata == duplicate_source
         ));
         let duplicate_iter =
             __unialloc_semantic_vec_into_iter(duplicate, duplicate_source.type_id, 0x17E2_D717);
         assert!(matches!(
             lookup_fast_auto_allocation_record(duplicate_ptr, layout, false),
-            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+            AutoAllocationRecordLookup::Exact(metadata, _) if metadata == duplicate_source
         ));
         assert!(matches!(
             lookup_global_auto_allocation_record(duplicate_ptr, layout, true),
-            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+            AutoAllocationRecordLookup::Exact(metadata, _) if metadata == duplicate_source
         ));
         drop(duplicate_iter);
 
@@ -26257,7 +26401,7 @@ mod tests {
     }
 
     #[test]
-    fn plain_global_recovery_record_skips_optional_auth_and_stays_layout_exact() {
+    fn plain_global_recovery_record_reuses_auth_word_for_publisher_and_stays_layout_exact() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -26282,7 +26426,11 @@ mod tests {
             .expect("plain global recovery record");
         {
             let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
-            assert_eq!(table.inline[record_idx].auth, 0);
+            assert_eq!(
+                table.inline[record_idx].auth,
+                current_auto_allocation_publisher_thread_token(),
+                "plain cross-thread recovery must bind its publisher thread without integrity hashing"
+            );
             assert_eq!(
                 table.inline[record_idx].align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
                 0
@@ -26294,6 +26442,48 @@ mod tests {
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
         assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
         assert_eq!(take_auto_deallocation_metadata(ptr, layout), None);
+
+        clear_auto_allocation_records();
+    }
+
+    #[test]
+    fn typed_plain_cross_thread_recovery_keeps_auth_and_publisher_tls_untouched() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x4488usize << 4) as *mut u8;
+        let metadata = AllocationMetadata::for_type(0xC002_2488)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C248)
+            .with_flags(0)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let publisher_token_before = unsafe { AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN };
+
+        assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+        let (shard_idx, record_idx) = global_auto_allocation_record_location_for_test(ptr)
+            .expect("typed-plain global recovery record");
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(
+                table.inline[record_idx].auth, 0,
+                "transport-only typed-plain recovery must keep the unsigned record contract"
+            );
+            assert!(table.inline[record_idx].matches_allocation(ptr, layout));
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(
+            unsafe { AUTO_ALLOCATION_PUBLISHER_THREAD_TOKEN },
+            publisher_token_before,
+            "typed-plain recovery must not initialize the Type Isolation publisher token"
+        );
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
 
         clear_auto_allocation_records();
     }
@@ -28202,6 +28392,175 @@ mod tests {
             unsafe { plain_type_cache_retained_bytes_snapshot_for_test() },
             0
         );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn cross_thread_recovery_plain_retention_is_bounded_without_depot_spill() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const FREES: usize = MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES + 2;
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D302)
+            .with_module(0xC0DE_D302)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let mut pointers = Vec::with_capacity(FREES);
+        for _ in 0..FREES {
+            let ptr = unsafe {
+                __unialloc_alloc_with_metadata_hints(
+                    layout.size(),
+                    layout.align(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.lifetime_hint,
+                    metadata.placement_hint,
+                    metadata.callsite,
+                )
+            };
+            assert!(!ptr.is_null());
+            pointers.push(ptr as usize);
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Acquire), FREES);
+
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let mut pointers = pointers.into_iter();
+            for ptr in pointers.by_ref().take(FREES - 1) {
+                unsafe {
+                    alloc.dealloc(ptr as *mut u8, layout);
+                }
+            }
+
+            let l1 = type_isolation_side_cache_snapshot();
+            assert_eq!(
+                l1.occupied_entries,
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES
+            );
+            assert_eq!(
+                l1.retained_bytes,
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES
+                    * type_cache_retained_bytes_for_layout(layout)
+            );
+            assert_eq!(
+                unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES - 1,
+                "one retained owner should occupy the direct inline entry"
+            );
+            assert_eq!(
+                type_cache_depot_current_occupancy(),
+                (0, 0),
+                "foreign overflow must terminally release instead of entering the depot"
+            );
+            assert_eq!(
+                GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES
+            );
+
+            let released = unsafe {
+                pop_semantic_type_cache(layout, metadata)
+                    .expect("popping one owner must reopen foreign retention headroom")
+            };
+            unsafe {
+                alloc.dealloc_raw(released, layout);
+            }
+            let final_ptr = pointers.next().expect("one deferred free must remain");
+            assert!(pointers.next().is_none());
+            unsafe {
+                alloc.dealloc(final_ptr as *mut u8, layout);
+            }
+            assert_eq!(
+                type_isolation_side_cache_snapshot().occupied_entries,
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES
+            );
+            assert_eq!(
+                unsafe { drain_current_thread_semantic_state(&alloc) },
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES
+            );
+        });
+        worker.join().expect("foreign bounded-retention worker");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Acquire), 0);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        assert_eq!(type_cache_depot_current_occupancy(), (0, 0));
+        #[cfg(feature = "stats")]
+        {
+            let admission = type_cache_admission_stats_snapshot();
+            assert_eq!(
+                admission.admitted.events,
+                MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES + 1
+            );
+            assert_eq!(admission.rejected_aggregate_entry_budget.events, 1);
+            assert_eq!(admission.depot_attempts.events, 0);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn cross_thread_capability_hint_preserves_same_thread_plain_working_set() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const FREES: usize = MAX_CROSS_THREAD_RECOVERY_PLAIN_CACHE_RETAINED_ENTRIES + 2;
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D303)
+            .with_module(0xC0DE_D303)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let mut pointers = Vec::with_capacity(FREES);
+        for _ in 0..FREES {
+            let ptr = unsafe {
+                __unialloc_alloc_with_metadata_hints(
+                    layout.size(),
+                    layout.align(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.lifetime_hint,
+                    metadata.placement_hint,
+                    metadata.callsite,
+                )
+            };
+            assert!(!ptr.is_null());
+            pointers.push(ptr);
+        }
+
+        for ptr in pointers {
+            unsafe {
+                alloc.dealloc(ptr, layout);
+            }
+        }
+        let l1 = type_isolation_side_cache_snapshot();
+        assert_eq!(
+            l1.occupied_entries, FREES,
+            "a capability hint must preserve a same-thread working set above the foreign cap"
+        );
+        assert_eq!(
+            unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+            FREES - 1
+        );
+        assert_eq!(type_cache_depot_current_occupancy(), (0, 0));
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Acquire), 0);
+        assert_eq!(
+            unsafe { drain_current_thread_semantic_state(&alloc) },
+            FREES
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
     }
 
     #[cfg(not(feature = "fixed_heap"))]

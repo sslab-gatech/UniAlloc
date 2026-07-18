@@ -301,7 +301,7 @@ unsafe fn dealloc_with_active_or_recorded_metadata_from_observation(
     observation: GlobalReclaimObservation,
 ) {
     match checked_recorded_reallocation_old_metadata(ptr, layout) {
-        AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+        AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
             alloc.dealloc_with_recovery_record_from_observation(
                 layout,
                 active_metadata,
@@ -367,7 +367,7 @@ unsafe fn realloc_with_auto_metadata(
     admission: GlobalRawReclaimAdmission,
 ) -> *mut u8 {
     match old_recovery {
-        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata, _) => {
             if semantic_realloc_can_reuse_in_place(
                 layout,
                 new_size,
@@ -423,7 +423,7 @@ unsafe fn realloc_with_active_metadata(
     admission: GlobalRawReclaimAdmission,
 ) -> *mut u8 {
     match old_recovery {
-        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata, _) => {
             if semantic_realloc_can_reuse_in_place(
                 layout,
                 new_size,
@@ -483,7 +483,7 @@ unsafe fn realloc_with_active_local_metadata(
     admission: GlobalRawReclaimAdmission,
 ) -> *mut u8 {
     match old_recovery {
-        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata, _) => {
             if semantic_realloc_can_reuse_in_place(
                 layout,
                 new_size,
@@ -756,7 +756,7 @@ impl RustAllocator {
             | ActiveAllocatorMetadata::Inactive => {}
         }
         match checked_recorded_reallocation_old_metadata(ptr, layout) {
-            AutoAllocationRecordLookup::Exact(metadata) => {
+            AutoAllocationRecordLookup::Exact(metadata, _) => {
                 return self.dealloc_with_peeked_recovery_metadata_from_observation(
                     layout,
                     metadata,
@@ -1003,7 +1003,7 @@ impl RustAllocator {
             return new_ptr;
         }
         let release_metadata = match old_recovery {
-            AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true)),
+            AutoAllocationRecordLookup::Exact(metadata, _) => Some((metadata, true)),
             AutoAllocationRecordLookup::Missing => match active_metadata {
                 ActiveAllocatorMetadata::Policy(metadata)
                     if !active_allocation_metadata_requires_recovery_record(metadata) =>
@@ -1050,7 +1050,7 @@ impl RustAllocator {
             }
             ActiveAllocatorMetadata::LifetimePolicy(_)
             | ActiveAllocatorMetadata::TransportOnly(_) => match old_recovery {
-                AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true, false)),
+                AutoAllocationRecordLookup::Exact(metadata, _) => Some((metadata, true, false)),
                 AutoAllocationRecordLookup::Missing => None,
                 AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
             },
@@ -1064,7 +1064,7 @@ impl RustAllocator {
                     Some((metadata, true, false))
                 } else if !auto_policy_enabled {
                     match old_recovery {
-                        AutoAllocationRecordLookup::Exact(metadata) => {
+                        AutoAllocationRecordLookup::Exact(metadata, _) => {
                             Some((metadata, true, false))
                         }
                         AutoAllocationRecordLookup::Missing => None,
@@ -1364,7 +1364,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             | ActiveAllocatorMetadata::Inactive => None,
         };
         let preflight_metadata = match old_recovery {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+            AutoAllocationRecordLookup::Exact(recorded_metadata, _) => {
                 if new_size == 0 {
                     active_metadata
                         .map(|metadata| {
@@ -1407,9 +1407,10 @@ unsafe impl GlobalAlloc for RustAllocator {
         let admission = begin_reallocation_reclaim_from_observation(reclaim_observation);
         if new_size == 0 {
             let release_metadata = match (active_metadata, old_recovery) {
-                (Some(active_metadata), AutoAllocationRecordLookup::Exact(recorded_metadata))
-                    if active_allocation_metadata_requires_recovery_record(active_metadata) =>
-                {
+                (
+                    Some(active_metadata),
+                    AutoAllocationRecordLookup::Exact(recorded_metadata, _),
+                ) if active_allocation_metadata_requires_recovery_record(active_metadata) => {
                     let dealloc_metadata = deallocation_metadata_after_recovery_record(
                         active_metadata,
                         recorded_metadata,
@@ -1425,19 +1426,17 @@ unsafe impl GlobalAlloc for RustAllocator {
                     }
                     None
                 }
-                (Some(active_metadata), AutoAllocationRecordLookup::Exact(recorded_metadata)) => {
-                    Some((
-                        deallocation_metadata_after_recovery_record(
-                            active_metadata,
-                            recorded_metadata,
-                        ),
-                        true,
-                    ))
-                }
+                (
+                    Some(active_metadata),
+                    AutoAllocationRecordLookup::Exact(recorded_metadata, _),
+                ) => Some((
+                    deallocation_metadata_after_recovery_record(active_metadata, recorded_metadata),
+                    true,
+                )),
                 (Some(active_metadata), AutoAllocationRecordLookup::Missing) => {
                     Some((active_metadata, false))
                 }
-                (None, AutoAllocationRecordLookup::Exact(recorded_metadata)) => {
+                (None, AutoAllocationRecordLookup::Exact(recorded_metadata, _)) => {
                     Some((recorded_metadata, true))
                 }
                 (None, AutoAllocationRecordLookup::Missing) => {
@@ -1503,7 +1502,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
         }
         match old_recovery {
-            AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+            AutoAllocationRecordLookup::Exact(dealloc_metadata, _) => {
                 if semantic_realloc_can_reuse_in_place(
                     layout,
                     new_size,
